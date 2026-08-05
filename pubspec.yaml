@@ -1,0 +1,43 @@
+name: flavorflow_erp
+description: FlavorFlow ERP — role-based production, store, packing & dispatch with strict RBAC. Native mobile + web.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  provider: ^6.1.5
+  go_router: ^14.8.1
+  http: ^1.3.0
+  shared_preferences: ^2.5.3
+  intl: ^0.20.2
+  fl_chart: 0.69.2
+  pdf: ^3.11.3
+  printing: ^5.14.2
+  universal_html: ^2.2.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/fonts/
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/inter-regular.ttf
+          weight: 400
+        - asset: assets/fonts/inter-medium.ttf
+          weight: 500
+        - asset: assets/fonts/inter-semibold.ttf
+          weight: 600
+        - asset: assets/fonts/inter-bold.ttf
+          weight: 700
+        - asset: assets/fonts/inter-extrabold.ttf
+          weight: 800
