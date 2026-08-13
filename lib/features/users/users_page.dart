@@ -196,7 +196,25 @@ class _UserFormDialogState extends State<UserFormDialog> {
   final password = TextEditingController();
   late String role = widget.user?['role']?.toString() ?? 'store_keeper';
   late bool active = (widget.user?['active'] as int? ?? 1) == 1;
+  late Set<String> customPerms = _defaultPermsFor(role);
   bool busy = false;
+
+  Set<String> _defaultPermsFor(String roleId) {
+    final r = widget.roles.firstWhere((x) => x['id'] == roleId, orElse: () => <String, dynamic>{});
+    return Set<String>.from((r['permissions'] as List?) ?? const []);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.user != null) {
+      // Editing: load existing user's custom permissions if present (server returns JSON array)
+      final up = widget.user!['permissions'];
+      if (up is List && up.isNotEmpty) {
+        customPerms = Set<String>.from(up.map((x) => x.toString()));
+      }
+    }
+  }
 
   Future<void> _save() async {
     setState(() => busy = true);
@@ -208,12 +226,14 @@ class _UserFormDialogState extends State<UserFormDialog> {
           'email': email.text.trim(),
           'password': password.text,
           'role': role,
+          'permissions': customPerms.toList(),
         });
       } else {
         await api.put('/users/${widget.user!['id']}', {
           'name': name.text.trim(),
           'role': role,
           'active': active,
+          'permissions': customPerms.toList(),
           if (password.text.isNotEmpty) 'password': password.text,
         });
       }
@@ -245,14 +265,24 @@ class _UserFormDialogState extends State<UserFormDialog> {
               for (final r in widget.roles)
                 DropdownMenuItem(value: r['id'] as String, child: Text(r['label'] as String)),
             ],
-            onChanged: (v) => setState(() => role = v ?? role),
+            onChanged: (v) {
+              if (v == null) return;
+              setState(() {
+                role = v;
+                customPerms = _defaultPermsFor(v);
+              });
+            },
           ),
           const SizedBox(height: 8),
-          // Permissions preview + checkboxes (scrollable, wrapped to avoid overflow)
+          // Permissions — role defaults + tap chips to toggle (customize)
           Builder(
             builder: (ctx) {
               final r = widget.roles.firstWhere((x) => x['id'] == role, orElse: () => <String, dynamic>{});
-              final rolePerms = List<String>.from((r['permissions'] as List?) ?? const []);
+              final allPerms = <String>{};
+              for (final ro in widget.roles) {
+                allPerms.addAll(List<String>.from((ro['permissions'] as List?) ?? const []));
+              }
+              final permsList = allPerms.toList()..sort();
               final color = hexColor(r['color'] as String? ?? '#4f46e5');
               return Container(
                 width: double.infinity,
@@ -268,26 +298,39 @@ class _UserFormDialogState extends State<UserFormDialog> {
                     Row(children: [
                       _RoleChip(role: r),
                       const SizedBox(width: 8),
-                      Expanded(child: Text(
-                        'default permissions (tap to customize):',
-                        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
+                      const Expanded(child: Text(
+                        'permissions (tap to toggle):',
+                        style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
                         softWrap: true,
                       )),
+                      TextButton(
+                        onPressed: () => setState(() => customPerms = _defaultPermsFor(role)),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          minimumSize: const Size(0, 28),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        child: const Text('Reset', style: TextStyle(fontSize: 11)),
+                      ),
                     ]),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     Wrap(
-                      spacing: 6,
+                      spacing: 5,
                       runSpacing: 4,
                       children: [
-                        for (final p in rolePerms)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: color.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(5),
-                              border: Border.all(color: color.withValues(alpha: 0.4)),
-                            ),
-                            child: Text(p, style: TextStyle(fontSize: 10.5, color: color, fontWeight: FontWeight.w600)),
+                        for (final p in permsList)
+                          FilterChip(
+                            label: Text(p, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600)),
+                            selected: customPerms.contains(p),
+                            onSelected: (v) => setState(() {
+                              if (v) { customPerms.add(p); } else { customPerms.remove(p); }
+                            }),
+                            selectedColor: color.withValues(alpha: 0.25),
+                            checkmarkColor: color,
+                            labelStyle: TextStyle(color: customPerms.contains(p) ? color : Colors.grey[700], fontSize: 10.5, fontWeight: FontWeight.w600),
+                            visualDensity: VisualDensity.compact,
+                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
                           ),
                       ],
                     ),
