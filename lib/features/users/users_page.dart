@@ -28,7 +28,63 @@ class _UsersPageState extends State<UsersPage> {
     return (json as Map).cast<String, dynamic>();
   }
 
-  void _reload() => setState(() => _future = _load());
+  void _reload() { _future = _load(); setState(() {}); }
+
+  Future<void> _deleteUser(Map<String, dynamic> u) async {
+    // Safely extract values first, before any async gap
+    final uid = u['id'];
+    final name = (u['name'] ?? 'User').toString();
+    final email = (u['email'] ?? '').toString();
+    if (uid == null) {
+      if (mounted) showErr(context, 'Invalid user id.');
+      return;
+    }
+    if (!mounted) return;
+    bool ok = false;
+    try {
+      ok = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Delete user permanently?'),
+              content: Text('$name ($email) will be permanently deleted.\n\nReports and audit entries will be kept with name shown as "[deleted]".'),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                FilledButton(
+                  style: FilledButton.styleFrom(backgroundColor: AppColors.red),
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Delete permanently'),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+    } catch (_) {
+      ok = false;
+    }
+    if (!ok || !mounted) return;
+    try {
+      await context.read<AuthController>().api.delete('/users/$uid');
+      if (!mounted) return;
+      _reload();
+      if (mounted) {
+        try {
+          showOk(context, 'User "$name" deleted.');
+        } catch (_) {}
+      }
+    } catch (e, st) {
+      print('DELETE ERR: $e\n$st');
+      if (!mounted) return;
+      try {
+        showErr(context, e is Exception ? e : Exception('$e'));
+      } catch (_) {
+        try {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Delete failed: $e'), backgroundColor: AppColors.red, duration: const Duration(seconds: 4)),
+          );
+        } catch (_) {}
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -70,14 +126,23 @@ class _UsersPageState extends State<UsersPage> {
                     fmtDate(u['created_at']),
                     Text('${(roleMap[u['role']]?['permissions'] as List?)?.length ?? 0} permissions'),
                     if (canManage)
-                      IconButton(
-                        icon: const Icon(Icons.edit_outlined, size: 19),
-                        tooltip: 'Edit user',
-                        onPressed: () async {
-                          final saved = await showDialog<bool>(context: context, builder: (_) => UserFormDialog(roles: roles, user: u));
-                          if (saved == true) _reload();
-                        },
-                      ),
+                      Row(mainAxisSize: MainAxisSize.min, children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined, size: 19),
+                          tooltip: 'Edit user',
+                          onPressed: () async {
+                            final saved = await showDialog<bool>(context: context, builder: (_) => UserFormDialog(roles: roles, user: u));
+                            if (saved == true) _reload();
+                          },
+                        ),
+                        // Don't let a user delete themselves (would lock super admin out)
+                        if (u['id'] != context.read<AuthController>().session?.id)
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline_rounded, size: 19, color: AppColors.red),
+                            tooltip: 'Delete permanently',
+                            onPressed: () => _deleteUser(u),
+                          ),
+                      ]),
                   ],
               ],
             ),
@@ -165,9 +230,10 @@ class _UserFormDialogState extends State<UserFormDialog> {
     final editing = widget.user != null;
     return AlertDialog(
       title: Text(editing ? 'Edit User' : 'Add User'),
-      content: SizedBox(
-        width: 420,
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
+      content: SingleChildScrollView(
+        child: SizedBox(
+          width: 420,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
           TextField(controller: name, decoration: const InputDecoration(labelText: 'Full name *')),
           const SizedBox(height: 12),
           TextField(controller: email, enabled: !editing, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email *')),
@@ -181,7 +247,56 @@ class _UserFormDialogState extends State<UserFormDialog> {
             ],
             onChanged: (v) => setState(() => role = v ?? role),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
+          // Permissions preview + checkboxes (scrollable, wrapped to avoid overflow)
+          Builder(
+            builder: (ctx) {
+              final r = widget.roles.firstWhere((x) => x['id'] == role, orElse: () => <String, dynamic>{});
+              final rolePerms = List<String>.from((r['permissions'] as List?) ?? const []);
+              final color = hexColor(r['color'] as String? ?? '#4f46e5');
+              return Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: color.withValues(alpha: 0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      _RoleChip(role: r),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(
+                        'default permissions (tap to customize):',
+                        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
+                        softWrap: true,
+                      )),
+                    ]),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        for (final p in rolePerms)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: color.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(5),
+                              border: Border.all(color: color.withValues(alpha: 0.4)),
+                            ),
+                            child: Text(p, style: TextStyle(fontSize: 10.5, color: color, fontWeight: FontWeight.w600)),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 10),
           TextField(
             controller: password,
             obscureText: true,
@@ -197,7 +312,8 @@ class _UserFormDialogState extends State<UserFormDialog> {
               onChanged: (v) => setState(() => active = v),
             ),
           ],
-        ]),
+          ]),
+        ),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
