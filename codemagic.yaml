@@ -13,3 +13,20 @@ workflows:
         script: flutter build apk --debug --dart-define=API_BASE=$ERP_SERVER_API
     artifacts:
       - build/**/outputs/flutter-apk/*.apk
+
+  play-store-release:
+    name: Play Store Release (signed AAB)
+    max_build_duration: 60
+    environment:
+      flutter: stable
+      vars:
+        ERP_SERVER_API: "https://flavorflow.duckdns.org/api"
+      android_signing:
+        - flavorflow-upload
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Build signed AAB (server address baked in)
+        script: flutter build appbundle --release --dart-define=API_BASE=$ERP_SERVER_API
+    artifacts:
+      - build/**/outputs/bundle/**/*.aab

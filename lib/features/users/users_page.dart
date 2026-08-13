@@ -28,6 +28,30 @@ class _UsersPageState extends State<UsersPage> {
     return (json as Map).cast<String, dynamic>();
   }
 
+  /// Show the user's OWN custom permissions when the server returns a
+  /// non-empty list — otherwise the role defaults. Tooltip lists them all,
+  /// so the admin can verify at a glance that custom perms were saved.
+  Widget _permsCell(Map<String, dynamic> u, Map<String, dynamic>? role) {
+    final own = u['permissions'];
+    final rolePerms = (role?['permissions'] as List?) ?? const [];
+    final List<String> list;
+    final String label;
+    final Color color;
+    if (own is List && own.isNotEmpty) {
+      list = own.map((x) => x.toString()).toList()..sort();
+      label = '${list.length} custom';
+      color = AppColors.violet;
+    } else {
+      list = List<String>.from(rolePerms);
+      label = '${list.length} default';
+      color = AppColors.slate;
+    }
+    return Tooltip(
+      message: list.isEmpty ? 'no permissions' : list.join('\n'),
+      child: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+    );
+  }
+
   void _reload() { _future = _load(); setState(() {}); }
 
   Future<void> _deleteUser(Map<String, dynamic> u) async {
@@ -124,7 +148,7 @@ class _UsersPageState extends State<UsersPage> {
                     _RoleChip(role: roleMap[u['role']]),
                     (u['active'] as int) == 1 ? const StatusChip('ACTIVE') : const StatusChip('INACTIVE'),
                     fmtDate(u['created_at']),
-                    Text('${(roleMap[u['role']]?['permissions'] as List?)?.length ?? 0} permissions'),
+                    _permsCell(u, roleMap[u['role']]),
                     if (canManage)
                       Row(mainAxisSize: MainAxisSize.min, children: [
                         IconButton(
