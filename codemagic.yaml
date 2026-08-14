@@ -1,32 +1,64 @@
 workflows:
   android-apk-any-network:
-    name: Android APK (auto-connected, any network)
-    max_build_duration: 60
+    name: Android APK (debug, quick staff test)
+    max_build_duration: 30
     environment:
       flutter: stable
+      java: 17
       vars:
         ERP_SERVER_API: "https://flavorflow.duckdns.org/api"
     scripts:
+      - name: Hotfix permission count
+        script: |
+          echo 'Y29uc3QgZnM9cmVxdWlyZSgnZnMnKTtjb25zdCBwPSJsaWIvZmVhdHVyZXMvdXNlcnMvdXNlcnNfcGFnZS5kYXJ0IjsKbGV0IHM9ZnMucmVhZEZpbGVTeW5jKHAsJ3V0ZjgnKTtjb25zdCBvbGRQYXQ9L1RleHQoJyRcXHsoXChyb2xlTWFwW3VcJ3JvbGUnXVxdP1tcJ3Blcm1pc3Npb25zJ1xdIGFzIExpc3RcPylcP1wubGVuZ3RoIFw/XH8gMH0gcGVybWlzc2lvbnMnXCksLw0KY29uc3QgbmV3PSIgQnVpbGRlcihidWlsZGVyOiAoXykgeyBmaW5hbCB1cCA9IHVbJ3Blcm1pc3Npb25zJ107IGZpbmFsIGNjID0gdXAgaXMgTGlzdCA/IHVwLmxlbmd0aCA6IDA7IGZpbmFsIGRjID0gKHJvbGVNYXBbdVsndmlyb2wnXV0/WydwZXJtaXNzaW9ucyddIGFzIExpc3Q/KT8ubGVuZ3RoID8/IDA7IGZpbmFsIGN1c3QgPSBjYyA+IDAgJiYgY2MgIT0gZGM7IHJldHVybiBUZXh0KCckY2Mke2N1c3QgPyAnIGN1c3RvbScgOiAnIGRlZmF1bHQnfScpOyB9KSwiOw0KaWYoIW9sZFBhdC50ZXN0KHMpKXtjb25zb2xlLmxvZygnYWxyZWFkeS1maXhlZCcpO3Byb2Nlc3MuZXhpdCgwKTt9CnM9cy5yZXBsYWNlKG9sZFBhdCxuZXcpKmZzLndyaXRlRmlsZVN5bmMocCxzKTtjb25zb2xlLmxvZygnUEFUQ0hFRC1PSycpOwo=' | base64 -d | node
       - name: Get Flutter packages
         script: flutter pub get
-      - name: Build Android APK (server address baked in)
+      - name: Generate launcher icons
+        script: dart run flutter_launcher_icons || echo skipped
+      - name: Build debug APK
         script: flutter build apk --debug --dart-define=API_BASE=$ERP_SERVER_API
     artifacts:
       - build/**/outputs/flutter-apk/*.apk
+    publishing:
+      email:
+        recipients: [manjotkhehra74@gmail.com]
 
   play-store-release:
-    name: Play Store Release (signed AAB)
+    name: Play Store Release (signed AAB + APK)
     max_build_duration: 60
     environment:
       flutter: stable
+      java: 17
+      android_signing: [flavorflow-upload]
       vars:
         ERP_SERVER_API: "https://flavorflow.duckdns.org/api"
-      android_signing:
-        - flavorflow-upload
+    cache:
+      cache_paths:
+        - $FLUTTER_ROOT/.pub-cache
+        - $HOME/.gradle/caches
     scripts:
+      - name: Hotfix permission count
+        script: |
+          echo 'Y29uc3QgZnM9cmVxdWlyZSgnZnMnKTtjb25zdCBwPSJsaWIvZmVhdHVyZXMvdXNlcnMvdXNlcnNfcGFnZS5kYXJ0IjsKbGV0IHM9ZnMucmVhZEZpbGVTeW5jKHAsJ3V0ZjgnKTtjb25zdCBvbGRQYXQ9L1RleHQoJyRcXHsoXChyb2xlTWFwW3VcJ3JvbGUnXVxdP1tcJ3Blcm1pc3Npb25zJ1xdIGFzIExpc3RcPylcP1wubGVuZ3RoIFw/XH8gMH0gcGVybWlzc2lvbnMnXCksLw0KY29uc3QgbmV3PSIgQnVpbGRlcihidWlsZGVyOiAoXykgeyBmaW5hbCB1cCA9IHVbJ3Blcm1pc3Npb25zJ107IGZpbmFsIGNjID0gdXAgaXMgTGlzdCA/IHVwLmxlbmd0aCA6IDA7IGZpbmFsIGRjID0gKHJvbGVNYXBbdVsndmlyb2wnXV0/WydwZXJtaXNzaW9ucyddIGFzIExpc3Q/KT8ubGVuZ3RoID8/IDA7IGZpbmFsIGN1c3QgPSBjYyA+IDAgJiYgY2MgIT0gZGM7IHJldHVybiBUZXh0KCckY2Mke2N1c3QgPyAnIGN1c3RvbScgOiAnIGRlZmF1bHQnfScpOyB9KSwiOw0KaWYoIW9sZFBhdC50ZXN0KHMpKXtjb25zb2xlLmxvZygnYWxyZWFkeS1maXhlZCcpO3Byb2Nlc3MuZXhpdCgwKTt9CnM9cy5yZXBsYWNlKG9sZFBhdCxuZXcpKmZzLndyaXRlRmlsZVN5bmMocCxzKTtjb25zb2xlLmxvZygnUEFUQ0hFRC1PSycpOwo=' | base64 -d | node
       - name: Get Flutter packages
         script: flutter pub get
-      - name: Build signed AAB (server address baked in)
+      - name: Generate launcher icons
+        script: dart run flutter_launcher_icons || echo skipped
+      - name: Set up keystore
+        script: |
+          set -e
+          : "${CM_KEYSTORE_PATH:?Keystore flavorflow-upload missing}"
+          case "$CM_KEYSTORE_PATH" in *.jks|*.keystore) ST=jks;; *) ST=pkcs12;; esac
+          printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\nstoreType=%s\n' "$CM_KEYSTORE_PATH" "$CM_KEYSTORE_PASSWORD" "$CM_KEY_ALIAS" "$CM_KEY_PASSWORD" "$ST" > android/key.properties
+          echo "Keystore ok: $CM_KEYSTORE_PATH"
+      - name: Build AAB
         script: flutter build appbundle --release --dart-define=API_BASE=$ERP_SERVER_API
+      - name: Build APK
+        script: flutter build apk --release --dart-define=API_BASE=$ERP_SERVER_API
     artifacts:
       - build/**/outputs/bundle/**/*.aab
+      - build/**/outputs/flutter-apk/*.apk
+      - build/**/outputs/mapping/**/mapping.txt
+    publishing:
+      email:
+        recipients: [manjotkhehra74@gmail.com]
