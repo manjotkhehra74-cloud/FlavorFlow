@@ -28,89 +28,7 @@ class _UsersPageState extends State<UsersPage> {
     return (json as Map).cast<String, dynamic>();
   }
 
-  /// Show the user's OWN custom permissions when the server returns a
-  /// non-empty list — otherwise the role defaults. Compares the stored set
-  /// with the role defaults so "custom" really means different-from-default.
-  Widget _permsCell(Map<String, dynamic> u, Map<String, dynamic>? role) {
-    final own = u['permissions'];
-    final rolePerms = (role?['permissions'] as List?) ?? const [];
-    final bool isCustom;
-    final List<String> list;
-    if (own is List && own.isNotEmpty) {
-      list = own.map((x) => x.toString()).toList()..sort();
-      final ownSet = list.toSet();
-      final defSet = rolePerms.map((x) => x.toString()).toSet();
-      isCustom = ownSet.length != defSet.length || !ownSet.containsAll(defSet);
-    } else {
-      list = List<String>.from(rolePerms);
-      isCustom = false;
-    }
-    return Tooltip(
-      message: list.isEmpty ? 'no permissions' : list.join('\n'),
-      child: Text(
-        isCustom ? '${list.length} custom' : '${list.length} default',
-        style: TextStyle(color: isCustom ? AppColors.violet : AppColors.slate, fontWeight: FontWeight.w600),
-      ),
-    );
-  }
-
-  void _reload() { _future = _load(); setState(() {}); }
-
-  Future<void> _deleteUser(Map<String, dynamic> u) async {
-    // Safely extract values first, before any async gap
-    final uid = u['id'];
-    final name = (u['name'] ?? 'User').toString();
-    final email = (u['email'] ?? '').toString();
-    if (uid == null) {
-      if (mounted) showErr(context, 'Invalid user id.');
-      return;
-    }
-    if (!mounted) return;
-    bool ok = false;
-    try {
-      ok = await showDialog<bool>(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              title: const Text('Delete user permanently?'),
-              content: Text('$name ($email) will be permanently deleted.\n\nReports and audit entries will be kept with name shown as "[deleted]".'),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-                FilledButton(
-                  style: FilledButton.styleFrom(backgroundColor: AppColors.red),
-                  onPressed: () => Navigator.pop(ctx, true),
-                  child: const Text('Delete permanently'),
-                ),
-              ],
-            ),
-          ) ??
-          false;
-    } catch (_) {
-      ok = false;
-    }
-    if (!ok || !mounted) return;
-    try {
-      await context.read<AuthController>().api.delete('/users/$uid');
-      if (!mounted) return;
-      _reload();
-      if (mounted) {
-        try {
-          showOk(context, 'User "$name" deleted.');
-        } catch (_) {}
-      }
-    } catch (e, st) {
-      print('DELETE ERR: $e\n$st');
-      if (!mounted) return;
-      try {
-        showErr(context, e is Exception ? e : Exception('$e'));
-      } catch (_) {
-        try {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Delete failed: $e'), backgroundColor: AppColors.red, duration: const Duration(seconds: 4)),
-          );
-        } catch (_) {}
-      }
-    }
-  }
+  void _reload() => setState(() => _future = _load());
 
   @override
   Widget build(BuildContext context) {
@@ -150,25 +68,16 @@ class _UsersPageState extends State<UsersPage> {
                     _RoleChip(role: roleMap[u['role']]),
                     (u['active'] as int) == 1 ? const StatusChip('ACTIVE') : const StatusChip('INACTIVE'),
                     fmtDate(u['created_at']),
-                    _permsCell(u, roleMap[u['role']]),
+                    Text('${(roleMap[u['role']]?['permissions'] as List?)?.length ?? 0} permissions'),
                     if (canManage)
-                      Row(mainAxisSize: MainAxisSize.min, children: [
-                        IconButton(
-                          icon: const Icon(Icons.edit_outlined, size: 19),
-                          tooltip: 'Edit user',
-                          onPressed: () async {
-                            final saved = await showDialog<bool>(context: context, builder: (_) => UserFormDialog(roles: roles, user: u));
-                            if (saved == true) _reload();
-                          },
-                        ),
-                        // Don't let a user delete themselves (would lock super admin out)
-                        if (u['id'] != context.read<AuthController>().session?.id)
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline_rounded, size: 19, color: AppColors.red),
-                            tooltip: 'Delete permanently',
-                            onPressed: () => _deleteUser(u),
-                          ),
-                      ]),
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined, size: 19),
+                        tooltip: 'Edit user',
+                        onPressed: () async {
+                          final saved = await showDialog<bool>(context: context, builder: (_) => UserFormDialog(roles: roles, user: u));
+                          if (saved == true) _reload();
+                        },
+                      ),
                   ],
               ],
             ),
@@ -222,25 +131,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
   final password = TextEditingController();
   late String role = widget.user?['role']?.toString() ?? 'store_keeper';
   late bool active = (widget.user?['active'] as int? ?? 1) == 1;
-  late Set<String> customPerms = _defaultPermsFor(role);
   bool busy = false;
-
-  Set<String> _defaultPermsFor(String roleId) {
-    final r = widget.roles.firstWhere((x) => x['id'] == roleId, orElse: () => <String, dynamic>{});
-    return Set<String>.from((r['permissions'] as List?) ?? const []);
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.user != null) {
-      // Editing: load existing user's custom permissions if present (server returns JSON array)
-      final up = widget.user!['permissions'];
-      if (up is List && up.isNotEmpty) {
-        customPerms = Set<String>.from(up.map((x) => x.toString()));
-      }
-    }
-  }
 
   Future<void> _save() async {
     setState(() => busy = true);
@@ -252,14 +143,12 @@ class _UserFormDialogState extends State<UserFormDialog> {
           'email': email.text.trim(),
           'password': password.text,
           'role': role,
-          'permissions': customPerms.toList(),
         });
       } else {
         await api.put('/users/${widget.user!['id']}', {
           'name': name.text.trim(),
           'role': role,
           'active': active,
-          'permissions': customPerms.toList(),
           if (password.text.isNotEmpty) 'password': password.text,
         });
       }
@@ -276,10 +165,9 @@ class _UserFormDialogState extends State<UserFormDialog> {
     final editing = widget.user != null;
     return AlertDialog(
       title: Text(editing ? 'Edit User' : 'Add User'),
-      content: SingleChildScrollView(
-        child: SizedBox(
-          width: 420,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
+      content: SizedBox(
+        width: 420,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
           TextField(controller: name, decoration: const InputDecoration(labelText: 'Full name *')),
           const SizedBox(height: 12),
           TextField(controller: email, enabled: !editing, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email *')),
@@ -291,81 +179,9 @@ class _UserFormDialogState extends State<UserFormDialog> {
               for (final r in widget.roles)
                 DropdownMenuItem(value: r['id'] as String, child: Text(r['label'] as String)),
             ],
-            onChanged: (v) {
-              if (v == null) return;
-              setState(() {
-                role = v;
-                customPerms = _defaultPermsFor(v);
-              });
-            },
+            onChanged: (v) => setState(() => role = v ?? role),
           ),
-          const SizedBox(height: 8),
-          // Permissions — role defaults + tap chips to toggle (customize)
-          Builder(
-            builder: (ctx) {
-              final r = widget.roles.firstWhere((x) => x['id'] == role, orElse: () => <String, dynamic>{});
-              final allPerms = <String>{};
-              for (final ro in widget.roles) {
-                allPerms.addAll(List<String>.from((ro['permissions'] as List?) ?? const []));
-              }
-              final permsList = allPerms.toList()..sort();
-              final color = hexColor(r['color'] as String? ?? '#4f46e5');
-              return Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: color.withValues(alpha: 0.3)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(children: [
-                      _RoleChip(role: r),
-                      const SizedBox(width: 8),
-                      const Expanded(child: Text(
-                        'permissions (tap to toggle):',
-                        style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
-                        softWrap: true,
-                      )),
-                      TextButton(
-                        onPressed: () => setState(() => customPerms = _defaultPermsFor(role)),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          minimumSize: const Size(0, 28),
-                          visualDensity: VisualDensity.compact,
-                        ),
-                        child: const Text('Reset', style: TextStyle(fontSize: 11)),
-                      ),
-                    ]),
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 5,
-                      runSpacing: 4,
-                      children: [
-                        for (final p in permsList)
-                          FilterChip(
-                            label: Text(p, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600)),
-                            selected: customPerms.contains(p),
-                            onSelected: (v) => setState(() {
-                              if (v) { customPerms.add(p); } else { customPerms.remove(p); }
-                            }),
-                            selectedColor: color.withValues(alpha: 0.25),
-                            checkmarkColor: color,
-                            labelStyle: TextStyle(color: customPerms.contains(p) ? color : Colors.grey[700], fontSize: 10.5, fontWeight: FontWeight.w600),
-                            visualDensity: VisualDensity.compact,
-                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           TextField(
             controller: password,
             obscureText: true,
@@ -381,8 +197,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
               onChanged: (v) => setState(() => active = v),
             ),
           ],
-          ]),
-        ),
+        ]),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
