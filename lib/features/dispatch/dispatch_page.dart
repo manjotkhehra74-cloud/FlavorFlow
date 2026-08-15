@@ -79,7 +79,8 @@ class _Line {
   int? productId;
   final cartons = TextEditingController();
   final trays = TextEditingController();
-  void dispose() { cartons.dispose(); trays.dispose(); }
+  final batchCode = TextEditingController();
+  void dispose() { cartons.dispose(); trays.dispose(); batchCode.dispose(); }
 }
 
 Map<String, dynamic> _prod(List<Map<String, dynamic>> products, int? id) =>
@@ -90,52 +91,76 @@ class _LinesEditor extends StatelessWidget {
   final List<_Line> lines;
   final VoidCallback onAdd, onChanged;
   final void Function(int) onRemove;
-  const _LinesEditor({required this.products, required this.lines, required this.onAdd, required this.onRemove, required this.onChanged});
+  final bool showBatch;
+  const _LinesEditor({required this.products, required this.lines, required this.onAdd, required this.onRemove, required this.onChanged, this.showBatch = false});
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       for (var i = 0; i < lines.length; i++)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: Row(children: [
-            Expanded(
-              flex: 4,
-              child: DropdownButtonFormField<int>(
-                initialValue: lines[i].productId,
-                decoration: InputDecoration(labelText: 'Product ${i + 1} *'),
-                items: [for (final p in products) DropdownMenuItem(value: p['id'] as int, child: Text(p['name'] as String, overflow: TextOverflow.ellipsis))],
-                onChanged: (v) { lines[i].productId = v; onChanged(); },
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              flex: 2,
-              child: TextField(
-                controller: lines[i].cartons,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(labelText: 'Cartons', helperText: lines[i].productId == null ? null : '${_prod(products, lines[i].productId)['bottles_per_cb']} bottles/CB'),
-                onChanged: (_) => onChanged(),
-              ),
-            ),
-            if ((_prod(products, lines[i].productId)['bottles_per_tray'] as num? ?? 0) > 0) ...[
-              const SizedBox(width: 10),
+        Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.fromLTRB(12, 10, 6, 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: scheme.outlineVariant),
+          ),
+          child: Column(children: [
+            // Row 1: full-width product selector so long names are never cut off.
+            Row(children: [
               Expanded(
-                flex: 2,
-                child: TextField(
-                  controller: lines[i].trays,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(labelText: 'Trays', helperText: lines[i].productId == null ? null : '${_prod(products, lines[i].productId)['bottles_per_tray']} bottles/tray'),
-                  onChanged: (_) => onChanged(),
+                child: DropdownButtonFormField<int>(
+                  initialValue: lines[i].productId,
+                  isExpanded: true,
+                  decoration: InputDecoration(labelText: 'Product ${i + 1} *'),
+                  items: [for (final p in products) DropdownMenuItem(value: p['id'] as int, child: Text(p['name'] as String, overflow: TextOverflow.ellipsis))],
+                  onChanged: (v) { lines[i].productId = v; onChanged(); },
                 ),
               ),
-            ],
-            const SizedBox(width: 6),
-            IconButton(
-              tooltip: 'Remove line',
-              onPressed: lines.length <= 1 ? null : () => onRemove(i),
-              icon: Icon(Icons.remove_circle_outline_rounded, color: lines.length <= 1 ? scheme.outline : scheme.error),
+              IconButton(
+                tooltip: 'Remove line',
+                onPressed: lines.length <= 1 ? null : () => onRemove(i),
+                icon: Icon(Icons.remove_circle_outline_rounded, color: lines.length <= 1 ? scheme.outline : scheme.error),
+              ),
+            ]),
+            const SizedBox(height: 10),
+            // Row 2: quantities (and optional batch code) with room to breathe.
+            Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(
+                  child: TextField(
+                    controller: lines[i].cartons,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(labelText: 'Cartons', helperText: lines[i].productId == null ? null : '${_prod(products, lines[i].productId)['bottles_per_cb']}/CB', helperMaxLines: 1),
+                    onChanged: (_) => onChanged(),
+                  ),
+                ),
+                if ((_prod(products, lines[i].productId)['bottles_per_tray'] as num? ?? 0) > 0) ...[
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: lines[i].trays,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(labelText: 'Trays', helperText: lines[i].productId == null ? null : '${_prod(products, lines[i].productId)['bottles_per_tray']}/tray', helperMaxLines: 1),
+                      onChanged: (_) => onChanged(),
+                    ),
+                  ),
+                ],
+                if (showBatch) ...[
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: TextField(
+                      controller: lines[i].batchCode,
+                      textCapitalization: TextCapitalization.characters,
+                      decoration: const InputDecoration(labelText: 'Batch code', hintText: 'e.g. SS-740-A', helperText: 'Stock deducts batch-wise', helperMaxLines: 1),
+                      onChanged: (_) => onChanged(),
+                    ),
+                  ),
+                ],
+              ]),
             ),
           ]),
         ),
@@ -227,6 +252,7 @@ mixin _CalcMixin<T extends StatefulWidget> on State<T> {
             'productId': l.productId,
             'cartons': int.tryParse(l.cartons.text) ?? 0,
             'trays': int.tryParse(l.trays.text) ?? 0,
+            if (l.batchCode.text.trim().isNotEmpty) 'batchCode': l.batchCode.text.trim().toUpperCase(),
           },
       ];
 
@@ -422,7 +448,7 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
           const SizedBox(height: 10),
           products.isEmpty
               ? const SizedBox(height: 60, child: Center(child: CircularProgressIndicator()))
-              : _LinesEditor(products: products, lines: lines, onAdd: addLine, onRemove: removeLine, onChanged: recalcDebounced),
+              : _LinesEditor(products: products, lines: lines, onAdd: addLine, onRemove: removeLine, onChanged: recalcDebounced, showBatch: true),
         ]));
         final side = SectionCard(title: 'Before you dispatch', child: Column(children: [
           if (calc != null) ...[

@@ -111,11 +111,12 @@ class _DispatchDetailPageState extends State<DispatchDetailPage> {
           SectionCard(
             title: 'Loaded Items',
             child: AppDataTable(
-              columns: const ['Product', 'Cartons', 'Trays', 'Bottles', 'Carton kg', 'Tray kg', 'Gross kg'],
+              columns: const ['Product', 'Batch', 'Cartons', 'Trays', 'Bottles', 'Carton kg', 'Tray kg', 'Gross kg'],
               rows: [
                 for (final it in items)
                   [
                     Text(it['product_name'] as String, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    (it['batch_code'] ?? '—').toString(),
                     qtyInt(it['cartons']),
                     qtyInt(it['trays'] ?? 0),
                     qtyInt(it['total_bottles']),

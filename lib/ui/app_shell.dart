@@ -229,7 +229,7 @@ class _Sidebar extends StatelessWidget {
             const SizedBox(width: 10),
             const Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
               Text('FlavorFlow ERP', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: Colors.white, height: 1.15, letterSpacing: -0.1)),
-              Text('SAUCES & VINEGAR', style: TextStyle(fontSize: 8.5, color: Shell.groupLabel, letterSpacing: 1.6, fontWeight: FontWeight.w600, height: 1.4)),
+              Text('MANUFACTURING SUITE', style: TextStyle(fontSize: 8.5, color: Shell.groupLabel, letterSpacing: 1.6, fontWeight: FontWeight.w600, height: 1.4)),
             ]),
           ]),
         ),

@@ -19,13 +19,16 @@ class DispatchPdf {
   static String kg(Object? v) => '${_num.format(v is num ? v : num.tryParse('$v') ?? 0)} kg';
 
   /// Confirmed dispatch challan (from dispatch detail API payload).
+  /// Includes the per-line production batch code when recorded.
   static Future<Uint8List> challan(Map<String, dynamic> d, List<Map<String, dynamic>> items) async {
     await _loadFonts();
+    final hasBatch = items.any((it) => (it['batch_code'] ?? '').toString().isNotEmpty);
     final rows = <List<String>>[
       for (var i = 0; i < items.length; i++)
         [
           '${i + 1}',
           '${items[i]['product_name']}',
+          if (hasBatch) '${items[i]['batch_code'] ?? '—'}',
           '${items[i]['cartons']}',
           '${items[i]['trays'] ?? 0}',
           '${items[i]['total_bottles']}',
@@ -38,6 +41,7 @@ class DispatchPdf {
     doc.addPage(_page(
       title: 'DISPATCH CHALLAN',
       subtitle: '${d['code']}',
+      headers: hasBatch ? _headersWithBatch : _headers,
       meta: [
         ['Dispatch Date', _dateWithDay(d['dispatch_date'])],
         ['Truck / Vehicle No.', '${d['truck_number']}'],
@@ -47,7 +51,7 @@ class DispatchPdf {
       remarks: '${d['remarks'] ?? ''}',
       rows: rows,
       totals: [
-        'TOTAL', '', '${d['total_cartons']}', '${d['total_trays'] ?? 0}', '${d['total_bottles']}',
+        'TOTAL', '', if (hasBatch) '', '${d['total_cartons']}', '${d['total_trays'] ?? 0}', '${d['total_bottles']}',
         kg(d['carton_weight']), kg(d['tray_weight'] ?? 0), kg(d['gross_weight']),
       ],
       footnote: 'Date & day are recorded automatically at dispatch time.',
@@ -97,6 +101,7 @@ class DispatchPdf {
   }
 
   static const _headers = ['#', 'Product', 'Cartons', 'Trays', 'Bottles', 'Carton Wt', 'Tray Wt', 'Gross Wt'];
+  static const _headersWithBatch = ['#', 'Product', 'Batch', 'Cartons', 'Trays', 'Bottles', 'Carton Wt', 'Tray Wt', 'Gross Wt'];
 
   static pw.Page _page({
     required String title,
@@ -106,6 +111,7 @@ class DispatchPdf {
     required List<String> totals,
     required String footnote,
     String remarks = '',
+    List<String> headers = _headers,
   }) {
     const primary = PdfColor.fromInt(0xFF2456C8);
     const headerBg = PdfColor.fromInt(0xFFEFF4FF);
@@ -124,15 +130,12 @@ class DispatchPdf {
               style: ts(header ? 8.6 : 9, bold: bold || header, color: color ?? (header ? primary : null))),
         );
 
-    final widths = {
+    final hasBatch = headers.length == _headersWithBatch.length;
+    final widths = <int, pw.TableColumnWidth>{
       0: const pw.FixedColumnWidth(26),
-      1: const pw.FlexColumnWidth(2.6),
-      2: const pw.FlexColumnWidth(1.0),
-      3: const pw.FlexColumnWidth(0.9),
-      4: const pw.FlexColumnWidth(1.0),
-      5: const pw.FlexColumnWidth(1.25),
-      6: const pw.FlexColumnWidth(1.2),
-      7: const pw.FlexColumnWidth(1.3),
+      1: pw.FlexColumnWidth(hasBatch ? 2.2 : 2.6),
+      if (hasBatch) 2: const pw.FlexColumnWidth(1.2),
+      for (var i = hasBatch ? 3 : 2; i < headers.length; i++) i: const pw.FlexColumnWidth(1.1),
     };
 
     return pw.Page(
@@ -185,17 +188,17 @@ class DispatchPdf {
           children: [
             pw.TableRow(
               decoration: const pw.BoxDecoration(color: headerBg),
-              children: [for (var i = 0; i < _headers.length; i++) cell(_headers[i], header: true, right: i >= 2)],
+              children: [for (var i = 0; i < headers.length; i++) cell(headers[i], header: true, right: i >= (hasBatch ? 3 : 2))],
             ),
             for (final r in rows)
-              pw.TableRow(children: [for (var i = 0; i < r.length; i++) cell(r[i], right: i >= 2)]),
+              pw.TableRow(children: [for (var i = 0; i < r.length; i++) cell(r[i], right: i >= (hasBatch ? 3 : 2))]),
             pw.TableRow(
               decoration: const pw.BoxDecoration(color: headerBg),
               children: [
                 for (var i = 0; i < totals.length; i++)
                   i == 0
                       ? pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 7, vertical: 6), child: pw.Text('TOTAL', style: ts(9, bold: true, color: primary)))
-                      : cell(totals[i], bold: true, right: i >= 2, color: primary),
+                      : cell(totals[i], bold: true, right: i >= (hasBatch ? 3 : 2), color: primary),
               ],
             ),
           ],

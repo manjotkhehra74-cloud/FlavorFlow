@@ -70,7 +70,7 @@ class _LoginPageState extends State<LoginPage> {
                   const SizedBox(width: 12),
                   const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text('FlavorFlow ERP', style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700, letterSpacing: -0.2)),
-                    Text('SAUCES & VINEGAR SUITE', style: TextStyle(color: Shell.groupLabel, fontSize: 8.5, fontWeight: FontWeight.w600, letterSpacing: 1.8)),
+                    Text('MANUFACTURING SUITE', style: TextStyle(color: Shell.groupLabel, fontSize: 8.5, fontWeight: FontWeight.w600, letterSpacing: 1.8)),
                   ]),
                 ]),
                 const SizedBox(height: 40),
