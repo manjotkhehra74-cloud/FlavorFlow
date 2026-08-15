@@ -28,6 +28,32 @@ class _UsersPageState extends State<UsersPage> {
     return (json as Map).cast<String, dynamic>();
   }
 
+  /// Show the user's OWN custom permissions when the server returns a
+  /// non-empty list — otherwise the role defaults. Compares the stored set
+  /// with the role defaults so "custom" really means different-from-default.
+  Widget _permsCell(Map<String, dynamic> u, Map<String, dynamic>? role) {
+    final own = u['permissions'];
+    final rolePerms = (role?['permissions'] as List?) ?? const [];
+    final bool isCustom;
+    final List<String> list;
+    if (own is List && own.isNotEmpty) {
+      list = own.map((x) => x.toString()).toList()..sort();
+      final ownSet = list.toSet();
+      final defSet = rolePerms.map((x) => x.toString()).toSet();
+      isCustom = ownSet.length != defSet.length || !ownSet.containsAll(defSet);
+    } else {
+      list = List<String>.from(rolePerms);
+      isCustom = false;
+    }
+    return Tooltip(
+      message: list.isEmpty ? 'no permissions' : list.join('\n'),
+      child: Text(
+        isCustom ? '${list.length} custom' : '${list.length} default',
+        style: TextStyle(color: isCustom ? AppColors.violet : AppColors.slate, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+
   void _reload() { _future = _load(); setState(() {}); }
 
   Future<void> _deleteUser(Map<String, dynamic> u) async {
@@ -124,7 +150,7 @@ class _UsersPageState extends State<UsersPage> {
                     _RoleChip(role: roleMap[u['role']]),
                     (u['active'] as int) == 1 ? const StatusChip('ACTIVE') : const StatusChip('INACTIVE'),
                     fmtDate(u['created_at']),
-                    Text('${(roleMap[u['role']]?['permissions'] as List?)?.length ?? 0} permissions'),
+                    _permsCell(u, roleMap[u['role']]),
                     if (canManage)
                       Row(mainAxisSize: MainAxisSize.min, children: [
                         IconButton(

@@ -44,6 +44,8 @@ class _AppShellState extends State<AppShell> {
     super.dispose();
   }
 
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
   int _selectedIndex(BuildContext context, List nav) {
     final path = GoRouterState.of(context).uri.path;
     var best = 0, bestLen = -1;
@@ -75,7 +77,16 @@ class _AppShellState extends State<AppShell> {
       nav: nav,
       selected: selected,
       session: session,
-      onTap: (i) => context.go(nav[i]['path'] as String),
+      onTap: (i) {
+        context.go(nav[i]['path'] as String);
+        if (!wide) {
+          // Auto-hide the drawer on mobile after a short delay so the tap
+          // ripple is visible before the drawer slides away.
+          Future.delayed(const Duration(milliseconds: 200), () {
+            _scaffoldKey.currentState?.closeDrawer();
+          });
+        }
+      },
       onLogout: _logout,
     );
 
@@ -97,6 +108,7 @@ class _AppShellState extends State<AppShell> {
     }
 
     return Scaffold(
+      key: _scaffoldKey,
       appBar: AppBar(
         title: Text(title),
         actions: [topBar.actionsPadding(child: topBar.bellAction(context)), topBar.userAction(context)],
