@@ -92,6 +92,35 @@ class _StockTabState extends State<_StockTab> {
 
   void _reload() => setState(() => _future = _load());
 
+  Future<void> _deleteMaterial(Map<String, dynamic> m) async {
+    final ok = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text('Delete ${m['name']}?'),
+            content: const Text('The material will be removed from stock and BOM dropdowns.\n\nPast ledger entries are kept unchanged.'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!ok || !mounted) return;
+    try {
+      await context.read<AuthController>().api.delete('/packing/materials/${m['id']}');
+      if (mounted) {
+        showOk(context, '${m['name']} deleted.');
+        _reload();
+      }
+    } catch (e) {
+      if (mounted) showErr(context, e);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthController>();
@@ -177,14 +206,21 @@ class _StockTabState extends State<_StockTab> {
                           qtyInt(m['min_stock']),
                           (m['low'] as int) == 1 ? const StatusChip('LOW') : const StatusChip('IN STOCK'),
                           if (canManage)
-                            IconButton(
-                              tooltip: 'Edit material & stock',
-                              icon: const Icon(Icons.edit_outlined, size: 18),
-                              onPressed: () async {
-                                final saved = await showDialog<bool>(context: context, builder: (_) => _MaterialFormDialog(material: m));
-                                if (saved == true) _reload();
-                              },
-                            )
+                            Row(mainAxisSize: MainAxisSize.min, children: [
+                              IconButton(
+                                tooltip: 'Edit material & stock',
+                                icon: const Icon(Icons.edit_outlined, size: 18),
+                                onPressed: () async {
+                                  final saved = await showDialog<bool>(context: context, builder: (_) => _MaterialFormDialog(material: m));
+                                  if (saved == true) _reload();
+                                },
+                              ),
+                              IconButton(
+                                tooltip: 'Delete material',
+                                icon: Icon(Icons.delete_outline_rounded, size: 18, color: Theme.of(context).colorScheme.error),
+                                onPressed: () => _deleteMaterial(m),
+                              ),
+                            ])
                           else
                             const SizedBox.shrink(),
                         ],

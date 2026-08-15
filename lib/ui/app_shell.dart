@@ -113,8 +113,11 @@ class _AppShellState extends State<AppShell> {
     return Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
-        title: Text(title),
-        actions: [topBar.actionsPadding(child: topBar.bellAction(context)), topBar.userAction(context)],
+        // FittedBox scales long section names down instead of cutting them off;
+        // the compact user menu (avatar only) leaves the title maximum room.
+        title: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text(title)),
+        titleSpacing: 0,
+        actions: [topBar.actionsPadding(child: topBar.bellAction(context)), topBar.userAction(context, compact: true)],
       ),
       drawer: Drawer(backgroundColor: Shell.bg, child: SafeArea(child: sidebar)),
       body: widget.child,
@@ -142,7 +145,9 @@ class _TopBar extends StatelessWidget {
         ),
       );
 
-  Widget userAction(BuildContext context) => Padding(
+  /// User menu. [compact] (mobile app bar) shows only the avatar so the page
+  /// title gets the full width — name & role still appear inside the menu.
+  Widget userAction(BuildContext context, {bool compact = false}) => Padding(
         padding: const EdgeInsets.only(right: 12, left: 2),
         child: PopupMenuButton<String>(
           tooltip: session.name,
@@ -160,16 +165,18 @@ class _TopBar extends StatelessWidget {
             const PopupMenuItem(value: 'refresh', child: ListTile(leading: Icon(Icons.sync_rounded, size: 20), title: Text('Refresh permissions'), dense: true, contentPadding: EdgeInsets.zero)),
             const PopupMenuItem(value: 'logout', child: ListTile(leading: Icon(Icons.logout_rounded, size: 20), title: Text('Sign out'), dense: true, contentPadding: EdgeInsets.zero)),
           ],
-          child: Row(children: [
-            _Avatar(session: session, radius: 15),
-            const SizedBox(width: 8),
-            Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
-              Text(session.name, style: const TextStyle(fontSize: 12.8, fontWeight: FontWeight.w600, color: Color(0xFF1B2733), height: 1.15)),
-              Text(session.roleLabel, style: const TextStyle(fontSize: 10.5, color: Color(0xFF5C6B7A), height: 1.2)),
-            ]),
-            const SizedBox(width: 4),
-            const Icon(Icons.keyboard_arrow_down_rounded, size: 17, color: Color(0xFF5C6B7A)),
-          ]),
+          child: compact
+              ? _Avatar(session: session, radius: 16)
+              : Row(children: [
+                  _Avatar(session: session, radius: 15),
+                  const SizedBox(width: 8),
+                  Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Text(session.name, style: const TextStyle(fontSize: 12.8, fontWeight: FontWeight.w600, color: Color(0xFF1B2733), height: 1.15)),
+                    Text(session.roleLabel, style: const TextStyle(fontSize: 10.5, color: Color(0xFF5C6B7A), height: 1.2)),
+                  ]),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.keyboard_arrow_down_rounded, size: 17, color: Color(0xFF5C6B7A)),
+                ]),
         ),
       );
 

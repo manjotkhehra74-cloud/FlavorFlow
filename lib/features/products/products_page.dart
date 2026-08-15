@@ -28,6 +28,35 @@ class _ProductsPageState extends State<ProductsPage> {
 
   void _reload() => setState(() => _future = _load());
 
+  Future<void> _deleteProduct(Map<String, dynamic> p) async {
+    final ok = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text('Delete ${p['name']}?'),
+            content: const Text('The product will be removed from the Product Master and all dropdowns.\n\nPast dispatches, batches and reports that used it are kept unchanged.'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!ok || !mounted) return;
+    try {
+      await context.read<AuthController>().api.delete('/products/${p['id']}');
+      if (mounted) {
+        showOk(context, '${p['name']} deleted.');
+        _reload();
+      }
+    } catch (e) {
+      if (mounted) showErr(context, e);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthController>();
@@ -72,14 +101,21 @@ class _ProductsPageState extends State<ProductsPage> {
                     qtyInt(products[i]['qty_cb']),
                     qtyInt(products[i]['qty_trays']),
                     if (canManage)
-                      IconButton(
-                        icon: const Icon(Icons.edit_outlined, size: 19),
-                        tooltip: 'Edit',
-                        onPressed: () async {
-                          final saved = await showDialog<bool>(context: context, builder: (_) => ProductFormDialog(product: products[i]));
-                          if (saved == true) _reload();
-                        },
-                      )
+                      Row(mainAxisSize: MainAxisSize.min, children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined, size: 19),
+                          tooltip: 'Edit',
+                          onPressed: () async {
+                            final saved = await showDialog<bool>(context: context, builder: (_) => ProductFormDialog(product: products[i]));
+                            if (saved == true) _reload();
+                          },
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.delete_outline_rounded, size: 19, color: Theme.of(context).colorScheme.error),
+                          tooltip: 'Delete',
+                          onPressed: () => _deleteProduct(products[i]),
+                        ),
+                      ])
                     else
                       const SizedBox.shrink(),
                   ],
