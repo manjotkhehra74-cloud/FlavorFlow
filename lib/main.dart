@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/company.dart';
 import 'core/i18n.dart';
@@ -9,8 +10,15 @@ import 'state/auth.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Fresh install → one-time language + industry setup before login.
-  kNeedsFirstRunSetup = !(await CompanyProfile.setupDone());
+  // One-time language + industry setup: ONLY on a truly fresh install —
+  // never for a device that has already completed it or has ever signed in
+  // (existing users updating the app must go straight to login/dashboard).
+  final prefs = await SharedPreferences.getInstance();
+  final alreadyUsed = (prefs.getBool('setup_done') ?? false) || prefs.getString('token') != null;
+  if (alreadyUsed && !(prefs.getBool('setup_done') ?? false)) {
+    await CompanyProfile.markSetupDone(); // existing install: lock it in
+  }
+  kNeedsFirstRunSetup = !alreadyUsed;
   final auth = AuthController();
   auth.restore();
   L10n.instance.load();
