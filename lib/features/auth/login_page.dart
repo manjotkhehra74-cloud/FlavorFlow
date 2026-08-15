@@ -18,17 +18,6 @@ class _LoginPageState extends State<LoginPage> {
   bool _obscure = true;
   String? _error;
 
-  static const _demo = [
-    ['Super Admin', 'super.admin@flavorflow.in', 'Super@123', Color(0xFF7C3AED)],
-    ['Admin', 'admin@flavorflow.in', 'Admin@123', Color(0xFF2563EB)],
-    ['Production Manager', 'pm@flavorflow.in', 'Prod@123', Color(0xFF0891B2)],
-    ['Production Supervisor', 'ps@flavorflow.in', 'Super@1234', Color(0xFF0D9488)],
-    ['Store Manager', 'sm@flavorflow.in', 'Store@123', Color(0xFFD97706)],
-    ['Store Keeper', 'sk@flavorflow.in', 'Keeper@123', Color(0xFF65A30D)],
-    ['Dispatch Manager', 'disp@flavorflow.in', 'Dispatch@123', Color(0xFFEA580C)],
-    ['Director (Read Only)', 'director@flavorflow.in', 'Director@123', Color(0xFF475569)],
-  ];
-
   Future<void> _submit() async {
     final auth = context.read<AuthController>();
     final err = await auth.login(_email.text.trim(), _password.text);
@@ -178,30 +167,6 @@ class _LoginPageState extends State<LoginPage> {
               ),
               const SizedBox(height: 26),
               Divider(color: scheme.outlineVariant),
-              const SizedBox(height: 14),
-              Text('DEMO ACCOUNTS — TAP TO FILL',
-                  style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, letterSpacing: 1.2, color: scheme.onSurfaceVariant)),
-              const SizedBox(height: 10),
-              Wrap(spacing: 7, runSpacing: 7, children: [
-                for (final d in _demo)
-                  InkWell(
-                    borderRadius: BorderRadius.circular(5),
-                    onTap: () => setState(() {
-                      _email.text = d[1] as String;
-                      _password.text = d[2] as String;
-                      _error = null;
-                    }),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5.5),
-                      decoration: BoxDecoration(
-                        color: (d[3] as Color).withValues(alpha: 0.07),
-                        borderRadius: BorderRadius.circular(5),
-                        border: Border.all(color: (d[3] as Color).withValues(alpha: 0.30)),
-                      ),
-                      child: Text(d[0] as String, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: d[3] as Color)),
-                    ),
-                  ),
-              ]),
               const SizedBox(height: 16),
               _ServerBar(),
             ]),
