@@ -40,6 +40,10 @@ class _ReportsPageState extends State<ReportsPage> {
     _data = null;
     _reportFuture = context.read<AuthController>().api.get('/reports/${r['id']}').then((j) {
       _data = (j as Map).cast<String, dynamic>();
+      // Rebuild the whole page (not just the FutureBuilder subtree) so the
+      // Export PDF button — which is disabled while _data is null — enables
+      // as soon as the report data arrives.
+      if (mounted) setState(() {});
       return _data!;
     });
   }
