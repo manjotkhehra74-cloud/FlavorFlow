@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../core/company.dart';
 import '../core/theme.dart';
 import '../core/format.dart';
 import '../state/auth.dart';
@@ -28,6 +29,8 @@ class _AppShellState extends State<AppShell> {
     super.initState();
     _loadUnread();
     _timer = Timer.periodic(const Duration(seconds: 20), (_) => _loadUnread());
+    // Load the editable company identity used on every exported PDF.
+    CompanyProfile.load(context.read<AuthController>().api);
   }
 
   Future<void> _loadUnread() async {
@@ -147,10 +150,13 @@ class _TopBar extends StatelessWidget {
           onSelected: (v) async {
             if (v == 'logout') await onLogout();
             if (v == 'refresh') await context.read<AuthController>().refreshSession();
+            if (v == 'company') await showDialog(context: context, builder: (_) => const CompanyProfileDialog());
           },
           itemBuilder: (c) => [
             PopupMenuItem(enabled: false, child: _UserHeader(session: session)),
             const PopupMenuDivider(),
+            if (session.role == 'super_admin')
+              const PopupMenuItem(value: 'company', child: ListTile(leading: Icon(Icons.business_rounded, size: 20), title: Text('Company details (PDF header)'), dense: true, contentPadding: EdgeInsets.zero)),
             const PopupMenuItem(value: 'refresh', child: ListTile(leading: Icon(Icons.sync_rounded, size: 20), title: Text('Refresh permissions'), dense: true, contentPadding: EdgeInsets.zero)),
             const PopupMenuItem(value: 'logout', child: ListTile(leading: Icon(Icons.logout_rounded, size: 20), title: Text('Sign out'), dense: true, contentPadding: EdgeInsets.zero)),
           ],
@@ -380,5 +386,72 @@ class _UserHeader extends StatelessWidget {
         ]),
       ),
     ]);
+  }
+}
+
+/// Super Admin: edit the company identity printed on all exported PDFs
+/// (packing slips, stock reports, registers). Makes the app universal —
+/// any manufacturing company can put its own name, address and GST/tax line.
+class CompanyProfileDialog extends StatefulWidget {
+  const CompanyProfileDialog({super.key});
+  @override
+  State<CompanyProfileDialog> createState() => _CompanyProfileDialogState();
+}
+
+class _CompanyProfileDialogState extends State<CompanyProfileDialog> {
+  late final TextEditingController name;
+  late final TextEditingController address;
+  late final TextEditingController tax;
+  bool saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final p = CompanyProfile.current;
+    name = TextEditingController(text: p.name);
+    address = TextEditingController(text: p.address);
+    tax = TextEditingController(text: p.taxLine);
+  }
+
+  @override
+  void dispose() { name.dispose(); address.dispose(); tax.dispose(); super.dispose(); }
+
+  Future<void> _save() async {
+    if (name.text.trim().isEmpty) {
+      showErr(context, 'Company name is required.');
+      return;
+    }
+    setState(() => saving = true);
+    await CompanyProfile.save(
+      CompanyProfile(name: name.text.trim(), address: address.text.trim(), taxLine: tax.text.trim()),
+      context.read<AuthController>().api,
+    );
+    if (!mounted) return;
+    Navigator.pop(context);
+    showOk(context, 'Company details saved — all exported PDFs will use them.');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Company details'),
+      content: SizedBox(
+        width: 440,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('Printed at the top of every exported PDF (packing slips, stock reports, registers).',
+              style: TextStyle(fontSize: 12.5, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          const SizedBox(height: 14),
+          TextField(controller: name, decoration: const InputDecoration(labelText: 'Company name *', hintText: 'e.g. G.D. Foods Mfg (I) Pvt. Ltd.')),
+          const SizedBox(height: 12),
+          TextField(controller: address, decoration: const InputDecoration(labelText: 'Address', hintText: 'e.g. Khadoor Sahib, Punjab')),
+          const SizedBox(height: 12),
+          TextField(controller: tax, decoration: const InputDecoration(labelText: 'GSTIN / tax & contact line', hintText: 'e.g. GSTIN 03XXXXX · info@company.in')),
+        ]),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(onPressed: saving ? null : _save, child: Text(saving ? 'Saving…' : 'Save')),
+      ],
+    );
   }
 }

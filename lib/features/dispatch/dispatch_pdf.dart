@@ -4,6 +4,8 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'dart:typed_data';
 
+import '../../core/company.dart';
+
 /// PDF builder for dispatch challans & truck-loading estimates.
 /// Roboto is embedded so all glyphs render correctly.
 class DispatchPdf {
@@ -39,8 +41,8 @@ class DispatchPdf {
     ];
     final doc = pw.Document();
     doc.addPage(_page(
-      title: 'DISPATCH CHALLAN',
-      subtitle: '${d['code']}',
+      title: 'DISPATCH PACKING SLIP',
+      subtitle: '', // dispatch number intentionally not printed on the slip
       headers: hasBatch ? _headersWithBatch : _headers,
       meta: [
         ['Dispatch Date', _dateWithDay(d['dispatch_date'])],
@@ -55,6 +57,7 @@ class DispatchPdf {
         kg(d['carton_weight']), kg(d['tray_weight'] ?? 0), kg(d['gross_weight']),
       ],
       footnote: 'Date & day are recorded automatically at dispatch time.',
+      preparedBy: '${d['created_by_name'] ?? ''}',
     ));
     return doc.save();
   }
@@ -112,7 +115,9 @@ class DispatchPdf {
     required String footnote,
     String remarks = '',
     List<String> headers = _headers,
+    String preparedBy = '',
   }) {
+    final company = CompanyProfile.current;
     const primary = PdfColor.fromInt(0xFF2456C8);
     const headerBg = PdfColor.fromInt(0xFFEFF4FF);
     const greyTxt = PdfColor.fromInt(0xFF64748B);
@@ -145,10 +150,10 @@ class DispatchPdf {
         // brand row
         pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
           pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-            pw.Text('FlavorFlow Foods Pvt. Ltd.', style: ts(15, bold: true)),
+            pw.Text(company.name, style: ts(15, bold: true)),
             pw.SizedBox(height: 2),
-            pw.Text('Industrial Area, Jalandhar, Punjab 144004', style: ts(9, color: greyTxt)),
-            pw.Text('GSTIN 03AAAAA0000A1Z5 · dispatch@flavorflow.in', style: ts(9, color: greyTxt)),
+            if (company.address.isNotEmpty) pw.Text(company.address, style: ts(9, color: greyTxt)),
+            if (company.taxLine.isNotEmpty) pw.Text(company.taxLine, style: ts(9, color: greyTxt)),
           ]),
           pw.Spacer(),
           pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
@@ -157,8 +162,10 @@ class DispatchPdf {
               decoration: pw.BoxDecoration(color: headerBg, borderRadius: pw.BorderRadius.circular(6)),
               child: pw.Text(title, style: ts(12, bold: true, color: primary)),
             ),
-            pw.SizedBox(height: 4),
-            pw.Text(subtitle, style: ts(11, bold: true)),
+            if (subtitle.isNotEmpty) ...[
+              pw.SizedBox(height: 4),
+              pw.Text(subtitle, style: ts(11, bold: true)),
+            ],
           ]),
         ]),
         pw.SizedBox(height: 14),
@@ -219,17 +226,30 @@ class DispatchPdf {
             style: ts(8, color: greyTxt)),
         pw.Spacer(),
 
-        // signature blocks
+        // signature blocks: Driver · Sec. Officer · Shift Incharge (matches the
+        // physical packing slip); Prepared by shows the logged-in user's name.
         pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-          pw.Text('Prepared by (Store)', style: ts(9)),
-          pw.Text('Transport In-charge', style: ts(9)),
-          pw.Text('Received by', style: ts(9)),
-        ]),
-        pw.SizedBox(height: 4),
-        pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-          pw.Container(width: 150, height: 1, color: const PdfColor.fromInt(0xFF94A3B8)),
-          pw.Container(width: 150, height: 1, color: const PdfColor.fromInt(0xFF94A3B8)),
-          pw.Container(width: 150, height: 1, color: const PdfColor.fromInt(0xFF94A3B8)),
+          pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+            pw.Container(width: 130, height: 1, color: const PdfColor.fromInt(0xFF94A3B8)),
+            pw.SizedBox(height: 4),
+            pw.Text('DRIVER SIGNATURE', style: ts(8, bold: true)),
+          ]),
+          pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.center, children: [
+            pw.Container(width: 130, height: 1, color: const PdfColor.fromInt(0xFF94A3B8)),
+            pw.SizedBox(height: 4),
+            pw.Text('SEC. OFFICER', style: ts(8, bold: true)),
+          ]),
+          pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
+            preparedBy.isEmpty
+                ? pw.Container(width: 130, height: 1, color: const PdfColor.fromInt(0xFF94A3B8))
+                : pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.center, children: [
+                    pw.Text(preparedBy, style: ts(9.5, bold: true)),
+                    pw.SizedBox(height: 2),
+                    pw.Container(width: 130, height: 1, color: const PdfColor.fromInt(0xFF94A3B8)),
+                  ]),
+            pw.SizedBox(height: 4),
+            pw.Text('SHIFT INCHARGE / PREPARED BY', style: ts(8, bold: true)),
+          ]),
         ]),
       ]),
     );

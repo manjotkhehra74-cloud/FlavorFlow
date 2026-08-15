@@ -36,7 +36,7 @@ class _DispatchDetailPageState extends State<DispatchDetailPage> {
     setState(() => exporting = true);
     try {
       final bytes = await DispatchPdf.challan(d, items);
-      await Printing.sharePdf(bytes: bytes, filename: '${d['code']}-challan.pdf');
+      await Printing.sharePdf(bytes: bytes, filename: '${d['code']}-packing-slip.pdf');
     } catch (e) {
       if (mounted) showErr(context, e);
     } finally {

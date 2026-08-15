@@ -4,6 +4,8 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'dart:typed_data';
 
+import '../../core/company.dart';
+
 /// Generic report PDF — renders any report (title + table) in the company style.
 class ReportPdf {
   static pw.Font? _regular;
@@ -58,9 +60,10 @@ class ReportPdf {
       build: (context) => pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.stretch, children: [
         pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
           pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-            pw.Text('FlavorFlow Foods Pvt. Ltd.', style: ts(14, bold: true)),
+            pw.Text(CompanyProfile.current.name, style: ts(14, bold: true)),
             pw.SizedBox(height: 2),
-            pw.Text('Industrial Area, Jalandhar, Punjab 144004', style: ts(8.6, color: greyTxt)),
+            if (CompanyProfile.current.address.isNotEmpty) pw.Text(CompanyProfile.current.address, style: ts(8.6, color: greyTxt)),
+            if (CompanyProfile.current.taxLine.isNotEmpty) pw.Text(CompanyProfile.current.taxLine, style: ts(8.6, color: greyTxt)),
           ]),
           pw.Spacer(),
           pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
