@@ -59,6 +59,23 @@ class CompanyProfile {
 
   static CompanyProfile? _cached;
 
+  /// One-time first-run setup (language + industry) completed on this device?
+  static Future<bool> setupDone() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool('setup_done') ?? false;
+    } catch (_) {
+      return true; // never block the app if prefs fail
+    }
+  }
+
+  static Future<void> markSetupDone() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('setup_done', true);
+    } catch (_) {}
+  }
+
   /// Last loaded profile (defaults until [load] runs).
   static CompanyProfile get current =>
       _cached ?? CompanyProfile(name: _dName, address: _dAddress, taxLine: _dTax);

@@ -98,6 +98,7 @@ class L10n extends ChangeNotifier {
       'No data': 'ਕੋਈ ਡਾਟਾ ਨਹੀਂ',
       'No notifications yet': 'ਹਾਲੇ ਕੋਈ ਸੂਚਨਾ ਨਹੀਂ',
       'Loading Summary': 'ਲੋਡਿੰਗ ਸਾਰ',
+      'Choose your industry': 'ਆਪਣੀ ਇੰਡਸਟਰੀ ਚੁਣੋ',
       'Gross loaded weight': 'ਕੁੱਲ ਲੋਡ ਭਾਰ',
     },
     'hi': {
@@ -156,6 +157,7 @@ class L10n extends ChangeNotifier {
       'No data': 'कोई डेटा नहीं',
       'No notifications yet': 'अभी कोई सूचना नहीं',
       'Loading Summary': 'लोडिंग सार',
+      'Choose your industry': 'अपनी इंडस्ट्री चुनें',
       'Gross loaded weight': 'कुल लोड वज़न',
     },
   };

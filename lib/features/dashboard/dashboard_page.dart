@@ -102,8 +102,12 @@ class _Header extends StatelessWidget {
           Text('$greeting, ${name.split(' ').first}',
               style: TextStyle(fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -0.4, color: scheme.onSurface)),
           const SizedBox(height: 3),
-          Text('${session.roleLabel} workspace  ·  ${fmtDateWithDay(todayYmd())}',
-              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5)),
+          // Wrap keeps each chunk intact: the date never splits across lines —
+          // on narrow phones it moves to its own line as one piece.
+          Wrap(spacing: 6, runSpacing: 2, children: [
+            Text('${session.roleLabel} workspace', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5)),
+            Text('·  ${fmtDateWithDay(todayYmd())}', softWrap: false, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5)),
+          ]),
         ]),
       ),
       Container(

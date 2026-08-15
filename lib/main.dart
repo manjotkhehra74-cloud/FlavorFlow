@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'core/company.dart';
 import 'core/i18n.dart';
 import 'core/theme.dart';
 import 'router.dart';
 import 'state/auth.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Fresh install → one-time language + industry setup before login.
+  kNeedsFirstRunSetup = !(await CompanyProfile.setupDone());
   final auth = AuthController();
   auth.restore();
   L10n.instance.load();
