@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
@@ -111,7 +112,7 @@ class _DispatchDetailPageState extends State<DispatchDetailPage> {
           SectionCard(
             title: 'Loaded Items',
             child: AppDataTable(
-              columns: const ['Product', 'Batch', 'Cartons', 'Trays', 'Bottles', 'Carton kg', 'Tray kg', 'Gross kg'],
+              columns: ['Product', 'Batch', U.carton, U.tray, U.piece, '${U.cb} kg', '${U.tray} kg', 'Gross kg'],
               rows: [
                 for (final it in items)
                   [

@@ -3,9 +3,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'api.dart';
 
 /// Editable company identity printed on every exported PDF (packing slips,
-/// stock reports, registers). FlavorFlow is a universal manufacturing ERP —
-/// the Super Admin sets the company name / address / GSTIN from the app
-/// instead of them being hard-coded for one firm.
+/// stock reports, registers) + configurable industry unit labels that make
+/// FlavorFlow universal: a textile unit calls a "Carton" a "Bale", a pharma
+/// unit calls "Bottles" "Units", etc. The Super Admin sets everything from
+/// the app instead of it being hard-coded for one firm.
 ///
 /// The profile is cached locally (SharedPreferences) and — when the server
 /// exposes a /settings/company route — synced so every device sees the same
@@ -14,8 +15,43 @@ class CompanyProfile {
   String name;
   String address;
   String taxLine; // e.g. "GSTIN 03AAAAA0000A1Z5 · dispatch@company.in"
+  String industry; // key of one of [industries]
+  String cartonLabel; // e.g. Carton / Bale / Box / Bag
+  String cartonShort; // e.g. CB / Bale / Box
+  String trayLabel; // e.g. Tray / Roll / Strip
+  String pieceLabel; // e.g. Bottles / Meters / Units / Pieces
 
-  CompanyProfile({required this.name, required this.address, required this.taxLine});
+  CompanyProfile({
+    required this.name,
+    required this.address,
+    required this.taxLine,
+    this.industry = 'food',
+    this.cartonLabel = 'Cartons',
+    this.cartonShort = 'CB',
+    this.trayLabel = 'Trays',
+    this.pieceLabel = 'Bottles',
+  });
+
+  /// Industry presets: id, label, carton/short/tray/piece unit names.
+  /// Choosing one pre-fills the unit labels (still editable afterwards).
+  static const industries = [
+    ['food', 'Food & Beverage', 'Cartons', 'CB', 'Trays', 'Bottles'],
+    ['dairy', 'Dairy', 'Crates', 'Crate', 'Trays', 'Packets'],
+    ['oil', 'Edible Oil', 'Cartons', 'CB', 'Trays', 'Tins'],
+    ['bakery', 'Bakery & Snacks', 'Cartons', 'CB', 'Trays', 'Packets'],
+    ['water', 'Beverages / Water', 'Cases', 'Case', 'Shells', 'Bottles'],
+    ['soap', 'Soap & Detergent', 'Cartons', 'CB', 'Trays', 'Bars'],
+    ['cosmetics', 'Cosmetics & Personal Care', 'Cartons', 'CB', 'Trays', 'Units'],
+    ['paint', 'Paint & Lubricants', 'Cartons', 'CB', 'Trays', 'Tins'],
+    ['agro', 'Agro-chemicals & Fertilizer', 'Cartons', 'CB', 'Trays', 'Bottles'],
+    ['pharma', 'Pharma / Ayurvedic', 'Boxes', 'Box', 'Strips', 'Units'],
+    ['textile', 'Textile / Hosiery', 'Bales', 'Bale', 'Rolls', 'Pieces'],
+    ['mill', 'Rice / Flour / Feed Mill', 'Bags', 'Bag', 'Stacks', 'KG'],
+    ['footwear', 'Footwear', 'Cartons', 'CB', 'Racks', 'Pairs'],
+    ['plastic', 'Plastic & Packaging', 'Cartons', 'CB', 'Trays', 'Pieces'],
+    ['hardware', 'Utensils & Hardware', 'Cartons', 'CB', 'Trays', 'Pieces'],
+    ['general', 'General Manufacturing', 'Cartons', 'CB', 'Trays', 'Pieces'],
+  ];
 
   static const _dName = 'FlavorFlow Foods Pvt. Ltd.';
   static const _dAddress = 'Industrial Area, Jalandhar, Punjab 144004';
@@ -34,6 +70,11 @@ class CompanyProfile {
       name: prefs.getString('company_name') ?? _dName,
       address: prefs.getString('company_address') ?? _dAddress,
       taxLine: prefs.getString('company_tax') ?? _dTax,
+      industry: prefs.getString('company_industry') ?? 'food',
+      cartonLabel: prefs.getString('unit_carton') ?? 'Cartons',
+      cartonShort: prefs.getString('unit_carton_short') ?? 'CB',
+      trayLabel: prefs.getString('unit_tray') ?? 'Trays',
+      pieceLabel: prefs.getString('unit_piece') ?? 'Bottles',
     );
     if (api != null) {
       try {
@@ -43,6 +84,11 @@ class CompanyProfile {
             name: j['name'].toString(),
             address: (j['address'] ?? '').toString(),
             taxLine: (j['taxLine'] ?? j['tax_line'] ?? '').toString(),
+            industry: (j['industry'] ?? p.industry).toString(),
+            cartonLabel: (j['cartonLabel'] ?? p.cartonLabel).toString(),
+            cartonShort: (j['cartonShort'] ?? p.cartonShort).toString(),
+            trayLabel: (j['trayLabel'] ?? p.trayLabel).toString(),
+            pieceLabel: (j['pieceLabel'] ?? p.pieceLabel).toString(),
           );
           await _persist(prefs, p);
         }
@@ -59,7 +105,16 @@ class CompanyProfile {
     _cached = p;
     if (api != null) {
       try {
-        await api.put('/settings/company', {'name': p.name, 'address': p.address, 'taxLine': p.taxLine});
+        await api.put('/settings/company', {
+          'name': p.name,
+          'address': p.address,
+          'taxLine': p.taxLine,
+          'industry': p.industry,
+          'cartonLabel': p.cartonLabel,
+          'cartonShort': p.cartonShort,
+          'trayLabel': p.trayLabel,
+          'pieceLabel': p.pieceLabel,
+        });
       } catch (_) {/* server route optional */}
     }
   }
@@ -68,5 +123,21 @@ class CompanyProfile {
     await prefs.setString('company_name', p.name);
     await prefs.setString('company_address', p.address);
     await prefs.setString('company_tax', p.taxLine);
+    await prefs.setString('company_industry', p.industry);
+    await prefs.setString('unit_carton', p.cartonLabel);
+    await prefs.setString('unit_carton_short', p.cartonShort);
+    await prefs.setString('unit_tray', p.trayLabel);
+    await prefs.setString('unit_piece', p.pieceLabel);
   }
+}
+
+/// Short helpers for the configurable unit labels — use everywhere instead of
+/// hard-coded "Cartons"/"CB"/"Trays"/"Bottles".
+class U {
+  static String get carton => CompanyProfile.current.cartonLabel; // Cartons / Bales…
+  static String get cb => CompanyProfile.current.cartonShort; // CB / Bale…
+  static String get tray => CompanyProfile.current.trayLabel; // Trays / Rolls…
+  static String get piece => CompanyProfile.current.pieceLabel; // Bottles / Pieces…
+  /// lowercase singular-ish tray label for helper texts, e.g. "6/tray"
+  static String get trayLc => tray.toLowerCase();
 }

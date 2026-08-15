@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
@@ -87,7 +88,7 @@ class _ProductsPageState extends State<ProductsPage> {
           SectionCard(
             title: 'Finished Goods Master',
             child: AppDataTable(
-              columns: const ['Product', 'Wt per CB (kg)', 'Wt w/o CB (kg)', 'Bottles / CB', 'Bottles / Tray', 'Tray Wt (kg)', 'Min Stock (CB)', 'Stock (CB)', 'Trays', ''],
+              columns: ['Product', 'Wt per ${U.cb} (kg)', 'Wt w/o ${U.cb} (kg)', '${U.piece} / ${U.cb}', '${U.piece} / ${U.tray}', '${U.tray} Wt (kg)', 'Min Stock (${U.cb})', 'Stock (${U.cb})', U.tray, ''],
               rows: [
                 for (var i = 0; i < products.length; i++)
                   [
@@ -183,21 +184,21 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
           TextField(controller: name, decoration: const InputDecoration(labelText: 'Product name *')),
           const SizedBox(height: 12),
           Row(children: [
-            Expanded(child: TextField(controller: wcb, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Weight per CB (kg) *'))),
+            Expanded(child: TextField(controller: wcb, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: 'Weight per ${U.cb} (kg) *'))),
             const SizedBox(width: 12),
-            Expanded(child: TextField(controller: wncb, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Weight w/o CB (kg) *'))),
+            Expanded(child: TextField(controller: wncb, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: 'Weight w/o ${U.cb} (kg) *'))),
           ]),
           const SizedBox(height: 12),
           Row(children: [
-            Expanded(child: TextField(controller: bpc, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bottles per CB *'))),
+            Expanded(child: TextField(controller: bpc, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${U.piece} per ${U.cb} *'))),
             const SizedBox(width: 12),
-            Expanded(child: TextField(controller: minStock, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Min stock (CB)'))),
+            Expanded(child: TextField(controller: minStock, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: 'Min stock (${U.cb})'))),
           ]),
           const SizedBox(height: 12),
           Row(children: [
-            Expanded(child: TextField(controller: bpt, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bottles per tray (0 = no tray)'))),
+            Expanded(child: TextField(controller: bpt, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${U.piece} per ${U.trayLc} (0 = no ${U.trayLc})'))),
             const SizedBox(width: 12),
-            Expanded(child: TextField(controller: trayWt, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Tray weight (kg)'))),
+            Expanded(child: TextField(controller: trayWt, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${U.tray} weight (kg)'))),
           ]),
           const SizedBox(height: 8),
           Text('Only Soya 740gm, Vinegar 610ml (white & brown), Soya 1.3kg and Vinegar 1.0 are tray-packed. Leave tray fields empty for others.',

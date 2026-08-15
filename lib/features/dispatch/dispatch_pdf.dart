@@ -103,8 +103,8 @@ class DispatchPdf {
     return doc.save();
   }
 
-  static const _headers = ['#', 'Product', 'Cartons', 'Trays', 'Bottles', 'Carton Wt', 'Tray Wt', 'Gross Wt'];
-  static const _headersWithBatch = ['#', 'Product', 'Batch', 'Cartons', 'Trays', 'Bottles', 'Carton Wt', 'Tray Wt', 'Gross Wt'];
+  static List<String> get _headers => ['#', 'Product', U.carton, U.tray, U.piece, '${U.cb} Wt', '${U.tray} Wt', 'Gross Wt'];
+  static List<String> get _headersWithBatch => ['#', 'Product', 'Batch', U.carton, U.tray, U.piece, '${U.cb} Wt', '${U.tray} Wt', 'Gross Wt'];
 
   static pw.Page _page({
     required String title,
@@ -114,10 +114,11 @@ class DispatchPdf {
     required List<String> totals,
     required String footnote,
     String remarks = '',
-    List<String> headers = _headers,
+    List<String>? headers,
     String preparedBy = '',
   }) {
     final company = CompanyProfile.current;
+    final List<String> hdrs = headers ?? _headers;
     const primary = PdfColor.fromInt(0xFF2456C8);
     const headerBg = PdfColor.fromInt(0xFFEFF4FF);
     const greyTxt = PdfColor.fromInt(0xFF64748B);
@@ -135,12 +136,12 @@ class DispatchPdf {
               style: ts(header ? 8.6 : 9, bold: bold || header, color: color ?? (header ? primary : null))),
         );
 
-    final hasBatch = headers.length == _headersWithBatch.length;
+    final hasBatch = hdrs.length == _headersWithBatch.length;
     final widths = <int, pw.TableColumnWidth>{
       0: const pw.FixedColumnWidth(26),
       1: pw.FlexColumnWidth(hasBatch ? 2.2 : 2.6),
       if (hasBatch) 2: const pw.FlexColumnWidth(1.2),
-      for (var i = hasBatch ? 3 : 2; i < headers.length; i++) i: const pw.FlexColumnWidth(1.1),
+      for (var i = hasBatch ? 3 : 2; i < hdrs.length; i++) i: const pw.FlexColumnWidth(1.1),
     };
 
     return pw.Page(
@@ -195,7 +196,7 @@ class DispatchPdf {
           children: [
             pw.TableRow(
               decoration: const pw.BoxDecoration(color: headerBg),
-              children: [for (var i = 0; i < headers.length; i++) cell(headers[i], header: true, right: i >= (hasBatch ? 3 : 2))],
+              children: [for (var i = 0; i < hdrs.length; i++) cell(hdrs[i], header: true, right: i >= (hasBatch ? 3 : 2))],
             ),
             for (final r in rows)
               pw.TableRow(children: [for (var i = 0; i < r.length; i++) cell(r[i], right: i >= (hasBatch ? 3 : 2))]),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
@@ -281,7 +282,7 @@ class _BomTabState extends State<_BomTab> {
               child: (entry['items'] as List).isEmpty
                   ? Text('No BOM recorded.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5))
                   : AppDataTable(
-                      columns: const ['Material', 'Category', 'Per CB', 'Per Tray', 'Unit', 'In Stock'],
+                      columns: ['Material', 'Category', 'Per ${U.cb}', 'Per ${U.tray}', 'Unit', 'In Stock'],
                       rows: [
                         for (final i in (entry['items'] as List).cast<Map<String, dynamic>>())
                           [

@@ -37,7 +37,7 @@ class StockPdf {
               style: ts(header ? 8.6 : 9, bold: bold || header, color: color ?? (header ? primary : null))),
         );
 
-    final headers = ['#', 'Product', 'Cartons (CB)', 'Trays', 'Total Bottles', 'Gross kg', 'Min (CB)', 'Status'];
+    final headers = ['#', 'Product', '${U.carton} (${U.cb})', U.tray, 'Total ${U.piece}', 'Gross kg', 'Min (${U.cb})', 'Status'];
     double sumCb = 0, sumTrays = 0, sumBottles = 0, sumGross = 0;
     final rows = <List<Object>>[];
     for (var i = 0; i < items.length; i++) {
@@ -144,7 +144,7 @@ class StockPdf {
           ],
         ),
         pw.SizedBox(height: 12),
-        pw.Text('Generated from live inventory — cartons (CB) and trays tracked separately.',
+        pw.Text('Generated from live inventory — ${U.carton.toLowerCase()} (${U.cb}) and ${U.trayLc} tracked separately.',
             style: ts(8, color: greyTxt)),
       ]),
     ));

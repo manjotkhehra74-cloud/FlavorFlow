@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
@@ -133,7 +134,7 @@ class _LinesEditor extends StatelessWidget {
                   child: TextField(
                     controller: lines[i].cartons,
                     keyboardType: TextInputType.number,
-                    decoration: InputDecoration(labelText: 'Cartons', helperText: lines[i].productId == null ? null : '${_prod(products, lines[i].productId)['bottles_per_cb']}/CB', helperMaxLines: 1),
+                    decoration: InputDecoration(labelText: U.carton, helperText: lines[i].productId == null ? null : '${_prod(products, lines[i].productId)['bottles_per_cb']}/${U.cb}', helperMaxLines: 1),
                     onChanged: (_) => onChanged(),
                   ),
                 ),
@@ -143,7 +144,7 @@ class _LinesEditor extends StatelessWidget {
                     child: TextField(
                       controller: lines[i].trays,
                       keyboardType: TextInputType.number,
-                      decoration: InputDecoration(labelText: 'Trays', helperText: lines[i].productId == null ? null : '${_prod(products, lines[i].productId)['bottles_per_tray']}/tray', helperMaxLines: 1),
+                      decoration: InputDecoration(labelText: U.tray, helperText: lines[i].productId == null ? null : '${_prod(products, lines[i].productId)['bottles_per_tray']}/${U.trayLc}', helperMaxLines: 1),
                       onChanged: (_) => onChanged(),
                     ),
                   ),
@@ -185,8 +186,8 @@ class _SummaryCard extends StatelessWidget {
           ]),
         );
     String lineText(Map<String, dynamic> l) {
-      final parts = <String>['${qtyInt(l['cartons'])} CB'];
-      if ((l['trays'] as num? ?? 0) > 0) parts.add('${qtyInt(l['trays'])} trays');
+      final parts = <String>['${qtyInt(l['cartons'])} ${U.cb}'];
+      if ((l['trays'] as num? ?? 0) > 0) parts.add('${qtyInt(l['trays'])} ${U.trayLc}');
       return '${parts.join(' + ')} → ${qty(l['grossWeight'])} kg';
     }
 
@@ -217,9 +218,9 @@ class _SummaryCard extends StatelessWidget {
         ],
         row('Carton weight', '${qty(totals['cartonWeight'])} kg'),
         row('Tray weight', '${qty(totals['trayWeight'])} kg'),
-        row('Total cartons', '${qtyInt(totals['totalCartons'])} CB'),
-        row('Total trays', qtyInt(totals['totalTrays'])),
-        row('Total bottles', qtyInt(totals['totalBottles'])),
+        row('Total ${U.carton.toLowerCase()}', '${qtyInt(totals['totalCartons'])} ${U.cb}'),
+        row('Total ${U.trayLc}', qtyInt(totals['totalTrays'])),
+        row('Total ${U.piece.toLowerCase()}', qtyInt(totals['totalBottles'])),
         const Divider(height: 18),
         row('Gross loaded weight', '${qty(totals['grossWeight'])} kg', strong: true),
       ]),
@@ -624,7 +625,7 @@ class _HistoryTabState extends State<_HistoryTab> {
           SectionCard(
             title: 'Dispatch History',
             child: AppDataTable(
-              columns: const ['Code', 'Date', 'Day', 'Truck', 'Destination', 'Cartons', 'Trays', 'Bottles', 'Gross kg', 'By'],
+              columns: ['Code', 'Date', 'Day', 'Truck', 'Destination', U.carton, U.tray, U.piece, 'Gross kg', 'By'],
               rows: [
                 for (final d in rows)
                   [

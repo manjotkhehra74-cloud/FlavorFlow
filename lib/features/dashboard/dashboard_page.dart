@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
@@ -303,7 +304,7 @@ class _Pie extends StatelessWidget {
               const SizedBox(width: 8),
               Flexible(child: Text(labels[i], style: TextStyle(fontSize: 12.5, color: scheme.onSurface, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)),
               const SizedBox(width: 10),
-              Text('${qty(values[i])} CB', style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+              Text('${qty(values[i])} ${U.cb}', style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
             ]),
           ),
       ]);

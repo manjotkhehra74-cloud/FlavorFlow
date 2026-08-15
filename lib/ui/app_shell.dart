@@ -412,6 +412,11 @@ class _CompanyProfileDialogState extends State<CompanyProfileDialog> {
   late final TextEditingController name;
   late final TextEditingController address;
   late final TextEditingController tax;
+  late final TextEditingController uCarton;
+  late final TextEditingController uCb;
+  late final TextEditingController uTray;
+  late final TextEditingController uPiece;
+  late String industry;
   bool saving = false;
 
   @override
@@ -421,10 +426,30 @@ class _CompanyProfileDialogState extends State<CompanyProfileDialog> {
     name = TextEditingController(text: p.name);
     address = TextEditingController(text: p.address);
     tax = TextEditingController(text: p.taxLine);
+    uCarton = TextEditingController(text: p.cartonLabel);
+    uCb = TextEditingController(text: p.cartonShort);
+    uTray = TextEditingController(text: p.trayLabel);
+    uPiece = TextEditingController(text: p.pieceLabel);
+    industry = p.industry;
   }
 
   @override
-  void dispose() { name.dispose(); address.dispose(); tax.dispose(); super.dispose(); }
+  void dispose() {
+    name.dispose(); address.dispose(); tax.dispose();
+    uCarton.dispose(); uCb.dispose(); uTray.dispose(); uPiece.dispose();
+    super.dispose();
+  }
+
+  void _applyIndustry(String id) {
+    final row = CompanyProfile.industries.firstWhere((r) => r[0] == id, orElse: () => CompanyProfile.industries.last);
+    setState(() {
+      industry = id;
+      uCarton.text = row[2];
+      uCb.text = row[3];
+      uTray.text = row[4];
+      uPiece.text = row[5];
+    });
+  }
 
   Future<void> _save() async {
     if (name.text.trim().isEmpty) {
@@ -433,30 +458,70 @@ class _CompanyProfileDialogState extends State<CompanyProfileDialog> {
     }
     setState(() => saving = true);
     await CompanyProfile.save(
-      CompanyProfile(name: name.text.trim(), address: address.text.trim(), taxLine: tax.text.trim()),
+      CompanyProfile(
+        name: name.text.trim(),
+        address: address.text.trim(),
+        taxLine: tax.text.trim(),
+        industry: industry,
+        cartonLabel: uCarton.text.trim().isEmpty ? 'Cartons' : uCarton.text.trim(),
+        cartonShort: uCb.text.trim().isEmpty ? 'CB' : uCb.text.trim(),
+        trayLabel: uTray.text.trim().isEmpty ? 'Trays' : uTray.text.trim(),
+        pieceLabel: uPiece.text.trim().isEmpty ? 'Bottles' : uPiece.text.trim(),
+      ),
       context.read<AuthController>().api,
     );
     if (!mounted) return;
     Navigator.pop(context);
-    showOk(context, 'Company details saved — all exported PDFs will use them.');
+    showOk(context, 'Company details saved — app labels & exported PDFs will use them.');
   }
 
   @override
   Widget build(BuildContext context) {
+    final sub = Theme.of(context).colorScheme.onSurfaceVariant;
     return AlertDialog(
       title: const Text('Company details'),
       content: SizedBox(
-        width: 440,
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('Printed at the top of every exported PDF (packing slips, stock reports, registers).',
-              style: TextStyle(fontSize: 12.5, color: Theme.of(context).colorScheme.onSurfaceVariant)),
-          const SizedBox(height: 14),
-          TextField(controller: name, decoration: const InputDecoration(labelText: 'Company name *', hintText: 'e.g. G.D. Foods Mfg (I) Pvt. Ltd.')),
-          const SizedBox(height: 12),
-          TextField(controller: address, decoration: const InputDecoration(labelText: 'Address', hintText: 'e.g. Khadoor Sahib, Punjab')),
-          const SizedBox(height: 12),
-          TextField(controller: tax, decoration: const InputDecoration(labelText: 'GSTIN / tax & contact line', hintText: 'e.g. GSTIN 03XXXXX · info@company.in')),
-        ]),
+        width: 460,
+        child: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Printed at the top of every exported PDF (packing slips, stock reports, registers).',
+                style: TextStyle(fontSize: 12.5, color: sub)),
+            const SizedBox(height: 14),
+            TextField(controller: name, decoration: const InputDecoration(labelText: 'Company name *', hintText: 'e.g. G.D. Foods Mfg (I) Pvt. Ltd.')),
+            const SizedBox(height: 12),
+            TextField(controller: address, decoration: const InputDecoration(labelText: 'Address', hintText: 'e.g. Khadoor Sahib, Punjab')),
+            const SizedBox(height: 12),
+            TextField(controller: tax, decoration: const InputDecoration(labelText: 'GSTIN / tax & contact line', hintText: 'e.g. GSTIN 03XXXXX · info@company.in')),
+            const SizedBox(height: 18),
+            Text('INDUSTRY & UNIT NAMES', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, letterSpacing: 1.1, color: sub)),
+            const SizedBox(height: 4),
+            Text('Choosing an industry pre-fills the unit names — you can still edit them. Used across the app and on PDFs.',
+                style: TextStyle(fontSize: 11.5, color: sub)),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              initialValue: industry,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Industry'),
+              items: [
+                for (final r in CompanyProfile.industries)
+                  DropdownMenuItem(value: r[0], child: Text(r[1], overflow: TextOverflow.ellipsis)),
+              ],
+              onChanged: (v) { if (v != null) _applyIndustry(v); },
+            ),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(child: TextField(controller: uCarton, decoration: const InputDecoration(labelText: 'Carton unit', hintText: 'Cartons / Bales / Boxes'))),
+              const SizedBox(width: 10),
+              Expanded(child: TextField(controller: uCb, decoration: const InputDecoration(labelText: 'Short form', hintText: 'CB / Bale / Box'))),
+            ]),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(child: TextField(controller: uTray, decoration: const InputDecoration(labelText: 'Tray unit', hintText: 'Trays / Rolls / Strips'))),
+              const SizedBox(width: 10),
+              Expanded(child: TextField(controller: uPiece, decoration: const InputDecoration(labelText: 'Piece unit', hintText: 'Bottles / Pieces / Units'))),
+            ]),
+          ]),
+        ),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
