@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -33,13 +34,20 @@ void main() async {
   );
 }
 
-class ErpApp extends StatelessWidget {
+class ErpApp extends StatefulWidget {
   const ErpApp({super.key});
+  @override
+  State<ErpApp> createState() => _ErpAppState();
+}
+
+class _ErpAppState extends State<ErpApp> {
+  GoRouter? _router; // built ONCE — rebuilding it would reset navigation
+                     // (e.g. the setup screen jumping back to step 1).
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthController>();
-    context.watch<L10n>(); // rebuild the whole app when the language changes
+    context.watch<L10n>(); // rebuild screens when the language changes
     if (!auth.ready) {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -47,11 +55,12 @@ class ErpApp extends StatelessWidget {
         home: const _Splash(),
       );
     }
+    _router ??= buildRouter(auth);
     return MaterialApp.router(
       title: 'FlavorFlow ERP',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
-      routerConfig: buildRouter(auth),
+      routerConfig: _router,
     );
   }
 }
