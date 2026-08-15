@@ -226,29 +226,17 @@ class DispatchPdf {
             style: ts(8, color: greyTxt)),
         pw.Spacer(),
 
-        // signature blocks: Driver · Sec. Officer · Shift Incharge (matches the
-        // physical packing slip); Prepared by shows the logged-in user's name.
-        pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-          pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-            pw.Container(width: 130, height: 1, color: const PdfColor.fromInt(0xFF94A3B8)),
-            pw.SizedBox(height: 4),
-            pw.Text('DRIVER SIGNATURE', style: ts(8, bold: true)),
-          ]),
+        // signature block: only "Prepared By" — shows the logged-in user's
+        // name (the account the slip was generated from).
+        pw.Row(mainAxisAlignment: pw.MainAxisAlignment.end, children: [
           pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.center, children: [
-            pw.Container(width: 130, height: 1, color: const PdfColor.fromInt(0xFF94A3B8)),
+            if (preparedBy.isNotEmpty) ...[
+              pw.Text(preparedBy, style: ts(9.5, bold: true)),
+              pw.SizedBox(height: 2),
+            ],
+            pw.Container(width: 150, height: 1, color: const PdfColor.fromInt(0xFF94A3B8)),
             pw.SizedBox(height: 4),
-            pw.Text('SEC. OFFICER', style: ts(8, bold: true)),
-          ]),
-          pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
-            preparedBy.isEmpty
-                ? pw.Container(width: 130, height: 1, color: const PdfColor.fromInt(0xFF94A3B8))
-                : pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.center, children: [
-                    pw.Text(preparedBy, style: ts(9.5, bold: true)),
-                    pw.SizedBox(height: 2),
-                    pw.Container(width: 130, height: 1, color: const PdfColor.fromInt(0xFF94A3B8)),
-                  ]),
-            pw.SizedBox(height: 4),
-            pw.Text('SHIFT INCHARGE / PREPARED BY', style: ts(8, bold: true)),
+            pw.Text('PREPARED BY', style: ts(8, bold: true)),
           ]),
         ]),
       ]),
