@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../core/company.dart';
+import '../core/i18n.dart';
 import '../core/theme.dart';
 import '../core/format.dart';
 import '../state/auth.dart';
@@ -74,7 +75,7 @@ class _AppShellState extends State<AppShell> {
     final nav = session.nav;
     final wide = MediaQuery.of(context).size.width >= 1060;
     final selected = _selectedIndex(context, nav);
-    final title = nav[selected]['label'] as String;
+    final title = tr(nav[selected]['label'] as String);
 
     final sidebar = _Sidebar(
       nav: nav,
@@ -156,14 +157,16 @@ class _TopBar extends StatelessWidget {
             if (v == 'logout') await onLogout();
             if (v == 'refresh') await context.read<AuthController>().refreshSession();
             if (v == 'company') await showDialog(context: context, builder: (_) => const CompanyProfileDialog());
+            if (v == 'language') await showDialog(context: context, builder: (_) => const LanguageDialog());
           },
           itemBuilder: (c) => [
             PopupMenuItem(enabled: false, child: _UserHeader(session: session)),
             const PopupMenuDivider(),
             if (session.role == 'super_admin')
-              const PopupMenuItem(value: 'company', child: ListTile(leading: Icon(Icons.business_rounded, size: 20), title: Text('Company details (PDF header)'), dense: true, contentPadding: EdgeInsets.zero)),
-            const PopupMenuItem(value: 'refresh', child: ListTile(leading: Icon(Icons.sync_rounded, size: 20), title: Text('Refresh permissions'), dense: true, contentPadding: EdgeInsets.zero)),
-            const PopupMenuItem(value: 'logout', child: ListTile(leading: Icon(Icons.logout_rounded, size: 20), title: Text('Sign out'), dense: true, contentPadding: EdgeInsets.zero)),
+              PopupMenuItem(value: 'company', child: ListTile(leading: const Icon(Icons.business_rounded, size: 20), title: Text(tr('Company details (PDF header)')), dense: true, contentPadding: EdgeInsets.zero)),
+            PopupMenuItem(value: 'language', child: ListTile(leading: const Icon(Icons.translate_rounded, size: 20), title: Text('${tr('Language')} · ਭਾਸ਼ਾ · भाषा'), dense: true, contentPadding: EdgeInsets.zero)),
+            PopupMenuItem(value: 'refresh', child: ListTile(leading: const Icon(Icons.sync_rounded, size: 20), title: Text(tr('Refresh permissions')), dense: true, contentPadding: EdgeInsets.zero)),
+            PopupMenuItem(value: 'logout', child: ListTile(leading: const Icon(Icons.logout_rounded, size: 20), title: Text(tr('Sign out')), dense: true, contentPadding: EdgeInsets.zero)),
           ],
           child: compact
               ? _Avatar(session: session, radius: 16)
@@ -252,13 +255,13 @@ class _Sidebar extends StatelessWidget {
             for (final g in groups.entries) ...[
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 5),
-                child: Text(g.key.toUpperCase(),
+                child: Text(tr(g.key).toUpperCase(),
                     style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: Shell.groupLabel, letterSpacing: 1.5)),
               ),
               for (final i in g.value)
                 _NavTile(
                   icon: iconFor(nav[i]['icon'] as String?),
-                  label: nav[i]['label'] as String,
+                  label: tr(nav[i]['label'] as String),
                   selected: i == selected,
                   onTap: () => onTap(i),
                 ),
@@ -458,6 +461,35 @@ class _CompanyProfileDialogState extends State<CompanyProfileDialog> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
         FilledButton(onPressed: saving ? null : _save, child: Text(saving ? 'Saving…' : 'Save')),
+      ],
+    );
+  }
+}
+
+/// Language picker — English · ਪੰਜਾਬੀ · हिन्दी. Per-device choice, applies
+/// instantly across the whole app (no restart needed).
+class LanguageDialog extends StatelessWidget {
+  const LanguageDialog({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.watch<L10n>();
+    return AlertDialog(
+      title: Text('${tr('Language')} · ਭਾਸ਼ਾ · भाषा'),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        for (final lang in L10n.languages)
+          RadioListTile<String>(
+            value: lang[0],
+            groupValue: l10n.code,
+            title: Text(lang[1]),
+            onChanged: (v) async {
+              await L10n.instance.set(v ?? 'en');
+              if (context.mounted) Navigator.pop(context);
+            },
+          ),
+      ]),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('Cancel'))),
       ],
     );
   }

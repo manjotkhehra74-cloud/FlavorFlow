@@ -3,8 +3,10 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/api.dart';
+import '../../core/i18n.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
+import '../../ui/app_shell.dart' show LanguageDialog;
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -116,9 +118,16 @@ class _LoginPageState extends State<LoginPage> {
                 ]),
                 const SizedBox(height: 26),
               ],
-              Text('Sign in', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: scheme.onSurface, letterSpacing: -0.4)),
+              Row(children: [
+                Expanded(child: Text(tr('Sign in'), style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: scheme.onSurface, letterSpacing: -0.4))),
+                IconButton(
+                  tooltip: '${tr('Language')} · ਭਾਸ਼ਾ · भाषा',
+                  icon: Icon(Icons.translate_rounded, size: 20, color: scheme.onSurfaceVariant),
+                  onPressed: () => showDialog(context: context, builder: (_) => const LanguageDialog()),
+                ),
+              ]),
               const SizedBox(height: 5),
-              Text('Your workspace adapts to your role.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
+              Text(tr('Your workspace adapts to your role.'), style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
               const SizedBox(height: 24),
               if (_error != null) ...[
                 Container(
@@ -140,7 +149,7 @@ class _LoginPageState extends State<LoginPage> {
                 controller: _email,
                 keyboardType: TextInputType.emailAddress,
                 autofillHints: const [AutofillHints.email],
-                decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.alternate_email_rounded, size: 19)),
+                decoration: InputDecoration(labelText: tr('Email'), prefixIcon: const Icon(Icons.alternate_email_rounded, size: 19)),
                 onSubmitted: (_) => _submit(),
               ),
               const SizedBox(height: 13),
@@ -148,7 +157,7 @@ class _LoginPageState extends State<LoginPage> {
                 controller: _password,
                 obscureText: _obscure,
                 decoration: InputDecoration(
-                  labelText: 'Password',
+                  labelText: tr('Password'),
                   prefixIcon: const Icon(Icons.lock_outline_rounded, size: 19),
                   suffixIcon: IconButton(
                     icon: Icon(_obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 19),
@@ -163,7 +172,7 @@ class _LoginPageState extends State<LoginPage> {
                 style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
                 child: busy
                     ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white))
-                    : const Text('Sign in'),
+                    : Text(tr('Sign in')),
               ),
               const SizedBox(height: 26),
               Divider(color: scheme.outlineVariant),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'core/i18n.dart';
 import 'core/theme.dart';
 import 'router.dart';
 import 'state/auth.dart';
@@ -9,7 +10,16 @@ void main() {
   WidgetsFlutterBinding.ensureInitialized();
   final auth = AuthController();
   auth.restore();
-  runApp(ChangeNotifierProvider.value(value: auth, child: const ErpApp()));
+  L10n.instance.load();
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: auth),
+        ChangeNotifierProvider.value(value: L10n.instance),
+      ],
+      child: const ErpApp(),
+    ),
+  );
 }
 
 class ErpApp extends StatelessWidget {
@@ -18,6 +28,7 @@ class ErpApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthController>();
+    context.watch<L10n>(); // rebuild the whole app when the language changes
     if (!auth.ready) {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
