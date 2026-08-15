@@ -33,7 +33,7 @@ class _ProductsPageState extends State<ProductsPage> {
           context: context,
           builder: (ctx) => AlertDialog(
             title: Text('Delete ${p['name']}?'),
-            content: const Text('The product will be removed from the Product Master and all dropdowns.\n\nPast dispatches, batches and reports that used it are kept unchanged.'),
+            content: const Text('The product will be removed from the Product Master, all dropdowns AND its stock will be removed from Inventory.\n\nPast dispatches, batches and reports that used it are kept unchanged.'),
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
               FilledButton(
