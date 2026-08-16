@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
@@ -93,35 +92,6 @@ class _StockTabState extends State<_StockTab> {
 
   void _reload() => setState(() => _future = _load());
 
-  Future<void> _deleteMaterial(Map<String, dynamic> m) async {
-    final ok = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: Text('Delete ${m['name']}?'),
-            content: const Text('The material will be removed from stock and BOM dropdowns.\n\nPast ledger entries are kept unchanged.'),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-              FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error),
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Delete'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-    if (!ok || !mounted) return;
-    try {
-      await context.read<AuthController>().api.delete('/packing/materials/${m['id']}');
-      if (mounted) {
-        showOk(context, '${m['name']} deleted.');
-        _reload();
-      }
-    } catch (e) {
-      if (mounted) showErr(context, e);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthController>();
@@ -135,17 +105,6 @@ class _StockTabState extends State<_StockTab> {
         final s = (snap.data!['summary'] as Map).cast<String, dynamic>();
         final categories = <String>{for (final m in all) m['category'] as String};
         final rows = _category.isEmpty ? all : all.where((m) => m['category'] == _category).toList();
-        // Pair every "Tray (X)" with its "Tray Cap (X)" right below it —
-        // e.g. Tray (740/610) → Tray Cap (740/610), Tray (1.3/1 Ltr) → Tray Cap (1.3/1 Ltr).
-        String pairKey(Map<String, dynamic> m) {
-          final n = (m['name'] as String).trim();
-          final cap = RegExp(r'^Tray\s*Cap\s*\((.+)\)$', caseSensitive: false).firstMatch(n);
-          if (cap != null) return 'TRAY ${cap.group(1)!.toUpperCase()}~1';
-          final tray = RegExp(r'^Tray\s*\((.+)\)$', caseSensitive: false).firstMatch(n);
-          if (tray != null) return 'TRAY ${tray.group(1)!.toUpperCase()}~0';
-          return n.toUpperCase();
-        }
-        rows.sort((a, b) => pairKey(a).compareTo(pairKey(b)));
         return ListView(padding: const EdgeInsets.all(20), children: [
           LayoutBuilder(builder: (context, c) {
             final cols = c.maxWidth > 1000 ? 3 : 1;
@@ -193,14 +152,6 @@ class _StockTabState extends State<_StockTab> {
               ),
               OutlinedButton.icon(
                 onPressed: () async {
-                  final saved = await showDialog<bool>(context: context, builder: (_) => const _RecipeConsumeDialog());
-                  if (saved == true) _reload();
-                },
-                icon: const Icon(Icons.science_rounded, size: 18),
-                label: const Text('Recipe Consumption'),
-              ),
-              OutlinedButton.icon(
-                onPressed: () async {
                   final saved = await showDialog<bool>(context: context, builder: (_) => const _MaterialFormDialog());
                   if (saved == true) _reload();
                 },
@@ -226,21 +177,14 @@ class _StockTabState extends State<_StockTab> {
                           qtyInt(m['min_stock']),
                           (m['low'] as int) == 1 ? const StatusChip('LOW') : const StatusChip('IN STOCK'),
                           if (canManage)
-                            Row(mainAxisSize: MainAxisSize.min, children: [
-                              IconButton(
-                                tooltip: 'Edit material & stock',
-                                icon: const Icon(Icons.edit_outlined, size: 18),
-                                onPressed: () async {
-                                  final saved = await showDialog<bool>(context: context, builder: (_) => _MaterialFormDialog(material: m));
-                                  if (saved == true) _reload();
-                                },
-                              ),
-                              IconButton(
-                                tooltip: 'Delete material',
-                                icon: Icon(Icons.delete_outline_rounded, size: 18, color: Theme.of(context).colorScheme.error),
-                                onPressed: () => _deleteMaterial(m),
-                              ),
-                            ])
+                            IconButton(
+                              tooltip: 'Edit material & stock',
+                              icon: const Icon(Icons.edit_outlined, size: 18),
+                              onPressed: () async {
+                                final saved = await showDialog<bool>(context: context, builder: (_) => _MaterialFormDialog(material: m));
+                                if (saved == true) _reload();
+                              },
+                            )
                           else
                             const SizedBox.shrink(),
                         ],
@@ -301,7 +245,7 @@ class _BomTabState extends State<_BomTab> {
               child: (entry['items'] as List).isEmpty
                   ? Text('No BOM recorded.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5))
                   : AppDataTable(
-                      columns: ['Material', 'Category', 'Per ${U.cb}', 'Per ${U.tray}', 'Unit', 'In Stock'],
+                      columns: const ['Material', 'Category', 'Per CB', 'Per Tray', 'Unit', 'In Stock'],
                       rows: [
                         for (final i in (entry['items'] as List).cast<Map<String, dynamic>>())
                           [
@@ -559,158 +503,4 @@ class _MaterialFormDialogState extends State<_MaterialFormDialog> {
       ],
     );
   }
-}
-
-/// Recipe-based raw material consumption: pick a recipe (e.g. "Soya Sauce
-/// 740gm — 300kg batch"), enter the TOTAL production quantity (e.g. 15000 kg);
-/// batches = total ÷ batch size, and every raw material in the recipe is
-/// consumed automatically (qty/batch × batches). Water is not tracked.
-class _RecipeConsumeDialog extends StatefulWidget {
-  const _RecipeConsumeDialog();
-  @override
-  State<_RecipeConsumeDialog> createState() => _RecipeConsumeDialogState();
-}
-
-class _RecipeConsumeDialogState extends State<_RecipeConsumeDialog> {
-  List<Map<String, dynamic>> recipes = [];
-  int? recipeId;
-  final qty = TextEditingController();
-  final remark = TextEditingController();
-  bool busy = false;
-
-  @override
-  void initState() {
-    super.initState();
-    context.read<AuthController>().api.get('/packing/recipes').then((json) {
-      if (!mounted) return;
-      setState(() {
-        recipes = ((json as Map)['recipes'] as List).cast<Map<String, dynamic>>();
-        if (recipes.isNotEmpty) recipeId = recipes.first['id'] as int;
-      });
-    }).catchError((e) {
-      if (mounted) showErr(context, e);
-    });
-  }
-
-  @override
-  void dispose() { qty.dispose(); remark.dispose(); super.dispose(); }
-
-  Map<String, dynamic>? get _recipe =>
-      recipes.where((r) => r['id'] == recipeId).cast<Map<String, dynamic>?>().firstOrNull;
-
-  double get _batches {
-    final r = _recipe;
-    final q = double.tryParse(qty.text) ?? 0;
-    if (r == null || q <= 0) return 0;
-    final size = (r['batch_size'] as num).toDouble();
-    return size > 0 ? q / size : 0;
-  }
-
-  Future<void> _submit() async {
-    final q = double.tryParse(qty.text) ?? 0;
-    if (recipeId == null || q <= 0) {
-      showErr(context, 'Enter the total production quantity.');
-      return;
-    }
-    setState(() => busy = true);
-    try {
-      final json = await context.read<AuthController>().api.post('/packing/recipe-consume', {
-        'recipeId': recipeId,
-        'totalQty': q,
-        'remark': remark.text.trim(),
-      });
-      if (!mounted) return;
-      final j = (json as Map).cast<String, dynamic>();
-      final warnings = (j['warnings'] as List?)?.cast<String>() ?? const [];
-      Navigator.pop(context, true);
-      showOk(context, 'Raw material consumed for ${j['batches']} batches.'
-          '${warnings.isEmpty ? '' : '\n⚠ ${warnings.join(' · ')}'}');
-    } catch (e) {
-      if (mounted) showErr(context, e);
-    } finally {
-      if (mounted) setState(() => busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final r = _recipe;
-    final batches = _batches;
-    return AlertDialog(
-      title: const Text('Recipe Consumption (Raw Material)'),
-      content: SizedBox(
-        width: 480,
-        child: recipes.isEmpty
-            ? const SizedBox(height: 90, child: Center(child: CircularProgressIndicator()))
-            : SingleChildScrollView(
-                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  DropdownButtonFormField<int>(
-                    initialValue: recipeId,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Recipe *'),
-                    items: [
-                      for (final rec in recipes)
-                        DropdownMenuItem(value: rec['id'] as int, child: Text(rec['name'] as String, overflow: TextOverflow.ellipsis)),
-                    ],
-                    onChanged: (v) => setState(() => recipeId = v),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: qty,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: InputDecoration(
-                      labelText: 'Total production (${r?['batch_unit'] ?? 'kg'}) *',
-                      hintText: 'e.g. 15000',
-                      helperText: r == null
-                          ? null
-                          : '1 batch = ${qty2(r['batch_size'])} ${r['batch_unit']}'
-                            '${batches > 0 ? ' → ${qty2(batches)} batches' : ''}',
-                    ),
-                    onChanged: (_) => setState(() {}),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(controller: remark, decoration: const InputDecoration(labelText: 'Remark', hintText: 'optional')),
-                  if (r != null && batches > 0) ...[
-                    const SizedBox(height: 14),
-                    Text('WILL CONSUME:', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, letterSpacing: 1.1, color: scheme.onSurfaceVariant)),
-                    const SizedBox(height: 6),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        for (final l in (r['lines'] as List).cast<Map<String, dynamic>>())
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 2),
-                            child: Row(children: [
-                              Expanded(child: Text(l['name'] as String, style: const TextStyle(fontSize: 12))),
-                              Text('${qty2((l['qty_per_batch'] as num) * batches)} ${l['unit']}',
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-                            ]),
-                          ),
-                        const SizedBox(height: 4),
-                        Text('Water is not tracked — only listed raw materials are consumed.',
-                            style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant)),
-                      ]),
-                    ),
-                  ],
-                ]),
-              ),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        FilledButton(onPressed: busy || batches <= 0 ? null : _submit, child: Text(busy ? 'Consuming…' : 'Consume')),
-      ],
-    );
-  }
-}
-
-String qty2(Object? v) {
-  final n = v is num ? v : num.tryParse('$v') ?? 0;
-  final r = (n * 100).round() / 100;
-  return r == r.roundToDouble() ? '${r.round()}' : '$r';
 }

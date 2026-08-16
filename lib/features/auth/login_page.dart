@@ -3,10 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/api.dart';
-import '../../core/i18n.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
-import '../../ui/app_shell.dart' show LanguageDialog;
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -19,6 +17,17 @@ class _LoginPageState extends State<LoginPage> {
   final _password = TextEditingController();
   bool _obscure = true;
   String? _error;
+
+  static const _demo = [
+    ['Super Admin', 'super.admin@flavorflow.in', 'Super@123', Color(0xFF7C3AED)],
+    ['Admin', 'admin@flavorflow.in', 'Admin@123', Color(0xFF2563EB)],
+    ['Production Manager', 'pm@flavorflow.in', 'Prod@123', Color(0xFF0891B2)],
+    ['Production Supervisor', 'ps@flavorflow.in', 'Super@1234', Color(0xFF0D9488)],
+    ['Store Manager', 'sm@flavorflow.in', 'Store@123', Color(0xFFD97706)],
+    ['Store Keeper', 'sk@flavorflow.in', 'Keeper@123', Color(0xFF65A30D)],
+    ['Dispatch Manager', 'disp@flavorflow.in', 'Dispatch@123', Color(0xFFEA580C)],
+    ['Director (Read Only)', 'director@flavorflow.in', 'Director@123', Color(0xFF475569)],
+  ];
 
   Future<void> _submit() async {
     final auth = context.read<AuthController>();
@@ -61,7 +70,7 @@ class _LoginPageState extends State<LoginPage> {
                   const SizedBox(width: 12),
                   const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text('FlavorFlow ERP', style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700, letterSpacing: -0.2)),
-                    Text('MANUFACTURING SUITE', style: TextStyle(color: Shell.groupLabel, fontSize: 8.5, fontWeight: FontWeight.w600, letterSpacing: 1.8)),
+                    Text('SAUCES & VINEGAR SUITE', style: TextStyle(color: Shell.groupLabel, fontSize: 8.5, fontWeight: FontWeight.w600, letterSpacing: 1.8)),
                   ]),
                 ]),
                 const SizedBox(height: 40),
@@ -118,16 +127,9 @@ class _LoginPageState extends State<LoginPage> {
                 ]),
                 const SizedBox(height: 26),
               ],
-              Row(children: [
-                Expanded(child: Text(tr('Sign in'), style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: scheme.onSurface, letterSpacing: -0.4))),
-                IconButton(
-                  tooltip: '${tr('Language')} · ਭਾਸ਼ਾ · भाषा',
-                  icon: Icon(Icons.translate_rounded, size: 20, color: scheme.onSurfaceVariant),
-                  onPressed: () => showDialog(context: context, builder: (_) => const LanguageDialog()),
-                ),
-              ]),
+              Text('Sign in', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: scheme.onSurface, letterSpacing: -0.4)),
               const SizedBox(height: 5),
-              Text(tr('Your workspace adapts to your role.'), style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
+              Text('Your workspace adapts to your role.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
               const SizedBox(height: 24),
               if (_error != null) ...[
                 Container(
@@ -149,7 +151,7 @@ class _LoginPageState extends State<LoginPage> {
                 controller: _email,
                 keyboardType: TextInputType.emailAddress,
                 autofillHints: const [AutofillHints.email],
-                decoration: InputDecoration(labelText: tr('Email'), prefixIcon: const Icon(Icons.alternate_email_rounded, size: 19)),
+                decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.alternate_email_rounded, size: 19)),
                 onSubmitted: (_) => _submit(),
               ),
               const SizedBox(height: 13),
@@ -157,7 +159,7 @@ class _LoginPageState extends State<LoginPage> {
                 controller: _password,
                 obscureText: _obscure,
                 decoration: InputDecoration(
-                  labelText: tr('Password'),
+                  labelText: 'Password',
                   prefixIcon: const Icon(Icons.lock_outline_rounded, size: 19),
                   suffixIcon: IconButton(
                     icon: Icon(_obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 19),
@@ -172,10 +174,34 @@ class _LoginPageState extends State<LoginPage> {
                 style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
                 child: busy
                     ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white))
-                    : Text(tr('Sign in')),
+                    : const Text('Sign in'),
               ),
               const SizedBox(height: 26),
               Divider(color: scheme.outlineVariant),
+              const SizedBox(height: 14),
+              Text('DEMO ACCOUNTS — TAP TO FILL',
+                  style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, letterSpacing: 1.2, color: scheme.onSurfaceVariant)),
+              const SizedBox(height: 10),
+              Wrap(spacing: 7, runSpacing: 7, children: [
+                for (final d in _demo)
+                  InkWell(
+                    borderRadius: BorderRadius.circular(5),
+                    onTap: () => setState(() {
+                      _email.text = d[1] as String;
+                      _password.text = d[2] as String;
+                      _error = null;
+                    }),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5.5),
+                      decoration: BoxDecoration(
+                        color: (d[3] as Color).withValues(alpha: 0.07),
+                        borderRadius: BorderRadius.circular(5),
+                        border: Border.all(color: (d[3] as Color).withValues(alpha: 0.30)),
+                      ),
+                      child: Text(d[0] as String, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: d[3] as Color)),
+                    ),
+                  ),
+              ]),
               const SizedBox(height: 16),
               _ServerBar(),
             ]),

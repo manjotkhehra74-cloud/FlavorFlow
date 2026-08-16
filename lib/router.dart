@@ -5,7 +5,6 @@ import 'features/adjustments/adjustments_page.dart';
 import 'features/adjustments/approvals_page.dart';
 import 'features/audit/audit_page.dart';
 import 'features/auth/login_page.dart';
-import 'features/auth/setup_page.dart';
 import 'features/dashboard/dashboard_page.dart';
 import 'features/dispatch/dispatch_detail_page.dart';
 import 'features/dispatch/dispatch_page.dart';
@@ -35,19 +34,11 @@ String? permForPath(String path) {
   return null; // dashboard & notifications are universal
 }
 
-/// Set by main() before the router is built: fresh install → one-time
-/// language + industry setup screen comes before login.
-bool kNeedsFirstRunSetup = false;
-
 GoRouter buildRouter(AuthController auth) {
   return GoRouter(
-    initialLocation: kNeedsFirstRunSetup ? '/setup' : '/dashboard',
+    initialLocation: '/dashboard',
     refreshListenable: auth,
     redirect: (context, state) {
-      final atSetup = state.matchedLocation == '/setup';
-      if (kNeedsFirstRunSetup && !atSetup) return '/setup';
-      if (!kNeedsFirstRunSetup && atSetup) return '/login';
-      if (atSetup) return null;
       final loggedIn = auth.isLoggedIn;
       final atLogin = state.matchedLocation == '/login';
       if (!loggedIn) return atLogin ? null : '/login';
@@ -57,7 +48,6 @@ GoRouter buildRouter(AuthController auth) {
       return null;
     },
     routes: [
-      GoRoute(path: '/setup', builder: (c, s) => const SetupPage()),
       GoRoute(path: '/login', builder: (c, s) => const LoginPage()),
       ShellRoute(
         builder: (c, s, child) => AppShell(child: child),

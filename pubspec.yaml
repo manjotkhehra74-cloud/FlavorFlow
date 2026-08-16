@@ -1,7 +1,7 @@
 name: flavorflow_erp
 description: FlavorFlow ERP — role-based production, store, packing & dispatch with strict RBAC. Native mobile + web.
 publish_to: 'none'
-version: 1.1.0+2
+version: 1.0.0+1
 
 environment:
   sdk: ^3.9.0
@@ -18,25 +18,11 @@ dependencies:
   pdf: ^3.11.3
   printing: ^5.14.2
   universal_html: ^2.2.4
-  path_provider: ^2.1.5
-  open_filex: ^4.7.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
-  flutter_launcher_icons: ^0.14.3
-
-flutter_launcher_icons:
-  android: true
-  ios: true
-  image_path: "assets/icon/app_icon.png"
-  adaptive_icon_background: "#1565C0"
-  adaptive_icon_foreground: "assets/icon/app_icon.png"
-  remove_alpha_ios: true
-  web:
-    generate: true
-    image_path: "assets/icon/app_icon.png"
 
 flutter:
   uses-material-design: true

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
@@ -283,7 +282,7 @@ class _HistoryList extends StatelessWidget {
           SectionCard(
             title: 'Decision History & Audit Trail',
             child: AppDataTable(
-              columns: ['Code', 'Product', 'Type', U.cb, 'Reason', 'Decision', 'Approved By', 'Approved Date', 'Rejected By', 'Rejected Date', 'Reject Reason', 'Remarks'],
+              columns: const ['Code', 'Product', 'Type', 'CB', 'Reason', 'Decision', 'Approved By', 'Approved Date', 'Rejected By', 'Rejected Date', 'Reject Reason', 'Remarks'],
               rows: [
                 for (final a in rows)
                   [
