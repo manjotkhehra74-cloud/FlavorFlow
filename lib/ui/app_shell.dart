@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../core/app_settings.dart';
+import '../core/notifier.dart';
 import '../core/company.dart';
 import '../core/i18n.dart';
 import '../core/theme.dart';
@@ -29,6 +30,7 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
+    PhoneNotifier.init(); // status-bar notifications (Android permission ask)
     _loadUnread();
     _timer = Timer.periodic(const Duration(seconds: 20), (_) => _loadUnread());
     // Load the editable company identity used on every exported PDF.
@@ -38,8 +40,12 @@ class _AppShellState extends State<AppShell> {
   Future<void> _loadUnread() async {
     try {
       final auth = context.read<AuthController>();
-      final json = await auth.api.get('/notifications/unread-count');
-      if (mounted) setState(() => _unread = (json as Map)['unread'] as int);
+      final json = await auth.api.get('/notifications');
+      final items = ((json as Map)['notifications'] as List).cast<Map<String, dynamic>>();
+      final unread = items.where((n) => n['is_read'] == 0).length;
+      if (mounted) setState(() => _unread = unread);
+      // New unread items → real phone notifications (sound + status bar).
+      await PhoneNotifier.showNew(items);
     } catch (_) {/* transient */}
   }
 
