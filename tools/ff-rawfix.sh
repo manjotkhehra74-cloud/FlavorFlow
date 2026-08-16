@@ -55,11 +55,32 @@ const RAW = [
 ];
 const now = new Date().toISOString();
 const findMat = db.prepare("SELECT id FROM packing_materials WHERE LOWER(name) = LOWER(?)");
-const insMat = db.prepare("INSERT INTO packing_materials (name, category, unit, stock, min_stock) VALUES (?, 'Raw Material', ?, 0, 0)");
+// Build the INSERT dynamically so every NOT NULL column without a default
+// (e.g. created_at) gets a sensible value — schema-proof.
+const cols = db.prepare("PRAGMA table_info(packing_materials)").all();
 const matId = {};
+function insertMaterial(name, unit) {
+  const vals = {};
+  for (const c of cols) {
+    if (c.pk) continue;
+    switch (c.name) {
+      case 'name': vals[c.name] = name; break;
+      case 'category': vals[c.name] = 'Raw Material'; break;
+      case 'unit': vals[c.name] = unit; break;
+      case 'stock': vals[c.name] = 0; break;
+      case 'min_stock': vals[c.name] = 0; break;
+      default:
+        if (c.notnull && c.dflt_value === null) {
+          vals[c.name] = /INT|REAL|NUM/i.test(c.type || '') ? 0 : now;
+        }
+    }
+  }
+  const names = Object.keys(vals);
+  db.prepare(`INSERT INTO packing_materials (${names.join(',')}) VALUES (${names.map(() => '?').join(',')})`).run(...names.map((k) => vals[k]));
+}
 for (const [name, unit] of RAW) {
   let row = findMat.get(name);
-  if (!row) { insMat.run(name, unit); row = findMat.get(name); console.log('RAW ADDED: ' + name); }
+  if (!row) { insertMaterial(name, unit); row = findMat.get(name); console.log('RAW ADDED: ' + name); }
   matId[name] = row.id;
 }
 
