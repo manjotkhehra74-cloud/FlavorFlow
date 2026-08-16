@@ -166,10 +166,15 @@ class _TopBar extends StatelessWidget {
           position: PopupMenuPosition.under,
           onSelected: (v) async {
             if (v == 'logout') await onLogout();
+            if (v == 'refresh') {
+              await context.read<AuthController>().refreshSession();
+              if (context.mounted) showOk(context, 'Permissions refreshed.');
+            }
           },
           itemBuilder: (c) => [
             PopupMenuItem(enabled: false, child: _UserHeader(session: session)),
             const PopupMenuDivider(),
+            PopupMenuItem(value: 'refresh', child: ListTile(leading: const Icon(Icons.sync_rounded, size: 20), title: Text(tr('Refresh permissions')), dense: true, contentPadding: EdgeInsets.zero)),
             PopupMenuItem(value: 'logout', child: ListTile(leading: const Icon(Icons.logout_rounded, size: 20), title: Text(tr('Sign out')), dense: true, contentPadding: EdgeInsets.zero)),
           ],
           child: compact
