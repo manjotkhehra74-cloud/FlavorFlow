@@ -302,7 +302,7 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
                     labelText: 'Batch code',
                     hintText: autoCode.isEmpty ? 'Leave blank for auto code' : 'Leave blank for auto ($autoCode)',
                     helperText: editing
-                        ? 'Batch code must stay unique'
+                        ? 'Same code is allowed again on a different date'
                         : (autoCode.isEmpty ? 'You may type your own code, e.g. SS-740-A' : 'Auto code would be $autoCode — or type your own, e.g. SS-740-A'),
                   ),
                 ),
@@ -348,7 +348,7 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
                     child: InkWell(
                       borderRadius: BorderRadius.circular(12),
                       onTap: () async {
-                        final d = await showDatePicker(context: context, initialDate: planned, firstDate: DateTime.now().subtract(const Duration(days: 30)), lastDate: DateTime.now().add(const Duration(days: 365)));
+                        final d = await showDatePicker(context: context, initialDate: planned, firstDate: DateTime(DateTime.now().year, DateTime.now().month - 1, 1), lastDate: DateTime.now().add(const Duration(days: 365)));
                         if (d != null) setState(() => planned = d);
                       },
                       child: InputDecorator(

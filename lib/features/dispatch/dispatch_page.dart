@@ -297,7 +297,7 @@ class _DateField extends StatelessWidget {
       onTap: () async {
         final d = await showDatePicker(
           context: context, initialDate: date,
-          firstDate: DateTime.now().subtract(const Duration(days: 30)),
+          firstDate: DateTime(DateTime.now().year, DateTime.now().month - 1, 1),
           lastDate: DateTime.now().add(const Duration(days: 90)),
         );
         if (d != null) onPick(d);
