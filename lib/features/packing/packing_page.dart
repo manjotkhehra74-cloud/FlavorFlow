@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/company.dart';
+import '../../core/download.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
+import '../reports/report_pdf.dart';
 
 /// Packing Material — stock of bottles, caps, labels, cartons, trays etc.
 /// Receipts & consumption feed a ledger; batch completion auto-consumes per BOM.
@@ -103,6 +106,37 @@ class _StockTabState extends State<_StockTab> {
   }
 
   void _reload() => setState(() => _future = _load());
+
+  bool _exporting = false;
+
+  /// Export the raw-material stock as PDF (client-built) or Excel (server report).
+  Future<void> _exportRaw(List<Map<String, dynamic>> items, {required bool pdf}) async {
+    setState(() => _exporting = true);
+    try {
+      final date = todayYmd();
+      if (pdf) {
+        final bytes = await ReportPdf.build(
+          title: 'Raw Material Stock',
+          desc: 'Current balance of every raw material (recipe consumption draws from here).',
+          columns: const ['Material', 'Unit', 'Balance', 'Minimum', 'Status'],
+          rows: [
+            for (final m in items)
+              [m['name'], m['unit'], m['stock'], m['min_stock'], (m['low'] as int? ?? 0) == 1 ? 'LOW' : 'OK'],
+          ],
+        );
+        await Printing.sharePdf(bytes: bytes, filename: 'flavorflow-raw-material-$date.pdf');
+      } else {
+        final bytes = await context.read<AuthController>().api.getBytes('/reports/raw-material-stock.xlsx');
+        downloadBytes('flavorflow-raw-material-$date.xlsx', bytes,
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        if (mounted) showOk(context, 'Excel file downloaded.');
+      }
+    } catch (e) {
+      if (mounted) showErr(context, e);
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
 
   Future<void> _deleteMaterial(Map<String, dynamic> m) async {
     final ok = await showDialog<bool>(
@@ -209,7 +243,7 @@ class _StockTabState extends State<_StockTab> {
                 icon: const Icon(Icons.north_east_rounded, size: 18),
                 label: const Text('Record Consumption'),
               ),
-              if (widget.rawOnly)
+              if (widget.rawOnly) ...[
                 OutlinedButton.icon(
                   onPressed: () async {
                     final saved = await showDialog<bool>(context: context, builder: (_) => const _RecipeConsumeDialog());
@@ -218,6 +252,25 @@ class _StockTabState extends State<_StockTab> {
                   icon: const Icon(Icons.science_rounded, size: 18),
                   label: const Text('Recipe Consumption'),
                 ),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final saved = await showDialog<bool>(context: context, builder: (_) => const _RecipeEditDialog());
+                    if (saved == true) _reload();
+                  },
+                  icon: const Icon(Icons.edit_note_rounded, size: 18),
+                  label: const Text('Edit Recipes'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _exporting ? null : () => _exportRaw(all, pdf: true),
+                  icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                  label: const Text('Export PDF'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _exporting ? null : () => _exportRaw(all, pdf: false),
+                  icon: const Icon(Icons.table_view_outlined, size: 18),
+                  label: const Text('Export Excel'),
+                ),
+              ],
               OutlinedButton.icon(
                 onPressed: () async {
                   final saved = await showDialog<bool>(context: context, builder: (_) => const _MaterialFormDialog());
@@ -597,6 +650,8 @@ class _RecipeConsumeDialogState extends State<_RecipeConsumeDialog> {
   int? recipeId;
   final qty = TextEditingController();
   final remark = TextEditingController();
+  /// materialId → custom TOTAL consumption typed by the user (override).
+  final Map<int, TextEditingController> overrides = {};
   bool busy = false;
 
   @override
@@ -614,7 +669,12 @@ class _RecipeConsumeDialogState extends State<_RecipeConsumeDialog> {
   }
 
   @override
-  void dispose() { qty.dispose(); remark.dispose(); super.dispose(); }
+  void dispose() {
+    qty.dispose();
+    remark.dispose();
+    for (final c in overrides.values) { c.dispose(); }
+    super.dispose();
+  }
 
   Map<String, dynamic>? get _recipe =>
       recipes.where((r) => r['id'] == recipeId).cast<Map<String, dynamic>?>().firstOrNull;
@@ -627,18 +687,28 @@ class _RecipeConsumeDialogState extends State<_RecipeConsumeDialog> {
     return size > 0 ? q / size : 0;
   }
 
+  TextEditingController _ovCtl(int materialId) =>
+      overrides.putIfAbsent(materialId, () => TextEditingController());
+
   Future<void> _submit() async {
     final q = double.tryParse(qty.text) ?? 0;
     if (recipeId == null || q <= 0) {
       showErr(context, 'Enter the total production quantity.');
       return;
     }
+    // collect non-empty overrides: materialId → custom total qty
+    final ov = <String, num>{};
+    overrides.forEach((mid, ctl) {
+      final v = double.tryParse(ctl.text.trim());
+      if (v != null && v > 0) ov['$mid'] = v;
+    });
     setState(() => busy = true);
     try {
       final json = await context.read<AuthController>().api.post('/packing/recipe-consume', {
         'recipeId': recipeId,
         'totalQty': q,
         'remark': remark.text.trim(),
+        if (ov.isNotEmpty) 'overrides': ov,
       });
       if (!mounted) return;
       final j = (json as Map).cast<String, dynamic>();
@@ -706,14 +776,31 @@ class _RecipeConsumeDialogState extends State<_RecipeConsumeDialog> {
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         for (final l in (r['lines'] as List).cast<Map<String, dynamic>>())
                           Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            padding: const EdgeInsets.symmetric(vertical: 3),
                             child: Row(children: [
                               Expanded(child: Text(l['name'] as String, style: const TextStyle(fontSize: 12))),
-                              Text('${qty2((l['qty_per_batch'] as num) * batches)} ${l['unit']}',
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                              SizedBox(
+                                width: 108,
+                                child: TextField(
+                                  controller: _ovCtl(l['material_id'] as int),
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  textAlign: TextAlign.right,
+                                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                                  decoration: InputDecoration(
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                    // recipe-calculated qty shows as hint; type to override
+                                    hintText: qty2((l['qty_per_batch'] as num) * batches),
+                                    suffixText: '${l['unit']}',
+                                    suffixStyle: const TextStyle(fontSize: 10.5),
+                                  ),
+                                ),
+                              ),
                             ]),
                           ),
                         const SizedBox(height: 4),
+                        Text('Amounts are as per recipe — type in any box to give that material a specific consumption instead.',
+                            style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant)),
                         Text('Water is not tracked — only listed raw materials are consumed.',
                             style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant)),
                       ]),
@@ -734,4 +821,157 @@ String qty2(Object? v) {
   final n = v is num ? v : num.tryParse('$v') ?? 0;
   final r = (n * 100).round() / 100;
   return r == r.roundToDouble() ? '${r.round()}' : '$r';
+}
+
+/// Edit recipes: pick a recipe, change the batch size and each material's
+/// qty per batch (0 removes the line). For when the factory recipe changes.
+class _RecipeEditDialog extends StatefulWidget {
+  const _RecipeEditDialog();
+  @override
+  State<_RecipeEditDialog> createState() => _RecipeEditDialogState();
+}
+
+class _RecipeEditDialogState extends State<_RecipeEditDialog> {
+  List<Map<String, dynamic>> recipes = [];
+  int? recipeId;
+  final batchSize = TextEditingController();
+  final Map<int, TextEditingController> lineCtls = {};
+  bool busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRecipes();
+  }
+
+  Future<void> _loadRecipes() async {
+    try {
+      final json = await context.read<AuthController>().api.get('/packing/recipes');
+      if (!mounted) return;
+      setState(() {
+        recipes = ((json as Map)['recipes'] as List).cast<Map<String, dynamic>>();
+        if (recipes.isNotEmpty && recipeId == null) _select(recipes.first['id'] as int);
+      });
+    } catch (e) {
+      if (mounted) showErr(context, e);
+    }
+  }
+
+  void _select(int id) {
+    recipeId = id;
+    final r = recipes.firstWhere((x) => x['id'] == id);
+    batchSize.text = qty2(r['batch_size']);
+    for (final c in lineCtls.values) { c.dispose(); }
+    lineCtls.clear();
+    for (final l in (r['lines'] as List).cast<Map<String, dynamic>>()) {
+      lineCtls[l['material_id'] as int] = TextEditingController(text: qty2(l['qty_per_batch']));
+    }
+    setState(() {});
+  }
+
+  @override
+  void dispose() {
+    batchSize.dispose();
+    for (final c in lineCtls.values) { c.dispose(); }
+    super.dispose();
+  }
+
+  Map<String, dynamic>? get _recipe =>
+      recipes.where((r) => r['id'] == recipeId).cast<Map<String, dynamic>?>().firstOrNull;
+
+  Future<void> _save() async {
+    final r = _recipe;
+    if (r == null) return;
+    final size = double.tryParse(batchSize.text) ?? 0;
+    if (size <= 0) {
+      showErr(context, 'Batch size must be greater than 0.');
+      return;
+    }
+    setState(() => busy = true);
+    try {
+      await context.read<AuthController>().api.put('/packing/recipes/${r['id']}', {
+        'batchSize': size,
+        'lines': [
+          for (final e in lineCtls.entries)
+            {'materialId': e.key, 'qtyPerBatch': double.tryParse(e.value.text) ?? 0},
+        ],
+      });
+      if (!mounted) return;
+      Navigator.pop(context, true);
+      showOk(context, 'Recipe updated.');
+    } catch (e) {
+      if (mounted) showErr(context, e);
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final r = _recipe;
+    return AlertDialog(
+      title: const Text('Edit Recipes'),
+      content: SizedBox(
+        width: 480,
+        child: recipes.isEmpty
+            ? const SizedBox(height: 90, child: Center(child: CircularProgressIndicator()))
+            : SingleChildScrollView(
+                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  DropdownButtonFormField<int>(
+                    initialValue: recipeId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Recipe *'),
+                    items: [
+                      for (final rec in recipes)
+                        DropdownMenuItem(value: rec['id'] as int, child: Text(rec['name'] as String, overflow: TextOverflow.ellipsis)),
+                    ],
+                    onChanged: (v) { if (v != null) _select(v); },
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: batchSize,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(labelText: 'Batch size (${r?['batch_unit'] ?? 'kg'}) *'),
+                  ),
+                  if (r != null) ...[
+                    const SizedBox(height: 14),
+                    Text('QTY PER BATCH (0 = remove):',
+                        style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, letterSpacing: 1.1, color: scheme.onSurfaceVariant)),
+                    const SizedBox(height: 6),
+                    for (final l in (r['lines'] as List).cast<Map<String, dynamic>>())
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 3),
+                        child: Row(children: [
+                          Expanded(child: Text(l['name'] as String, style: const TextStyle(fontSize: 12.5))),
+                          SizedBox(
+                            width: 110,
+                            child: TextField(
+                              controller: lineCtls[l['material_id'] as int],
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              textAlign: TextAlign.right,
+                              style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                              decoration: InputDecoration(
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                suffixText: '${l['unit']}',
+                                suffixStyle: const TextStyle(fontSize: 10.5),
+                              ),
+                            ),
+                          ),
+                        ]),
+                      ),
+                    const SizedBox(height: 6),
+                    Text('Changes apply to future consumptions only — past ledger entries stay unchanged.',
+                        style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant)),
+                  ],
+                ]),
+              ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(onPressed: busy || r == null ? null : _save, child: Text(busy ? 'Saving…' : 'Save Recipe')),
+      ],
+    );
+  }
 }
