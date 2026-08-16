@@ -228,7 +228,7 @@ class _StockTabState extends State<_StockTab> {
                 padding: const EdgeInsets.only(left: 8),
                 child: FilledButton.icon(
                   onPressed: () async {
-                    final saved = await showDialog<bool>(context: context, builder: (_) => const _TxnDialog(kind: 'receive'));
+                    final saved = await showDialog<bool>(context: context, builder: (_) => _TxnDialog(kind: 'receive', rawOnly: widget.rawOnly));
                     if (saved == true) _reload();
                   },
                   icon: const Icon(Icons.south_west_rounded, size: 18),
@@ -237,7 +237,7 @@ class _StockTabState extends State<_StockTab> {
               ),
               OutlinedButton.icon(
                 onPressed: () async {
-                  final saved = await showDialog<bool>(context: context, builder: (_) => const _TxnDialog(kind: 'consume'));
+                  final saved = await showDialog<bool>(context: context, builder: (_) => _TxnDialog(kind: 'consume', rawOnly: widget.rawOnly));
                   if (saved == true) _reload();
                 },
                 icon: const Icon(Icons.north_east_rounded, size: 18),
@@ -469,7 +469,8 @@ class _LedgerTabState extends State<_LedgerTab> {
 
 class _TxnDialog extends StatefulWidget {
   final String kind; // 'receive' | 'consume'
-  const _TxnDialog({required this.kind});
+  final bool rawOnly; // Raw Material screen → only raw materials in the list
+  const _TxnDialog({required this.kind, this.rawOnly = false});
   @override
   State<_TxnDialog> createState() => _TxnDialogState();
 }
@@ -490,7 +491,12 @@ class _TxnDialogState extends State<_TxnDialog> {
     super.initState();
     context.read<AuthController>().api.get('/packing/materials').then((json) {
       setState(() {
-        materials = ((json as Map)['materials'] as List).cast<Map<String, dynamic>>();
+        var list = ((json as Map)['materials'] as List).cast<Map<String, dynamic>>();
+        // Raw screen shows only raw materials; packing screen hides them.
+        list = widget.rawOnly
+            ? list.where((m) => m['category'] == 'Raw Material').toList()
+            : list.where((m) => m['category'] != 'Raw Material').toList();
+        materials = list;
         materialId = materials.isNotEmpty ? materials.first['id'] as int : null;
       });
     }).catchError((e) { setState(() => loadError = '$e'); });
@@ -519,7 +525,9 @@ class _TxnDialogState extends State<_TxnDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(isReceive ? 'Receive Packing Stock' : 'Record Consumption'),
+      title: Text(isReceive
+          ? (widget.rawOnly ? 'Receive Raw Material' : 'Receive Packing Stock')
+          : 'Record Consumption'),
       content: SizedBox(
         width: 400,
         child: loadError != null
@@ -529,8 +537,10 @@ class _TxnDialogState extends State<_TxnDialog> {
                 : Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
                     DropdownButtonFormField<int>(
                       initialValue: materialId,
+                      isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Material *'),
-                      items: [for (final m in materials) DropdownMenuItem(value: m['id'] as int, child: Text('${m['name']} (${m['category']})', overflow: TextOverflow.ellipsis))],
+                      // Raw screen: category suffix skipped so the full name fits.
+                      items: [for (final m in materials) DropdownMenuItem(value: m['id'] as int, child: Text(widget.rawOnly ? '${m['name']}' : '${m['name']} (${m['category']})', overflow: TextOverflow.ellipsis))],
                       onChanged: (v) => setState(() => materialId = v),
                     ),
                     if (_material != null)

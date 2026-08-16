@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/api.dart';
+import '../../core/biometric.dart';
 import '../../core/i18n.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
@@ -19,13 +20,76 @@ class _LoginPageState extends State<LoginPage> {
   final _password = TextEditingController();
   bool _obscure = true;
   String? _error;
+  bool _bioAvailable = false; // device supports fingerprint/face/PIN
+  bool _bioEnabled = false; // quick login already set up on this device
+
+  @override
+  void initState() {
+    super.initState();
+    _checkBio();
+  }
+
+  Future<void> _checkBio() async {
+    final avail = await BiometricAuth.available();
+    final enabled = await BiometricAuth.enabled();
+    if (!mounted) return;
+    setState(() { _bioAvailable = avail; _bioEnabled = enabled; });
+    // Prefill the saved email for convenience.
+    if (enabled && _email.text.isEmpty) {
+      final saved = await BiometricAuth.savedEmail();
+      if (saved != null && mounted) setState(() => _email.text = saved);
+    }
+  }
 
   Future<void> _submit() async {
     final auth = context.read<AuthController>();
-    final err = await auth.login(_email.text.trim(), _password.text);
+    final email = _email.text.trim();
+    final password = _password.text;
+    final err = await auth.login(email, password);
     if (!mounted) return;
     if (err != null) {
       setState(() => _error = err);
+      return;
+    }
+    // First successful password login on a biometric-capable device:
+    // offer one-time setup of fingerprint/passkey quick login.
+    if (_bioAvailable && !_bioEnabled) {
+      final yes = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Enable quick login?'),
+              content: const Text(
+                  'Next time, sign in with your fingerprint / face / device PIN — no password typing.\n\nYour credentials are stored in the phone\'s encrypted keystore, only on this device.'),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Not now')),
+                FilledButton.icon(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  icon: const Icon(Icons.fingerprint_rounded, size: 19),
+                  label: const Text('Enable'),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+      if (yes) await BiometricAuth.enable(email, password);
+    }
+    if (mounted) context.go('/dashboard');
+  }
+
+  /// Fingerprint / passkey button: OS prompt → stored credentials → sign in.
+  Future<void> _bioLogin() async {
+    final creds = await BiometricAuth.authenticate();
+    if (creds == null || !mounted) return;
+    final auth = context.read<AuthController>();
+    final err = await auth.login(creds.email, creds.password);
+    if (!mounted) return;
+    if (err != null) {
+      // Password likely changed on the server — drop the stale credentials.
+      await BiometricAuth.disable();
+      setState(() {
+        _bioEnabled = false;
+        _error = '$err\nQuick login was reset — sign in with your password once to re-enable it.';
+      });
     } else {
       context.go('/dashboard');
     }
@@ -156,6 +220,7 @@ class _LoginPageState extends State<LoginPage> {
               TextField(
                 controller: _password,
                 obscureText: _obscure,
+                autofillHints: const [AutofillHints.password],
                 decoration: InputDecoration(
                   labelText: tr('Password'),
                   prefixIcon: const Icon(Icons.lock_outline_rounded, size: 19),
@@ -174,6 +239,15 @@ class _LoginPageState extends State<LoginPage> {
                     ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white))
                     : Text(tr('Sign in')),
               ),
+              if (_bioEnabled) ...[
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: busy ? null : _bioLogin,
+                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 13)),
+                  icon: const Icon(Icons.fingerprint_rounded, size: 22),
+                  label: const Text('Login with fingerprint / passkey'),
+                ),
+              ],
               const SizedBox(height: 26),
               Divider(color: scheme.outlineVariant),
               const SizedBox(height: 16),
