@@ -135,6 +135,17 @@ class _StockTabState extends State<_StockTab> {
         final s = (snap.data!['summary'] as Map).cast<String, dynamic>();
         final categories = <String>{for (final m in all) m['category'] as String};
         final rows = _category.isEmpty ? all : all.where((m) => m['category'] == _category).toList();
+        // Pair every "Tray (X)" with its "Tray Cap (X)" right below it —
+        // e.g. Tray (740/610) → Tray Cap (740/610), Tray (1.3/1 Ltr) → Tray Cap (1.3/1 Ltr).
+        String pairKey(Map<String, dynamic> m) {
+          final n = (m['name'] as String).trim();
+          final cap = RegExp(r'^Tray\s*Cap\s*\((.+)\)$', caseSensitive: false).firstMatch(n);
+          if (cap != null) return 'TRAY ${cap.group(1)!.toUpperCase()}~1';
+          final tray = RegExp(r'^Tray\s*\((.+)\)$', caseSensitive: false).firstMatch(n);
+          if (tray != null) return 'TRAY ${tray.group(1)!.toUpperCase()}~0';
+          return n.toUpperCase();
+        }
+        rows.sort((a, b) => pairKey(a).compareTo(pairKey(b)));
         return ListView(padding: const EdgeInsets.all(20), children: [
           LayoutBuilder(builder: (context, c) {
             final cols = c.maxWidth > 1000 ? 3 : 1;
