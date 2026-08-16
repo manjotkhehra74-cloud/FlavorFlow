@@ -71,10 +71,12 @@ class StockPdf {
 
     final now = DateTime.now();
     final doc = pw.Document();
-    doc.addPage(pw.Page(
+    // MultiPage: table flows across pages when there are many products
+    // (a single Page silently drops overflowing content).
+    doc.addPage(pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.fromLTRB(36, 30, 36, 30),
-      build: (context) => pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.stretch, children: [
+      build: (context) => [
         pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
           pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
             pw.Text(CompanyProfile.current.name, style: ts(15, bold: true)),
@@ -117,6 +119,7 @@ class StockPdf {
           },
           children: [
             pw.TableRow(
+              repeat: true,
               decoration: const pw.BoxDecoration(color: headerBg),
               children: [for (var i = 0; i < headers.length; i++) cell(headers[i], header: true, right: i >= 2 && i <= 6)],
             ),
@@ -146,7 +149,7 @@ class StockPdf {
         pw.SizedBox(height: 12),
         pw.Text('Generated from live inventory — ${U.carton.toLowerCase()} (${U.cb}) and ${U.trayLc} tracked separately.',
             style: ts(8, color: greyTxt)),
-      ]),
+      ],
     ));
     return doc.save();
   }

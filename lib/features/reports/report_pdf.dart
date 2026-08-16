@@ -54,10 +54,20 @@ class ReportPdf {
 
     final now = DateTime.now();
     final doc = pw.Document();
-    doc.addPage(pw.Page(
+    // MultiPage: long reports (30–200+ rows) flow across pages automatically —
+    // a single Page silently drops content that overflows (blank-table bug).
+    doc.addPage(pw.MultiPage(
       pageFormat: landscape ? PdfPageFormat.a4.landscape : PdfPageFormat.a4,
       margin: const pw.EdgeInsets.fromLTRB(34, 28, 34, 28),
-      build: (context) => pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.stretch, children: [
+      footer: (context) => pw.Padding(
+        padding: const pw.EdgeInsets.only(top: 8),
+        child: pw.Row(children: [
+          pw.Text('Exported from FlavorFlow ERP — quantities and weights only.', style: ts(7.8, color: greyTxt)),
+          pw.Spacer(),
+          pw.Text('Page ${context.pageNumber} of ${context.pagesCount}', style: ts(7.8, color: greyTxt)),
+        ]),
+      ),
+      build: (context) => [
         pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
           pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
             pw.Text(CompanyProfile.current.name, style: ts(14, bold: true)),
@@ -89,8 +99,11 @@ class ReportPdf {
             for (var c = 0; c < columns.length; c++)
               c: c == 0 ? const pw.FlexColumnWidth(2.2) : const pw.FlexColumnWidth(1.4),
           },
+          // Repeat the header row at the top of every page.
+          tableWidth: pw.TableWidth.max,
           children: [
             pw.TableRow(
+              repeat: true,
               decoration: const pw.BoxDecoration(color: headerBg),
               children: [for (var c = 0; c < columns.length; c++) cell(columns[c].toUpperCase(), header: true, right: numericCols.contains(c))],
             ),
@@ -100,9 +113,7 @@ class ReportPdf {
               ]),
           ],
         ),
-        pw.SizedBox(height: 10),
-        pw.Text('Exported from FlavorFlow ERP — quantities and weights only.', style: ts(7.8, color: greyTxt)),
-      ]),
+      ],
     ));
     return doc.save();
   }
