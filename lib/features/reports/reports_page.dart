@@ -131,12 +131,12 @@ class _ReportsPageState extends State<ReportsPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: sel ? const Color(0xFFE1EEFB) : Colors.white,
+          color: sel ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(5),
           border: Border.all(color: sel ? AppColors.blue : const Color(0xFFC3CEDA)),
         ),
         child: Text(r['title'] as String,
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: sel ? const Color(0xFF0B4E96) : const Color(0xFF1B2733))),
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: sel ? Theme.of(context).colorScheme.onPrimaryContainer : Theme.of(context).colorScheme.onSurface)),
       ),
     );
   }
@@ -150,19 +150,19 @@ class _ReportsPageState extends State<ReportsPage> {
         onTap: () => setState(() => _select(r)),
         child: Container(
           decoration: BoxDecoration(
-            color: sel ? const Color(0xFFEAF3FC) : Colors.transparent,
+            color: sel ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.6) : Colors.transparent,
             borderRadius: BorderRadius.circular(6),
             border: sel ? const Border(left: BorderSide(color: AppColors.blue, width: 3)) : null,
           ),
           padding: EdgeInsets.fromLTRB(sel ? 9 : 12, 9, 10, 9),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(r['title'] as String,
-                style: TextStyle(fontSize: 12.6, fontWeight: FontWeight.w600, color: sel ? const Color(0xFF0B4E96) : const Color(0xFF1B2733))),
+                style: TextStyle(fontSize: 12.6, fontWeight: FontWeight.w600, color: sel ? Theme.of(context).colorScheme.onPrimaryContainer : Theme.of(context).colorScheme.onSurface)),
             const SizedBox(height: 2),
             Text(r['desc'] as String,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), height: 1.35)),
+                style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant, height: 1.35)),
           ]),
         ),
       ),
@@ -196,7 +196,7 @@ class _ReportsPageState extends State<ReportsPage> {
         ),
       ]),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(_selected!['desc'] as String, style: const TextStyle(fontSize: 11.5, color: Color(0xFF64748B))),
+        Text(_selected!['desc'] as String, style: TextStyle(fontSize: 11.5, color: Theme.of(context).colorScheme.onSurfaceVariant)),
         const SizedBox(height: 12),
         FutureBuilder<Map<String, dynamic>>(
           future: _reportFuture,

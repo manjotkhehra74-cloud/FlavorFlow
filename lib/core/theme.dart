@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 /// Inter typography with tabular numbers.
 ThemeData buildTheme({bool dark = false}) {
   const primary = Color(0xFF0A6ED1); // business blue
-  const ink = Color(0xFF1B2733);
-  const subInk = Color(0xFF5C6B7A);
+  final ink = dark ? const Color(0xFFE4EAF0) : const Color(0xFF1B2733);
+  final subInk = dark ? const Color(0xFF9AA8B5) : const Color(0xFF5C6B7A);
 
   final base = ColorScheme.fromSeed(seedColor: primary, brightness: dark ? Brightness.dark : Brightness.light);
   final scheme = dark
@@ -82,7 +82,7 @@ ThemeData buildTheme({bool dark = false}) {
       centerTitle: false,
       toolbarHeight: 54,
       titleTextStyle: txt(16.5, FontWeight.w700, color: ink, ls: -0.2),
-      iconTheme: const IconThemeData(color: subInk, size: 21),
+      iconTheme: IconThemeData(color: subInk, size: 21),
     ),
     cardTheme: CardThemeData(
       color: scheme.surface,
@@ -105,7 +105,7 @@ ThemeData buildTheme({bool dark = false}) {
       isDense: true,
     ),
     dataTableTheme: DataTableThemeData(
-      headingRowColor: const WidgetStatePropertyAll(Color(0xFFF5F8FB)),
+      headingRowColor: WidgetStatePropertyAll(dark ? const Color(0xFF1F262E) : const Color(0xFFF5F8FB)),
       headingRowHeight: 38,
       dataRowMinHeight: 40,
       dataRowMaxHeight: 46,

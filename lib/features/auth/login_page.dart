@@ -39,6 +39,12 @@ class _LoginPageState extends State<LoginPage> {
       final saved = await BiometricAuth.savedEmail();
       if (saved != null && mounted) setState(() => _email.text = saved);
     }
+    // Biometrics registered → the fingerprint prompt pops automatically on
+    // open, so a returning user just touches the sensor and is in.
+    if (enabled && mounted) {
+      await Future.delayed(const Duration(milliseconds: 350)); // let the screen settle
+      if (mounted) _bioLogin();
+    }
   }
 
   Future<void> _submit() async {

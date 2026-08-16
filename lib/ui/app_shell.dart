@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../core/app_settings.dart';
-import '../core/biometric.dart';
 import '../core/company.dart';
 import '../core/i18n.dart';
 import '../core/theme.dart';
@@ -167,49 +166,10 @@ class _TopBar extends StatelessWidget {
           position: PopupMenuPosition.under,
           onSelected: (v) async {
             if (v == 'logout') await onLogout();
-            if (v == 'refresh') await context.read<AuthController>().refreshSession();
-            if (v == 'company') await showDialog(context: context, builder: (_) => const CompanyProfileDialog());
-            if (v == 'language') await showDialog(context: context, builder: (_) => const LanguageDialog());
-            if (v == 'passkey') {
-              final enabled = await BiometricAuth.enabled();
-              if (!context.mounted) return;
-              if (enabled) {
-                final remove = await showDialog<bool>(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        title: const Text('Biometric login'),
-                        content: const Text('Biometric login is ON — the login screen shows "Login with biometrics" (fingerprint / face / device PIN).\n\nTurn it off on this device?'),
-                        actions: [
-                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep on')),
-                          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Turn off')),
-                        ],
-                      ),
-                    ) ??
-                    false;
-                if (remove) {
-                  await BiometricAuth.disable();
-                  if (context.mounted) showOk(context, 'Biometric login turned off on this device.');
-                }
-              } else if (BiometricAuth.hasSession) {
-                final saved = await BiometricAuth.enableFromSession();
-                if (context.mounted) {
-                  saved
-                      ? showOk(context, 'Biometric login enabled — next login just needs your fingerprint.')
-                      : showErr(context, 'Could not enable biometric login.');
-                }
-              } else {
-                showErr(context, 'Sign in with your password once — biometric login turns on automatically.');
-              }
-            }
           },
           itemBuilder: (c) => [
             PopupMenuItem(enabled: false, child: _UserHeader(session: session)),
             const PopupMenuDivider(),
-            if (session.role == 'super_admin')
-              PopupMenuItem(value: 'company', child: ListTile(leading: const Icon(Icons.business_rounded, size: 20), title: Text(tr('Company details (PDF header)')), dense: true, contentPadding: EdgeInsets.zero)),
-            PopupMenuItem(value: 'language', child: ListTile(leading: const Icon(Icons.translate_rounded, size: 20), title: Text('${tr('Language')} · ਭਾਸ਼ਾ · भाषा'), dense: true, contentPadding: EdgeInsets.zero)),
-            const PopupMenuItem(value: 'passkey', child: ListTile(leading: Icon(Icons.fingerprint_rounded, size: 20), title: Text('Biometric login'), dense: true, contentPadding: EdgeInsets.zero)),
-            PopupMenuItem(value: 'refresh', child: ListTile(leading: const Icon(Icons.sync_rounded, size: 20), title: Text(tr('Refresh permissions')), dense: true, contentPadding: EdgeInsets.zero)),
             PopupMenuItem(value: 'logout', child: ListTile(leading: const Icon(Icons.logout_rounded, size: 20), title: Text(tr('Sign out')), dense: true, contentPadding: EdgeInsets.zero)),
           ],
           child: compact
@@ -218,7 +178,7 @@ class _TopBar extends StatelessWidget {
                   _Avatar(session: session, radius: 15),
                   const SizedBox(width: 8),
                   Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
-                    Text(session.name, style: const TextStyle(fontSize: 12.8, fontWeight: FontWeight.w600, color: Color(0xFF1B2733), height: 1.15)),
+                    Text(session.name, style: TextStyle(fontSize: 12.8, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface, height: 1.15)),
                     Text(session.roleLabel, style: const TextStyle(fontSize: 10.5, color: Color(0xFF5C6B7A), height: 1.2)),
                   ]),
                   const SizedBox(width: 4),
@@ -231,10 +191,10 @@ class _TopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 54,
-      color: Colors.white,
+      color: Theme.of(context).colorScheme.surface,
       padding: const EdgeInsets.only(left: 20),
       child: Row(children: [
-        Text(title, style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w700, letterSpacing: -0.2, color: Color(0xFF1B2733))),
+        Text(title, style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w700, letterSpacing: -0.2, color: Theme.of(context).colorScheme.onSurface)),
         const Spacer(),
         Icon(Icons.calendar_today_outlined, size: 13, color: Theme.of(context).colorScheme.onSurfaceVariant),
         const SizedBox(width: 6),

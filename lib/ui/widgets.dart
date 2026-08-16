@@ -179,7 +179,7 @@ class KpiCard extends StatelessWidget {
             Expanded(
               child: Text(label.toUpperCase(),
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.9, color: Color(0xFF64748B))),
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.9, color: Theme.of(context).colorScheme.onSurfaceVariant)),
             ),
             Icon(icon, size: 16, color: tint),
           ]),
@@ -189,7 +189,7 @@ class KpiCard extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: Text(value,
                 style: const TextStyle(
-                    fontSize: 23, fontWeight: FontWeight.w700, letterSpacing: -0.5, color: Color(0xFF1B2733),
+                    fontSize: 23, fontWeight: FontWeight.w700, letterSpacing: -0.5, color: Theme.of(context).colorScheme.onSurface,
                     fontFeatures: [FontFeature.tabularFigures()])),
           ),
         ]),

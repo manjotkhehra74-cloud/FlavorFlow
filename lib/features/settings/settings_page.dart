@@ -185,6 +185,15 @@ class _SettingsPageState extends State<SettingsPage> {
         title: 'ERP server',
         subtitle: auth.serverBase ?? 'Automatic',
       ),
+      _tile(
+        icon: Icons.sync_rounded,
+        title: tr('Refresh permissions'),
+        subtitle: 'Re-load your role & permissions from the server',
+        onTap: () async {
+          await auth.refreshSession();
+          if (context.mounted) showOk(context, 'Permissions refreshed.');
+        },
+      ),
 
       _section('ABOUT'),
       _tile(
