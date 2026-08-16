@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
@@ -74,7 +75,7 @@ class _AdjustmentsPageState extends State<AdjustmentsPage> {
             child: rows.isEmpty
                 ? const EmptyState('No adjustment requests')
                 : AppDataTable(
-                    columns: const ['Code', 'Product', 'Type', 'CB', 'Reason', 'Status', 'Requested By', 'Requested On', 'Decision'],
+                    columns: ['Code', 'Product', 'Type', U.cb, 'Reason', 'Status', 'Requested By', 'Requested On', 'Decision'],
                     rows: [
                       for (final a in rows)
                         [
@@ -178,7 +179,7 @@ class _AdjustmentFormDialogState extends State<AdjustmentFormDialog> {
                   onSelectionChanged: (s) => setState(() => type = s.first),
                 ),
                 const SizedBox(height: 14),
-                TextField(controller: cb, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Cartons (CB)')),
+                TextField(controller: cb, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${U.carton} (${U.cb})')),
                 const SizedBox(height: 12),
                 TextField(controller: reason, maxLines: 2, decoration: const InputDecoration(labelText: 'Reason *', hintText: 'e.g. Damaged cartons, QC sample, sales return…')),
               ]),

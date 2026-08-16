@@ -1,10 +1,11 @@
 import 'dart:typed_data';
-import 'package:universal_html/html.dart' as html;
 
-/// Trigger a browser download of raw bytes (the app runs as web).
+import 'download_native.dart' if (dart.library.html) 'download_web.dart' as impl;
+
+/// Cross-platform "download" of raw bytes.
+/// - Web: triggers a browser download.
+/// - Android/iOS/desktop: saves the file and opens it with the default app
+///   (Excel viewer, PDF reader, …) via open_filex.
 void downloadBytes(String filename, Uint8List bytes, String mimeType) {
-  final blob = html.Blob([bytes], mimeType);
-  final url = html.Url.createObjectUrlFromBlob(blob);
-  (html.AnchorElement(href: url)..setAttribute('download', filename)).click();
-  html.Url.revokeObjectUrl(url);
+  impl.downloadBytesImpl(filename, bytes, mimeType);
 }

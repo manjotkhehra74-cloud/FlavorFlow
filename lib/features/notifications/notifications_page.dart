@@ -41,11 +41,26 @@ class _NotificationsPageState extends State<NotificationsPage> {
   }
 
   Future<void> _readAll() async {
+    final api = context.read<AuthController>().api;
     try {
-      await context.read<AuthController>().api.post('/notifications/read-all');
+      await api.post('/notifications/read-all');
+    } catch (_) {
+      // Fallback for servers without the bulk route (or where /:id/read
+      // shadows it): mark every unread notification individually.
+      try {
+        final items = await _future;
+        final unread = items.where((n) => n['is_read'] == 0).toList();
+        for (final n in unread) {
+          await api.post('/notifications/${n['id']}/read');
+        }
+      } catch (e) {
+        if (mounted) showErr(context, e);
+        return;
+      }
+    }
+    if (mounted) {
       _reload();
-    } catch (e) {
-      if (mounted) showErr(context, e);
+      showOk(context, 'All notifications marked as read.');
     }
   }
 

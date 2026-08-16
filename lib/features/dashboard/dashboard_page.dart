@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
@@ -101,8 +102,12 @@ class _Header extends StatelessWidget {
           Text('$greeting, ${name.split(' ').first}',
               style: TextStyle(fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -0.4, color: scheme.onSurface)),
           const SizedBox(height: 3),
-          Text('${session.roleLabel} workspace  ·  ${fmtDateWithDay(todayYmd())}',
-              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5)),
+          // Wrap keeps each chunk intact: the date never splits across lines —
+          // on narrow phones it moves to its own line as one piece.
+          Wrap(spacing: 6, runSpacing: 2, children: [
+            Text('${session.roleLabel} workspace', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5)),
+            Text('·  ${fmtDateWithDay(todayYmd())}', softWrap: false, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5)),
+          ]),
         ]),
       ),
       Container(
@@ -155,13 +160,13 @@ class _Line extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final values = (w['values'] as List).map((e) => (e as num).toDouble()).toList();
-    final maxY = (values.isEmpty ? 0 : values.reduce((a, b) => a > b ? a : b)) * 1.2 + 1;
+    final axis = _niceAxis(values);
     return SizedBox(
       height: 220,
       child: LineChart(LineChartData(
-        minY: 0, maxY: maxY,
+        minY: 0, maxY: axis.maxY,
         gridData: FlGridData(
-          show: true, drawVerticalLine: false,
+          show: true, drawVerticalLine: false, horizontalInterval: axis.interval,
           getDrawingHorizontalLine: (v) => FlLine(color: scheme.outlineVariant.withValues(alpha: 0.5), strokeWidth: 0.7, dashArray: [4, 5]),
         ),
         borderData: FlBorderData(show: false),
@@ -170,7 +175,7 @@ class _Line extends StatelessWidget {
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
-              showTitles: true, reservedSize: 42,
+              showTitles: true, reservedSize: 42, interval: axis.interval,
               getTitlesWidget: (v, m) => SideTitleWidget(axisSide: m.axisSide, child: Text(_tick(v), style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant))),
             ),
           ),
@@ -208,6 +213,31 @@ class _Line extends StatelessWidget {
 
 String _tick(double v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(v % 1000 == 0 ? 0 : 1)}k' : qty(v);
 
+/// Pick a clean axis step (1/2/5 × power of 10) for ~4 gridlines, then
+/// round maxY UP to a multiple of it — so every label lands exactly on a
+/// gridline and the top value never overlaps the tick below it.
+({double maxY, double interval}) _niceAxis(List<double> values) {
+  final rawMax = values.isEmpty ? 0.0 : values.reduce((a, b) => a > b ? a : b);
+  if (rawMax <= 0) return (maxY: 4, interval: 1);
+  final target = rawMax * 1.15 / 4; // aim for ~4 intervals incl. headroom
+  double magnitude = 1;
+  while (magnitude * 10 <= target) { magnitude *= 10; }
+  while (magnitude > target && magnitude > 0.001) { magnitude /= 10; }
+  double interval;
+  if (target <= magnitude * 1) {
+    interval = magnitude * 1;
+  } else if (target <= magnitude * 2) {
+    interval = magnitude * 2;
+  } else if (target <= magnitude * 5) {
+    interval = magnitude * 5;
+  } else {
+    interval = magnitude * 10;
+  }
+  if (interval < 1) interval = 1; // counts (CB, trips) are whole numbers
+  final maxY = ((rawMax * 1.15) / interval).ceil() * interval;
+  return (maxY: maxY <= rawMax ? maxY + interval : maxY.toDouble(), interval: interval);
+}
+
 class _Bar extends StatelessWidget {
   final Map<String, dynamic> w;
   const _Bar(this.w);
@@ -215,13 +245,13 @@ class _Bar extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final values = (w['values'] as List).map((e) => (e as num).toDouble()).toList();
-    final maxY = (values.isEmpty ? 0 : values.reduce((a, b) => a > b ? a : b)) * 1.2 + 1;
+    final axis = _niceAxis(values);
     return SizedBox(
       height: 220,
       child: BarChart(BarChartData(
-        maxY: maxY,
+        maxY: axis.maxY,
         gridData: FlGridData(
-          show: true, drawVerticalLine: false,
+          show: true, drawVerticalLine: false, horizontalInterval: axis.interval,
           getDrawingHorizontalLine: (v) => FlLine(color: scheme.outlineVariant.withValues(alpha: 0.5), strokeWidth: 0.7, dashArray: [4, 5]),
         ),
         borderData: FlBorderData(show: false),
@@ -230,7 +260,7 @@ class _Bar extends StatelessWidget {
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
-              showTitles: true, reservedSize: 42,
+              showTitles: true, reservedSize: 42, interval: axis.interval,
               getTitlesWidget: (v, m) => SideTitleWidget(axisSide: m.axisSide, child: Text(_tick(v), style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant))),
             ),
           ),
@@ -303,7 +333,7 @@ class _Pie extends StatelessWidget {
               const SizedBox(width: 8),
               Flexible(child: Text(labels[i], style: TextStyle(fontSize: 12.5, color: scheme.onSurface, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)),
               const SizedBox(width: 10),
-              Text('${qty(values[i])} CB', style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+              Text('${qty(values[i])} ${U.cb}', style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
             ]),
           ),
       ]);

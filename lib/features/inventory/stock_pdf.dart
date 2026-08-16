@@ -4,6 +4,8 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'dart:typed_data';
 
+import '../../core/company.dart';
+
 /// Stock Report PDF — all finished goods (cartons, trays, bottles, weights).
 class StockPdf {
   static pw.Font? _regular;
@@ -35,7 +37,7 @@ class StockPdf {
               style: ts(header ? 8.6 : 9, bold: bold || header, color: color ?? (header ? primary : null))),
         );
 
-    final headers = ['#', 'Product', 'Cartons (CB)', 'Trays', 'Total Bottles', 'Gross kg', 'Min (CB)', 'Status'];
+    final headers = ['#', 'Product', '${U.carton} (${U.cb})', U.tray, 'Total ${U.piece}', 'Gross kg', 'Min (${U.cb})', 'Status'];
     double sumCb = 0, sumTrays = 0, sumBottles = 0, sumGross = 0;
     final rows = <List<Object>>[];
     for (var i = 0; i < items.length; i++) {
@@ -69,15 +71,18 @@ class StockPdf {
 
     final now = DateTime.now();
     final doc = pw.Document();
-    doc.addPage(pw.Page(
+    // MultiPage: table flows across pages when there are many products
+    // (a single Page silently drops overflowing content).
+    doc.addPage(pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.fromLTRB(36, 30, 36, 30),
-      build: (context) => pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.stretch, children: [
+      build: (context) => [
         pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
           pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-            pw.Text('FlavorFlow Foods Pvt. Ltd.', style: ts(15, bold: true)),
+            pw.Text(CompanyProfile.current.name, style: ts(15, bold: true)),
             pw.SizedBox(height: 2),
-            pw.Text('Industrial Area, Jalandhar, Punjab 144004', style: ts(9, color: greyTxt)),
+            if (CompanyProfile.current.address.isNotEmpty) pw.Text(CompanyProfile.current.address, style: ts(9, color: greyTxt)),
+            if (CompanyProfile.current.taxLine.isNotEmpty) pw.Text(CompanyProfile.current.taxLine, style: ts(9, color: greyTxt)),
           ]),
           pw.Spacer(),
           pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
@@ -114,6 +119,7 @@ class StockPdf {
           },
           children: [
             pw.TableRow(
+              repeat: true,
               decoration: const pw.BoxDecoration(color: headerBg),
               children: [for (var i = 0; i < headers.length; i++) cell(headers[i], header: true, right: i >= 2 && i <= 6)],
             ),
@@ -141,9 +147,9 @@ class StockPdf {
           ],
         ),
         pw.SizedBox(height: 12),
-        pw.Text('Generated from live inventory — cartons (CB) and trays tracked separately.',
+        pw.Text('Generated from live inventory — ${U.carton.toLowerCase()} (${U.cb}) and ${U.trayLc} tracked separately.',
             style: ts(8, color: greyTxt)),
-      ]),
+      ],
     ));
     return doc.save();
   }
