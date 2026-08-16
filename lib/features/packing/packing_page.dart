@@ -61,11 +61,22 @@ class _PackingPageState extends State<PackingPage> with SingleTickerProviderStat
   }
 }
 
+/// Raw Material — its own section in the menu. Same stock engine as packing
+/// (receive / consume / recipes) but shows ONLY the "Raw Material" category.
+class RawMaterialPage extends StatelessWidget {
+  const RawMaterialPage({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return const _StockTab(rawOnly: true);
+  }
+}
+
 /* ------------------------------- stock tab ------------------------------- */
 
 class _StockTab extends StatefulWidget {
   final bool lowOnly;
-  const _StockTab({this.lowOnly = false});
+  final bool rawOnly;
+  const _StockTab({this.lowOnly = false, this.rawOnly = false});
   @override
   State<_StockTab> createState() => _StockTabState();
 }
@@ -131,8 +142,14 @@ class _StockTabState extends State<_StockTab> {
       builder: (context, snap) {
         if (snap.hasError) return ErrorState(snap.error!, onRetry: _reload);
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        final all = (snap.data!['materials'] as List).cast<Map<String, dynamic>>();
+        var all = (snap.data!['materials'] as List).cast<Map<String, dynamic>>();
+        // Raw Material lives in its own menu section; the packing screen
+        // hides it, and the raw screen shows ONLY it.
+        all = widget.rawOnly
+            ? all.where((m) => m['category'] == 'Raw Material').toList()
+            : all.where((m) => m['category'] != 'Raw Material').toList();
         final s = (snap.data!['summary'] as Map).cast<String, dynamic>();
+        final lowCount = all.where((m) => (m['low'] as int? ?? 0) == 1).length;
         final categories = <String>{for (final m in all) m['category'] as String};
         final rows = _category.isEmpty ? all : all.where((m) => m['category'] == _category).toList();
         // Pair every "Tray (X)" with its "Tray Cap (X)" right below it —
@@ -154,9 +171,9 @@ class _StockTabState extends State<_StockTab> {
               crossAxisCount: cols, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
               mainAxisSpacing: 12, crossAxisSpacing: 12, childAspectRatio: ratio,
               children: [
-                KpiCard(label: 'Packing Items', value: qtyInt(s['items']), icon: Icons.widgets_rounded, tint: AppColors.blue),
-                KpiCard(label: 'Categories', value: qtyInt(s['categories']), icon: Icons.category_rounded, tint: AppColors.teal),
-                KpiCard(label: 'Running Low', value: qtyInt(s['low_count']), icon: Icons.warning_amber_rounded, tint: AppColors.red),
+                KpiCard(label: widget.rawOnly ? 'Raw Materials' : 'Packing Items', value: qtyInt(all.length), icon: widget.rawOnly ? Icons.science_rounded : Icons.widgets_rounded, tint: AppColors.blue),
+                KpiCard(label: 'Categories', value: qtyInt(categories.length), icon: Icons.category_rounded, tint: AppColors.teal),
+                KpiCard(label: 'Running Low', value: qtyInt(lowCount), icon: Icons.warning_amber_rounded, tint: AppColors.red),
               ],
             );
           }),
@@ -169,8 +186,9 @@ class _StockTabState extends State<_StockTab> {
               avatar: const Icon(Icons.warning_amber_rounded, size: 16),
               onSelected: (_) => setState(() { _lowOnly = true; _category = ''; _future = _load(); }),
             ),
-            for (final cat in categories)
-              ChoiceChip(label: Text(cat), selected: !_lowOnly && _category == cat, onSelected: (_) => setState(() { _category = cat; _lowOnly = false; _future = _load(); })),
+            if (!widget.rawOnly)
+              for (final cat in categories)
+                ChoiceChip(label: Text(cat), selected: !_lowOnly && _category == cat, onSelected: (_) => setState(() { _category = cat; _lowOnly = false; _future = _load(); })),
             if (canManage) ...[
               Padding(
                 padding: const EdgeInsets.only(left: 8),
@@ -191,14 +209,15 @@ class _StockTabState extends State<_StockTab> {
                 icon: const Icon(Icons.north_east_rounded, size: 18),
                 label: const Text('Record Consumption'),
               ),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  final saved = await showDialog<bool>(context: context, builder: (_) => const _RecipeConsumeDialog());
-                  if (saved == true) _reload();
-                },
-                icon: const Icon(Icons.science_rounded, size: 18),
-                label: const Text('Recipe Consumption'),
-              ),
+              if (widget.rawOnly)
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final saved = await showDialog<bool>(context: context, builder: (_) => const _RecipeConsumeDialog());
+                    if (saved == true) _reload();
+                  },
+                  icon: const Icon(Icons.science_rounded, size: 18),
+                  label: const Text('Recipe Consumption'),
+                ),
               OutlinedButton.icon(
                 onPressed: () async {
                   final saved = await showDialog<bool>(context: context, builder: (_) => const _MaterialFormDialog());
@@ -211,9 +230,11 @@ class _StockTabState extends State<_StockTab> {
           ]),
           const SizedBox(height: 16),
           SectionCard(
-            title: _lowOnly ? 'Low Stock Packing Material' : 'Packing Material Stock',
+            title: widget.rawOnly
+                ? (_lowOnly ? 'Low Stock Raw Material' : 'Raw Material Stock')
+                : (_lowOnly ? 'Low Stock Packing Material' : 'Packing Material Stock'),
             child: rows.isEmpty
-                ? EmptyState(_lowOnly ? 'Nothing running low 🎉' : 'No packing material yet')
+                ? EmptyState(_lowOnly ? 'Nothing running low 🎉' : (widget.rawOnly ? 'No raw material yet' : 'No packing material yet'))
                 : AppDataTable(
                     columns: const ['Material', 'Category', 'In Stock', 'Unit', 'Min Stock', 'Status', ''],
                     rows: [
@@ -500,7 +521,7 @@ class _MaterialFormDialogState extends State<_MaterialFormDialog> {
 
   bool get editing => widget.material != null;
 
-  static const categories = ['Bottles', 'Jerry Cans', 'Caps', 'Labels', 'Holograms', 'Plugs', 'Sleeves', 'Cartons', 'Trays', 'Tray Caps', 'Other'];
+  static const categories = ['Bottles', 'Jerry Cans', 'Caps', 'Labels', 'Holograms', 'Plugs', 'Sleeves', 'Cartons', 'Trays', 'Tray Caps', 'Raw Material', 'Other'];
 
   Future<void> _save() async {
     setState(() => busy = true);

@@ -72,7 +72,13 @@ class _AppShellState extends State<AppShell> {
     final auth = context.watch<AuthController>();
     final session = auth.session;
     if (session == null) return const Scaffold();
-    final nav = session.nav;
+    final nav = [...session.nav.map((e) => Map<String, dynamic>.from(e as Map))];
+    // Raw Material gets its own menu entry right below Packing Material
+    // (client-side: the server nav doesn't know this module yet).
+    final pi = nav.indexWhere((e) => e['path'] == '/packing');
+    if (pi != -1 && !nav.any((e) => e['path'] == '/raw')) {
+      nav.insert(pi + 1, {'path': '/raw', 'label': 'Raw Material', 'icon': 'science', 'group': nav[pi]['group']});
+    }
     final wide = MediaQuery.of(context).size.width >= 1060;
     final selected = _selectedIndex(context, nav);
     final title = tr(nav[selected]['label'] as String);

@@ -21,6 +21,7 @@ IconData iconFor(String? name) {
     case 'calculate': return Icons.calculate_outlined;
     case 'add_box': return Icons.add_box_outlined;
     case 'widgets': return Icons.widgets_outlined;
+    case 'science': return Icons.science_outlined;
     case 'liquor': return Icons.liquor_outlined;
     case 'dinner_dining': return Icons.dinner_dining_outlined;
     case 'category': return Icons.category_outlined;

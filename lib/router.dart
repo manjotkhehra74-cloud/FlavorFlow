@@ -25,6 +25,7 @@ String? permForPath(String path) {
   if (path.startsWith('/products')) return 'products.view';
   if (path.startsWith('/inventory')) return 'inventory.view';
   if (path.startsWith('/packing')) return 'packing.view';
+  if (path.startsWith('/raw')) return 'packing.view';
   if (path.startsWith('/adjustments')) return 'adjustments.view';
   if (path.startsWith('/approvals')) return 'adjustments.approve';
   if (path.startsWith('/production')) return 'production.view';
@@ -72,6 +73,7 @@ GoRouter buildRouter(AuthController auth) {
             path: '/packing',
             builder: (c, s) => PackingPage(lowOnly: s.uri.queryParameters['filter'] == 'low'),
           ),
+          GoRoute(path: '/raw', builder: (c, s) => const RawMaterialPage()),
           GoRoute(path: '/adjustments', builder: (c, s) => const AdjustmentsPage()),
           GoRoute(
             path: '/approvals',
