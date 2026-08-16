@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../core/app_settings.dart';
 import '../core/biometric.dart';
 import '../core/company.dart';
 import '../core/i18n.dart';
@@ -151,7 +152,7 @@ class _TopBar extends StatelessWidget {
         tooltip: 'Notifications',
         onPressed: () => context.go('/notifications'),
         icon: Badge(
-          isLabelVisible: unread > 0,
+          isLabelVisible: unread > 0 && AppSettings.instance.showNotifBadge,
           label: Text('$unread'),
           child: const Icon(Icons.notifications_outlined),
         ),

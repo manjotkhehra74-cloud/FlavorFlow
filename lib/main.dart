@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'core/app_settings.dart';
 import 'core/company.dart';
 import 'core/i18n.dart';
 import 'core/theme.dart';
@@ -23,11 +24,13 @@ void main() async {
   final auth = AuthController();
   auth.restore();
   L10n.instance.load();
+  AppSettings.instance.load();
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: auth),
         ChangeNotifierProvider.value(value: L10n.instance),
+        ChangeNotifierProvider.value(value: AppSettings.instance),
       ],
       child: const ErpApp(),
     ),
@@ -48,10 +51,15 @@ class _ErpAppState extends State<ErpApp> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthController>();
     context.watch<L10n>(); // rebuild screens when the language changes
+    final settings = context.watch<AppSettings>();
+    Widget scaled(Widget child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(settings.textScale)),
+          child: child,
+        );
     if (!auth.ready) {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
-        theme: buildTheme(),
+        theme: buildTheme(dark: settings.darkMode),
         home: const _Splash(),
       );
     }
@@ -59,8 +67,9 @@ class _ErpAppState extends State<ErpApp> {
     return MaterialApp.router(
       title: 'FlavorFlow ERP',
       debugShowCheckedModeBanner: false,
-      theme: buildTheme(),
+      theme: buildTheme(dark: settings.darkMode),
       routerConfig: _router,
+      builder: (context, child) => scaled(child ?? const SizedBox.shrink()),
     );
   }
 }

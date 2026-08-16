@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../core/app_settings.dart';
 import '../../core/biometric.dart';
 import '../../core/i18n.dart';
 import '../../state/auth.dart';
@@ -91,6 +92,7 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthController>();
+    final settings = context.watch<AppSettings>();
     final session = auth.session;
     final scheme = Theme.of(context).colorScheme;
     return ListView(padding: const EdgeInsets.all(20), children: [
@@ -103,6 +105,40 @@ class _SettingsPageState extends State<SettingsPage> {
           await showDialog(context: context, builder: (_) => const LanguageDialog());
           setState(() {});
         },
+      ),
+      _tile(
+        icon: Icons.dark_mode_outlined,
+        title: 'Dark theme',
+        subtitle: settings.darkMode ? 'ON — easier on the eyes at night' : 'OFF — classic light look',
+        trailing: Switch(value: settings.darkMode, onChanged: (v) => settings.setDarkMode(v)),
+        onTap: () => settings.setDarkMode(!settings.darkMode),
+      ),
+      _tile(
+        icon: Icons.format_size_rounded,
+        title: 'Text size',
+        subtitle: settings.textScale <= 1.0
+            ? 'Normal'
+            : settings.textScale <= 1.15
+                ? 'Large'
+                : 'Extra large (factory floor)',
+        trailing: SegmentedButton<double>(
+          showSelectedIcon: false,
+          style: const ButtonStyle(visualDensity: VisualDensity.compact),
+          segments: const [
+            ButtonSegment(value: 1.0, label: Text('A', style: TextStyle(fontSize: 12))),
+            ButtonSegment(value: 1.15, label: Text('A', style: TextStyle(fontSize: 15))),
+            ButtonSegment(value: 1.3, label: Text('A', style: TextStyle(fontSize: 18))),
+          ],
+          selected: {settings.textScale},
+          onSelectionChanged: (v) => settings.setTextScale(v.first),
+        ),
+      ),
+      _tile(
+        icon: Icons.notifications_active_outlined,
+        title: 'Notification badge',
+        subtitle: settings.showNotifBadge ? 'ON — unread count on the bell icon' : 'OFF — bell stays clean',
+        trailing: Switch(value: settings.showNotifBadge, onChanged: (v) => settings.setShowNotifBadge(v)),
+        onTap: () => settings.setShowNotifBadge(!settings.showNotifBadge),
       ),
 
       _section('SECURITY'),
