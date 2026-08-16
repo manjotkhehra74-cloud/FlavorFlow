@@ -193,6 +193,14 @@ class _StockTabState extends State<_StockTab> {
               ),
               OutlinedButton.icon(
                 onPressed: () async {
+                  final saved = await showDialog<bool>(context: context, builder: (_) => const _RecipeConsumeDialog());
+                  if (saved == true) _reload();
+                },
+                icon: const Icon(Icons.science_rounded, size: 18),
+                label: const Text('Recipe Consumption'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () async {
                   final saved = await showDialog<bool>(context: context, builder: (_) => const _MaterialFormDialog());
                   if (saved == true) _reload();
                 },
@@ -551,4 +559,158 @@ class _MaterialFormDialogState extends State<_MaterialFormDialog> {
       ],
     );
   }
+}
+
+/// Recipe-based raw material consumption: pick a recipe (e.g. "Soya Sauce
+/// 740gm — 300kg batch"), enter the TOTAL production quantity (e.g. 15000 kg);
+/// batches = total ÷ batch size, and every raw material in the recipe is
+/// consumed automatically (qty/batch × batches). Water is not tracked.
+class _RecipeConsumeDialog extends StatefulWidget {
+  const _RecipeConsumeDialog();
+  @override
+  State<_RecipeConsumeDialog> createState() => _RecipeConsumeDialogState();
+}
+
+class _RecipeConsumeDialogState extends State<_RecipeConsumeDialog> {
+  List<Map<String, dynamic>> recipes = [];
+  int? recipeId;
+  final qty = TextEditingController();
+  final remark = TextEditingController();
+  bool busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    context.read<AuthController>().api.get('/packing/recipes').then((json) {
+      if (!mounted) return;
+      setState(() {
+        recipes = ((json as Map)['recipes'] as List).cast<Map<String, dynamic>>();
+        if (recipes.isNotEmpty) recipeId = recipes.first['id'] as int;
+      });
+    }).catchError((e) {
+      if (mounted) showErr(context, e);
+    });
+  }
+
+  @override
+  void dispose() { qty.dispose(); remark.dispose(); super.dispose(); }
+
+  Map<String, dynamic>? get _recipe =>
+      recipes.where((r) => r['id'] == recipeId).cast<Map<String, dynamic>?>().firstOrNull;
+
+  double get _batches {
+    final r = _recipe;
+    final q = double.tryParse(qty.text) ?? 0;
+    if (r == null || q <= 0) return 0;
+    final size = (r['batch_size'] as num).toDouble();
+    return size > 0 ? q / size : 0;
+  }
+
+  Future<void> _submit() async {
+    final q = double.tryParse(qty.text) ?? 0;
+    if (recipeId == null || q <= 0) {
+      showErr(context, 'Enter the total production quantity.');
+      return;
+    }
+    setState(() => busy = true);
+    try {
+      final json = await context.read<AuthController>().api.post('/packing/recipe-consume', {
+        'recipeId': recipeId,
+        'totalQty': q,
+        'remark': remark.text.trim(),
+      });
+      if (!mounted) return;
+      final j = (json as Map).cast<String, dynamic>();
+      final warnings = (j['warnings'] as List?)?.cast<String>() ?? const [];
+      Navigator.pop(context, true);
+      showOk(context, 'Raw material consumed for ${j['batches']} batches.'
+          '${warnings.isEmpty ? '' : '\n⚠ ${warnings.join(' · ')}'}');
+    } catch (e) {
+      if (mounted) showErr(context, e);
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final r = _recipe;
+    final batches = _batches;
+    return AlertDialog(
+      title: const Text('Recipe Consumption (Raw Material)'),
+      content: SizedBox(
+        width: 480,
+        child: recipes.isEmpty
+            ? const SizedBox(height: 90, child: Center(child: CircularProgressIndicator()))
+            : SingleChildScrollView(
+                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  DropdownButtonFormField<int>(
+                    initialValue: recipeId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Recipe *'),
+                    items: [
+                      for (final rec in recipes)
+                        DropdownMenuItem(value: rec['id'] as int, child: Text(rec['name'] as String, overflow: TextOverflow.ellipsis)),
+                    ],
+                    onChanged: (v) => setState(() => recipeId = v),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: qty,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(
+                      labelText: 'Total production (${r?['batch_unit'] ?? 'kg'}) *',
+                      hintText: 'e.g. 15000',
+                      helperText: r == null
+                          ? null
+                          : '1 batch = ${qty2(r['batch_size'])} ${r['batch_unit']}'
+                            '${batches > 0 ? ' → ${qty2(batches)} batches' : ''}',
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(controller: remark, decoration: const InputDecoration(labelText: 'Remark', hintText: 'optional')),
+                  if (r != null && batches > 0) ...[
+                    const SizedBox(height: 14),
+                    Text('WILL CONSUME:', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, letterSpacing: 1.1, color: scheme.onSurfaceVariant)),
+                    const SizedBox(height: 6),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        for (final l in (r['lines'] as List).cast<Map<String, dynamic>>())
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            child: Row(children: [
+                              Expanded(child: Text(l['name'] as String, style: const TextStyle(fontSize: 12))),
+                              Text('${qty2((l['qty_per_batch'] as num) * batches)} ${l['unit']}',
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                            ]),
+                          ),
+                        const SizedBox(height: 4),
+                        Text('Water is not tracked — only listed raw materials are consumed.',
+                            style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant)),
+                      ]),
+                    ),
+                  ],
+                ]),
+              ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(onPressed: busy || batches <= 0 ? null : _submit, child: Text(busy ? 'Consuming…' : 'Consume')),
+      ],
+    );
+  }
+}
+
+String qty2(Object? v) {
+  final n = v is num ? v : num.tryParse('$v') ?? 0;
+  final r = (n * 100).round() / 100;
+  return r == r.roundToDouble() ? '${r.round()}' : '$r';
 }
