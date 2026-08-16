@@ -58,26 +58,20 @@ class BiometricAuth {
     try { return await _storage.read(key: _kEmail); } catch (_) { return null; }
   }
 
-  /// Store credentials as a device passkey. Saving itself REQUIRES the OS
-  /// biometric prompt (fingerprint/face/PIN) — like registering a passkey.
-  /// Returns false if the user cancelled the biometric check.
+  /// Store credentials silently after a successful password login —
+  /// biometric verification happens at LOGIN time (OS prompt), not at save.
   static Future<bool> enable(String email, String password) async {
     try {
-      final ok = await _auth.authenticate(
-        localizedReason: 'Verify to save your passkey on this device',
-        options: const AuthenticationOptions(stickyAuth: true, biometricOnly: false),
-      );
-      if (!ok) return false;
+      await _storage.write(key: _kEnabled, value: '1');
+      await _storage.write(key: _kEmail, value: email);
+      await _storage.write(key: _kPassword, value: password);
+      return true;
     } catch (_) {
       return false;
     }
-    await _storage.write(key: _kEnabled, value: '1');
-    await _storage.write(key: _kEmail, value: email);
-    await _storage.write(key: _kPassword, value: password);
-    return true;
   }
 
-  /// Save a passkey for the CURRENT logged-in session (from the user menu).
+  /// Save biometric login for the CURRENT session (from the user menu).
   static Future<bool> enableFromSession() async {
     if (!hasSession) return false;
     return enable(_sessEmail!, _sessPassword!);
