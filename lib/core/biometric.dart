@@ -58,14 +58,45 @@ class BiometricAuth {
     try { return await _storage.read(key: _kEmail); } catch (_) { return null; }
   }
 
-  /// Store credentials silently after a successful password login —
-  /// biometric verification happens at LOGIN time (OS prompt), not at save.
+  /// Register biometric login: the OS fingerprint/face/PIN prompt MUST be
+  /// passed first — only then are the credentials stored in the encrypted
+  /// keystore. Returns false when the user cancels the verification.
   static Future<bool> enable(String email, String password) async {
+    try {
+      final ok = await _auth.authenticate(
+        localizedReason: 'Verify to register biometric login',
+        options: const AuthenticationOptions(stickyAuth: true, biometricOnly: false),
+      );
+      if (!ok) return false;
+      await _storage.write(key: _kEnabled, value: '1');
+      await _storage.write(key: _kEmail, value: email);
+      await _storage.write(key: _kPassword, value: password);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Store credentials WITHOUT prompting — use only right after the OS
+  /// biometric prompt has already been passed in the same flow.
+  static Future<bool> enableVerified(String email, String password) async {
     try {
       await _storage.write(key: _kEnabled, value: '1');
       await _storage.write(key: _kEmail, value: email);
       await _storage.write(key: _kPassword, value: password);
       return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Just the OS verification prompt (fingerprint/face/PIN) — true if passed.
+  static Future<bool> verifyOnly(String reason) async {
+    try {
+      return await _auth.authenticate(
+        localizedReason: reason,
+        options: const AuthenticationOptions(stickyAuth: true, biometricOnly: false),
+      );
     } catch (_) {
       return false;
     }

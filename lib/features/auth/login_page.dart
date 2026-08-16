@@ -42,22 +42,80 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _submit() async {
-    final auth = context.read<AuthController>();
     final email = _email.text.trim();
     final password = _password.text;
+    if (email.isEmpty || password.isEmpty) {
+      setState(() => _error = 'Enter your email and password.');
+      return;
+    }
+
+    // FIRST-TIME login on a biometric-capable device: offer registration
+    // BEFORE logging in (after login the router navigates away, which used
+    // to kill the popup within a second). "Later" simply skips it.
+    var wantBio = false;
+    if (_bioAvailable && !_bioEnabled) {
+      final choice = await showDialog<bool>(
+            context: context,
+            barrierDismissible: false,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Register biometric login?'),
+              content: const Text(
+                  'Sign in next time with just your fingerprint / face / device PIN — no password typing.\n\nStored only in this phone\'s encrypted keystore.'),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Later')),
+                FilledButton.icon(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  icon: const Icon(Icons.fingerprint_rounded, size: 19),
+                  label: const Text('Register'),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+      if (choice && mounted) {
+        // fingerprint/face verification happens NOW, before login
+        wantBio = await BiometricAuth.verifyOnly('Verify to register biometric login');
+        if (!wantBio && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Verification cancelled — you can register later from below the login form.')));
+        }
+      }
+    }
+    if (!mounted) return;
+
+    final auth = context.read<AuthController>();
     final err = await auth.login(email, password);
     if (!mounted) return;
     if (err != null) {
       setState(() => _error = err);
       return;
     }
-    // Remember this session (memory only) + on a biometric-capable device
-    // silently save the credentials in the encrypted keystore — next time
-    // "Login with biometrics" signs in with just a fingerprint. No popups.
     BiometricAuth.rememberSession(email, password);
-    if (_bioAvailable) {
-      await BiometricAuth.enable(email, password);
+    // Password verified by the server + fingerprint already verified → save.
+    if (wantBio) await BiometricAuth.enableVerified(email, password);
+    if (mounted) context.go('/dashboard');
+  }
+
+  /// Manual registration from below the login form: verify fingerprint,
+  /// then log in with the typed credentials and save them on success.
+  Future<void> _registerBiometrics() async {
+    final email = _email.text.trim();
+    final password = _password.text;
+    if (email.isEmpty || password.isEmpty) {
+      setState(() => _error = 'Type your email and password first, then tap Register biometric login.');
+      return;
     }
+    final ok = await BiometricAuth.verifyOnly('Verify to register biometric login');
+    if (!ok || !mounted) return;
+    final auth = context.read<AuthController>();
+    final err = await auth.login(email, password);
+    if (!mounted) return;
+    if (err != null) {
+      setState(() => _error = err);
+      return;
+    }
+    BiometricAuth.rememberSession(email, password);
+    await BiometricAuth.enableVerified(email, password);
     if (mounted) context.go('/dashboard');
   }
 
@@ -231,6 +289,14 @@ class _LoginPageState extends State<LoginPage> {
                   style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 13)),
                   icon: const Icon(Icons.fingerprint_rounded, size: 22),
                   label: const Text('Login with biometrics'),
+                ),
+              ] else if (_bioAvailable) ...[
+                const SizedBox(height: 12),
+                // Manual registration: type id/password above, then tap here.
+                TextButton.icon(
+                  onPressed: busy ? null : _registerBiometrics,
+                  icon: const Icon(Icons.fingerprint_rounded, size: 20),
+                  label: const Text('Register biometric login'),
                 ),
               ],
               const SizedBox(height: 26),
