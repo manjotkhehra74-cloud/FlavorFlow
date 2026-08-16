@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../core/biometric.dart';
 import '../core/company.dart';
 import '../core/i18n.dart';
 import '../core/theme.dart';
@@ -164,6 +165,38 @@ class _TopBar extends StatelessWidget {
             if (v == 'refresh') await context.read<AuthController>().refreshSession();
             if (v == 'company') await showDialog(context: context, builder: (_) => const CompanyProfileDialog());
             if (v == 'language') await showDialog(context: context, builder: (_) => const LanguageDialog());
+            if (v == 'passkey') {
+              final enabled = await BiometricAuth.enabled();
+              if (!context.mounted) return;
+              if (enabled) {
+                final remove = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Passkey'),
+                        content: const Text('A passkey is saved on this device — the login screen shows "Login with passkey".\n\nRemove it from this device?'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep')),
+                          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Remove passkey')),
+                        ],
+                      ),
+                    ) ??
+                    false;
+                if (remove) {
+                  await BiometricAuth.disable();
+                  if (context.mounted) showOk(context, 'Passkey removed from this device.');
+                }
+              } else if (BiometricAuth.hasSession) {
+                // Saving asks for fingerprint/face/PIN — like a real passkey.
+                final saved = await BiometricAuth.enableFromSession();
+                if (context.mounted) {
+                  saved
+                      ? showOk(context, 'Passkey saved — next login just needs your fingerprint.')
+                      : showErr(context, 'Passkey not saved (verification cancelled).');
+                }
+              } else {
+                showErr(context, 'Sign in with your password once, then save the passkey.');
+              }
+            }
           },
           itemBuilder: (c) => [
             PopupMenuItem(enabled: false, child: _UserHeader(session: session)),
@@ -171,6 +204,7 @@ class _TopBar extends StatelessWidget {
             if (session.role == 'super_admin')
               PopupMenuItem(value: 'company', child: ListTile(leading: const Icon(Icons.business_rounded, size: 20), title: Text(tr('Company details (PDF header)')), dense: true, contentPadding: EdgeInsets.zero)),
             PopupMenuItem(value: 'language', child: ListTile(leading: const Icon(Icons.translate_rounded, size: 20), title: Text('${tr('Language')} · ਭਾਸ਼ਾ · भाषा'), dense: true, contentPadding: EdgeInsets.zero)),
+            const PopupMenuItem(value: 'passkey', child: ListTile(leading: Icon(Icons.fingerprint_rounded, size: 20), title: Text('Passkey / biometric login'), dense: true, contentPadding: EdgeInsets.zero)),
             PopupMenuItem(value: 'refresh', child: ListTile(leading: const Icon(Icons.sync_rounded, size: 20), title: Text(tr('Refresh permissions')), dense: true, contentPadding: EdgeInsets.zero)),
             PopupMenuItem(value: 'logout', child: ListTile(leading: const Icon(Icons.logout_rounded, size: 20), title: Text(tr('Sign out')), dense: true, contentPadding: EdgeInsets.zero)),
           ],

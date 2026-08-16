@@ -51,27 +51,40 @@ class _LoginPageState extends State<LoginPage> {
       setState(() => _error = err);
       return;
     }
+    // Remember this session's credentials (memory only) so a passkey can
+    // also be saved later from the user menu.
+    BiometricAuth.rememberSession(email, password);
     // First successful password login on a biometric-capable device:
-    // offer one-time setup of fingerprint/passkey quick login.
+    // offer to save a passkey. Saving itself asks for fingerprint/face/PIN —
+    // exactly like registering a real passkey.
     if (_bioAvailable && !_bioEnabled) {
       final yes = await showDialog<bool>(
             context: context,
             builder: (ctx) => AlertDialog(
-              title: const Text('Enable quick login?'),
+              title: const Text('Save a passkey?'),
               content: const Text(
-                  'Next time, sign in with your fingerprint / face / device PIN — no password typing.\n\nYour credentials are stored in the phone\'s encrypted keystore, only on this device.'),
+                  'Sign in next time with just your fingerprint / face / device PIN — no password typing.\n\nSaving will ask for your fingerprint to confirm. The passkey is stored in this phone\'s encrypted keystore only.'),
               actions: [
                 TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Not now')),
                 FilledButton.icon(
                   onPressed: () => Navigator.pop(ctx, true),
-                  icon: const Icon(Icons.fingerprint_rounded, size: 19),
-                  label: const Text('Enable'),
+                  icon: const Icon(Icons.key_rounded, size: 19),
+                  label: const Text('Save passkey'),
                 ),
               ],
             ),
           ) ??
           false;
-      if (yes) await BiometricAuth.enable(email, password);
+      if (yes) {
+        final saved = await BiometricAuth.enable(email, password);
+        if (mounted) {
+          if (saved) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Passkey saved — next time login with your fingerprint.')));
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Passkey not saved (verification cancelled). You can save it later from the user menu.')));
+          }
+        }
+      }
     }
     if (mounted) context.go('/dashboard');
   }
@@ -88,7 +101,7 @@ class _LoginPageState extends State<LoginPage> {
       await BiometricAuth.disable();
       setState(() {
         _bioEnabled = false;
-        _error = '$err\nQuick login was reset — sign in with your password once to re-enable it.';
+        _error = '$err\nPasskey was reset — sign in with your password once to save it again.';
       });
     } else {
       context.go('/dashboard');
@@ -245,7 +258,7 @@ class _LoginPageState extends State<LoginPage> {
                   onPressed: busy ? null : _bioLogin,
                   style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 13)),
                   icon: const Icon(Icons.fingerprint_rounded, size: 22),
-                  label: const Text('Login with fingerprint / passkey'),
+                  label: const Text('Login with passkey'),
                 ),
               ],
               const SizedBox(height: 26),

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/api.dart';
+import '../core/biometric.dart';
 
 class UserSession {
   final int id;
@@ -99,6 +100,9 @@ class AuthController extends ChangeNotifier {
     } catch (_) {/* ignore */}
     api.token = null;
     session = null;
+    // In-memory credentials are dropped; the saved passkey (secure storage)
+    // stays so "Login with passkey" keeps working on the login screen.
+    BiometricAuth.forgetSession();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('token');
     notifyListeners();
