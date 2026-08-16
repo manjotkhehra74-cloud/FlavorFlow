@@ -188,9 +188,9 @@ class KpiCard extends StatelessWidget {
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
             child: Text(value,
-                style: const TextStyle(
+                style: TextStyle(
                     fontSize: 23, fontWeight: FontWeight.w700, letterSpacing: -0.5, color: Theme.of(context).colorScheme.onSurface,
-                    fontFeatures: [FontFeature.tabularFigures()])),
+                    fontFeatures: const [FontFeature.tabularFigures()])),
           ),
         ]),
       ),
