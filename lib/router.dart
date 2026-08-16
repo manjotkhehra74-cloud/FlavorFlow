@@ -16,6 +16,7 @@ import 'features/production/production_detail_page.dart';
 import 'features/production/production_page.dart';
 import 'features/products/products_page.dart';
 import 'features/reports/reports_page.dart';
+import 'features/settings/settings_page.dart';
 import 'features/users/users_page.dart';
 import 'state/auth.dart';
 import 'ui/app_shell.dart';
@@ -103,6 +104,7 @@ GoRouter buildRouter(AuthController auth) {
           GoRoute(path: '/users', builder: (c, s) => const UsersPage()),
           GoRoute(path: '/audit', builder: (c, s) => const AuditPage()),
           GoRoute(path: '/notifications', builder: (c, s) => const NotificationsPage()),
+          GoRoute(path: '/settings', builder: (c, s) => const SettingsPage()),
         ],
       ),
     ],

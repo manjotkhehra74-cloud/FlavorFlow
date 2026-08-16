@@ -80,6 +80,10 @@ class _AppShellState extends State<AppShell> {
     if (pi != -1 && !nav.any((e) => e['path'] == '/raw')) {
       nav.insert(pi + 1, {'path': '/raw', 'label': 'Raw Material', 'icon': 'science', 'group': nav[pi]['group']});
     }
+    // Settings entry at the end of the menu for every user.
+    if (!nav.any((e) => e['path'] == '/settings')) {
+      nav.add({'path': '/settings', 'label': 'Settings', 'icon': 'settings', 'group': nav.isNotEmpty ? (nav.last['group'] ?? 'System') : 'System'});
+    }
     final wide = MediaQuery.of(context).size.width >= 1060;
     final selected = _selectedIndex(context, nav);
     final title = tr(nav[selected]['label'] as String);

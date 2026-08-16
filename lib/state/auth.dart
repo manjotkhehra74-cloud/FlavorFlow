@@ -75,11 +75,17 @@ class AuthController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<String?> login(String email, String password) async {
+  /// Returns null on success, 'TOTP_REQUIRED' when the account has 2FA on
+  /// and no/wrong code was given, or a user-facing error message.
+  Future<String?> login(String email, String password, {String? totpCode}) async {
     busy = true;
     notifyListeners();
     try {
-      final json = await api.post('/auth/login', {'email': email, 'password': password});
+      final json = await api.post('/auth/login', {
+        'email': email,
+        'password': password,
+        if (totpCode != null) 'totpCode': totpCode,
+      });
       final map = (json as Map).cast<String, dynamic>();
       api.token = map['token'] as String;
       session = UserSession.fromJson(map);

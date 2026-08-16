@@ -83,8 +83,7 @@ class _LoginPageState extends State<LoginPage> {
     }
     if (!mounted) return;
 
-    final auth = context.read<AuthController>();
-    final err = await auth.login(email, password);
+    final err = await _loginWith2fa(email, password);
     if (!mounted) return;
     if (err != null) {
       setState(() => _error = err);
@@ -94,6 +93,51 @@ class _LoginPageState extends State<LoginPage> {
     // Password verified by the server + fingerprint already verified → save.
     if (wantBio) await BiometricAuth.enableVerified(email, password);
     if (mounted) context.go('/dashboard');
+  }
+
+  /// Login that handles the 2FA step: when the server replies TOTP_REQUIRED
+  /// an authenticator-code dialog opens and the login is retried with it.
+  Future<String?> _loginWith2fa(String email, String password) async {
+    final auth = context.read<AuthController>();
+    var err = await auth.login(email, password);
+    while (err != null && err.contains('TOTP_REQUIRED')) {
+      if (!mounted) return err;
+      final code = await _ask2faCode();
+      if (code == null) return 'Login cancelled — authenticator code is required.';
+      err = await auth.login(email, password, totpCode: code);
+      if (err != null && !err.contains('TOTP_REQUIRED')) return err;
+    }
+    return err;
+  }
+
+  Future<String?> _ask2faCode() async {
+    final ctl = TextEditingController();
+    final v = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Two-factor code'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Text('Enter the 6-digit code from your authenticator app (Google/Microsoft Authenticator).', style: TextStyle(fontSize: 13)),
+          const SizedBox(height: 12),
+          TextField(
+            controller: ctl,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            maxLength: 6,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 22, letterSpacing: 8, fontWeight: FontWeight.w700),
+            decoration: const InputDecoration(counterText: '', hintText: '000000'),
+            onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, ctl.text.trim()), child: const Text('Verify')),
+        ],
+      ),
+    );
+    return (v == null || v.length != 6) ? null : v;
   }
 
   /// Manual registration from below the login form: verify fingerprint,
@@ -107,8 +151,7 @@ class _LoginPageState extends State<LoginPage> {
     }
     final ok = await BiometricAuth.verifyOnly('Verify to register biometric login');
     if (!ok || !mounted) return;
-    final auth = context.read<AuthController>();
-    final err = await auth.login(email, password);
+    final err = await _loginWith2fa(email, password);
     if (!mounted) return;
     if (err != null) {
       setState(() => _error = err);
@@ -123,8 +166,7 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _bioLogin() async {
     final creds = await BiometricAuth.authenticate();
     if (creds == null || !mounted) return;
-    final auth = context.read<AuthController>();
-    final err = await auth.login(creds.email, creds.password);
+    final err = await _loginWith2fa(creds.email, creds.password);
     if (!mounted) return;
     if (err != null) {
       // Password likely changed on the server — drop the stale credentials.
