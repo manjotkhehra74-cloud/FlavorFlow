@@ -50,12 +50,22 @@ class AuthController extends ChangeNotifier {
   Future<void> restore() async {
     try {
       await api.loadSavedBase();
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token');
-      if (token != null) {
-        api.token = token;
-        final json = await api.get('/auth/me');
-        session = UserSession.fromJson((json as Map).cast<String, dynamic>());
+      if (!kIsWeb) {
+        // SECURITY (mobile): the session never survives an app close —
+        // back button, swipe from recents or force-stop all end it. Every
+        // fresh open lands on the login screen (password or biometrics).
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('token');
+        api.token = null;
+        session = null;
+      } else {
+        final prefs = await SharedPreferences.getInstance();
+        final token = prefs.getString('token');
+        if (token != null) {
+          api.token = token;
+          final json = await api.get('/auth/me');
+          session = UserSession.fromJson((json as Map).cast<String, dynamic>());
+        }
       }
     } catch (_) {
       api.token = null;
