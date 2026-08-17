@@ -8,6 +8,7 @@ import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
+import '../reports/report_pdf.dart';
 import 'stock_pdf.dart';
 
 /// Inventory — finished goods stock (cartons + trays) with low-stock highlighting.
@@ -168,7 +169,124 @@ class _InventoryPageState extends State<InventoryPage> {
                     ],
                   ),
           ),
+          const SizedBox(height: 16),
+          // Batch-wise stock (factory register style) below Stock on Hand.
+          const _BatchStockSection(),
         ]);
+      },
+    );
+  }
+}
+
+/// Batch-wise Stock on the Inventory page — same server report the Reports
+/// section uses: product header rows, batches oldest-first, per-product
+/// TOTAL and GRAND TOTAL. Own PDF/Excel export buttons.
+class _BatchStockSection extends StatefulWidget {
+  const _BatchStockSection();
+  @override
+  State<_BatchStockSection> createState() => _BatchStockSectionState();
+}
+
+class _BatchStockSectionState extends State<_BatchStockSection> {
+  late Future<Map<String, dynamic>> _future;
+  bool _exporting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  Future<Map<String, dynamic>> _load() async {
+    final json = await context.read<AuthController>().api.get('/reports/batch-stock');
+    return (json as Map).cast<String, dynamic>();
+  }
+
+  Future<void> _export(Map<String, dynamic> data, {required bool pdf}) async {
+    setState(() => _exporting = true);
+    try {
+      final date = todayYmd();
+      if (pdf) {
+        final bytes = await ReportPdf.build(
+          title: data['title'] as String? ?? 'Batch-wise Stock',
+          desc: data['desc'] as String? ?? '',
+          columns: (data['columns'] as List).cast<String>(),
+          rows: (data['rows'] as List).map((r) => (r as List).cast<dynamic>()).toList(),
+        );
+        await Printing.sharePdf(bytes: bytes, filename: 'flavorflow-batch-stock-$date.pdf');
+      } else {
+        final bytes = await context.read<AuthController>().api.getBytes('/reports/batch-stock.xlsx');
+        downloadBytes('flavorflow-batch-stock-$date.xlsx', bytes,
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        if (mounted) showOk(context, 'Excel file downloaded.');
+      }
+    } catch (e) {
+      if (mounted) showErr(context, e);
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.hasError) {
+          return SectionCard(
+            title: 'Batch-wise Stock',
+            child: ErrorState(snap.error!, onRetry: () => setState(() => _future = _load())),
+          );
+        }
+        if (!snap.hasData) {
+          return const SectionCard(
+            title: 'Batch-wise Stock',
+            child: SizedBox(height: 70, child: Center(child: CircularProgressIndicator())),
+          );
+        }
+        final data = snap.data!;
+        final columns = (data['columns'] as List).cast<String>();
+        final rows = (data['rows'] as List).map((r) => (r as List).cast<dynamic>()).toList();
+        return SectionCard(
+          title: 'Batch-wise Stock',
+          trailing: Wrap(spacing: 8, children: [
+            OutlinedButton.icon(
+              onPressed: _exporting ? null : () => _export(data, pdf: true),
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
+              label: const Text('PDF'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFFB91C1C),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                minimumSize: const Size(0, 32),
+              ),
+            ),
+            OutlinedButton.icon(
+              onPressed: _exporting ? null : () => _export(data, pdf: false),
+              icon: const Icon(Icons.table_view_outlined, size: 16),
+              label: const Text('Excel'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF047857),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                minimumSize: const Size(0, 32),
+              ),
+            ),
+          ]),
+          child: rows.isEmpty
+              ? const EmptyState('No completed batches with remaining stock')
+              : AppDataTable(
+                  columns: columns,
+                  rows: [
+                    for (final r in rows)
+                      [
+                        // product headers / totals bold, batch rows normal
+                        r[0].toString().startsWith('▶') || r[0] == 'TOTAL' || r[0] == 'GRAND TOTAL'
+                            ? Text('${r[0]}', style: const TextStyle(fontWeight: FontWeight.w800))
+                            : '${r[0]}',
+                        for (var c = 1; c < r.length; c++) r[c],
+                      ],
+                  ],
+                ),
+        );
       },
     );
   }
