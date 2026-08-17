@@ -99,6 +99,7 @@ class Reminders {
               importance: Importance.high, priority: Priority.high),
         ),
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
         matchDateTimeComponents: DateTimeComponents.time, // repeat daily
       );
     } catch (_) {}
@@ -128,6 +129,7 @@ class Reminders {
               importance: Importance.high, priority: Priority.high),
         ),
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
       );
     } catch (_) {}
   }
