@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/format.dart';
+import '../../core/i18n.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 
@@ -81,7 +82,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                   style: TextStyle(color: scheme.onSurfaceVariant)),
             ),
             if (unread > 0)
-              TextButton.icon(onPressed: _readAll, icon: const Icon(Icons.done_all_rounded, size: 18), label: const Text('Mark all read')),
+              TextButton.icon(onPressed: _readAll, icon: const Icon(Icons.done_all_rounded, size: 18), label: Text(tr('Mark all read'))),
           ]),
           const SizedBox(height: 12),
           if (items.isEmpty)

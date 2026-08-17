@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/format.dart';
 import '../../core/theme.dart';
+import '../../core/i18n.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 
@@ -134,7 +135,7 @@ class _UsersPageState extends State<UsersPage> {
                   if (saved == true) _reload();
                 },
                 icon: const Icon(Icons.person_add_alt_rounded, size: 19),
-                label: const Text('Add User'),
+                label: Text(tr('Add User')),
               ),
           ]),
           const SizedBox(height: 16),

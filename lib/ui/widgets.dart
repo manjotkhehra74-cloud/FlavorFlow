@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../core/i18n.dart';
+
 import '../core/format.dart';
 import '../core/theme.dart';
 
@@ -149,7 +151,7 @@ class SectionCard extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 12, 11),
             child: Row(children: [
-              Expanded(child: Text(title!, style: const TextStyle(fontSize: 13.6, fontWeight: FontWeight.w700, letterSpacing: -0.1))),
+              Expanded(child: Text(tr(title!), style: const TextStyle(fontSize: 13.6, fontWeight: FontWeight.w700, letterSpacing: -0.1))),
               if (trailing != null) trailing!,
             ]),
           ),
@@ -178,7 +180,7 @@ class KpiCard extends StatelessWidget {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
           Row(children: [
             Expanded(
-              child: Text(label.toUpperCase(),
+              child: Text(tr(label).toUpperCase(),
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.9, color: Theme.of(context).colorScheme.onSurfaceVariant)),
             ),
@@ -215,7 +217,7 @@ class AppDataTable extends StatelessWidget {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: DataTable(
-        columns: [for (final c in columns) DataColumn(label: Text(c.toUpperCase()))],
+        columns: [for (final c in columns) DataColumn(label: Text(tr(c).toUpperCase()))],
         rows: [
           for (var i = 0; i < rows.length; i++)
             DataRow(
@@ -262,7 +264,7 @@ class EmptyState extends StatelessWidget {
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Icon(icon, size: 38, color: scheme.outline),
           const SizedBox(height: 10),
-          Text(message, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
+          Text(tr(message), style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
         ]),
       ),
     );

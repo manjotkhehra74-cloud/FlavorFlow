@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/download.dart';
 import '../../core/theme.dart';
+import '../../core/i18n.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 import 'report_pdf.dart';
@@ -177,7 +178,7 @@ class _ReportsPageState extends State<ReportsPage> {
         OutlinedButton.icon(
           onPressed: (_data == null || _exporting) ? null : _exportPdf,
           icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
-          label: const Text('Export PDF'),
+          label: Text(tr('Export PDF')),
           style: OutlinedButton.styleFrom(
             foregroundColor: const Color(0xFFB91C1C),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -187,7 +188,7 @@ class _ReportsPageState extends State<ReportsPage> {
         OutlinedButton.icon(
           onPressed: _exporting ? null : _exportExcel,
           icon: const Icon(Icons.table_view_outlined, size: 16),
-          label: const Text('Export Excel'),
+          label: Text(tr('Export Excel')),
           style: OutlinedButton.styleFrom(
             foregroundColor: const Color(0xFF047857),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

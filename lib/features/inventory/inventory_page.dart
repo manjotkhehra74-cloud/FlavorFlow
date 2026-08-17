@@ -6,6 +6,7 @@ import '../../core/download.dart';
 import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
+import '../../core/i18n.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 import '../reports/report_pdf.dart';
@@ -107,7 +108,7 @@ class _InventoryPageState extends State<InventoryPage> {
               onSelected: (_) => setState(() { _lowOnly = false; _future = _load(); }),
             ),
             ChoiceChip(
-              label: const Text('Low stock only'),
+              label: Text(tr('Low stock only')),
               selected: _lowOnly,
               avatar: const Icon(Icons.warning_amber_rounded, size: 16),
               onSelected: (_) => setState(() { _lowOnly = true; _future = _load(); }),
@@ -121,18 +122,18 @@ class _InventoryPageState extends State<InventoryPage> {
                     if (saved == true) _reload();
                   },
                   icon: const Icon(Icons.add_box_outlined, size: 19),
-                  label: const Text('Receive Stock'),
+                  label: Text(tr('Receive Stock')),
                 ),
               ),
             OutlinedButton.icon(
               onPressed: _exporting ? null : _exportPdf,
               icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
-              label: const Text('Stock PDF'),
+              label: Text(tr('Stock PDF')),
             ),
             OutlinedButton.icon(
               onPressed: _exporting ? null : _exportExcel,
               icon: const Icon(Icons.table_view_outlined, size: 18),
-              label: const Text('Stock Excel'),
+              label: Text(tr('Stock Excel')),
             ),
           ]),
           const SizedBox(height: 16),

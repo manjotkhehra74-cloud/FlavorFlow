@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/company.dart';
 import '../../core/format.dart';
+import '../../core/i18n.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 
@@ -81,7 +82,7 @@ class _ProductsPageState extends State<ProductsPage> {
                   if (saved == true) _reload();
                 },
                 icon: const Icon(Icons.add_rounded),
-                label: const Text('Add Product'),
+                label: Text(tr('Add Product')),
               ),
           ]),
           const SizedBox(height: 16),

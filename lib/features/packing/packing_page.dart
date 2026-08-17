@@ -6,6 +6,7 @@ import '../../core/company.dart';
 import '../../core/download.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
+import '../../core/i18n.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 import '../reports/report_pdf.dart';
@@ -45,10 +46,10 @@ class _PackingPageState extends State<PackingPage> with SingleTickerProviderStat
             controller: _tab,
             isScrollable: true,
             tabAlignment: TabAlignment.start,
-            tabs: const [
-              Tab(text: 'Packing Stock'),
-              Tab(text: 'Packing per Product (BOM)'),
-              Tab(text: 'Ledger'),
+            tabs: [
+              Tab(text: tr('Packing Stock')),
+              Tab(text: tr('Packing per Product (BOM)')),
+              Tab(text: tr('Ledger')),
             ],
           ),
         ),
@@ -213,9 +214,9 @@ class _StockTabState extends State<_StockTab> {
           }),
           const SizedBox(height: 16),
           Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-            ChoiceChip(label: const Text('All'), selected: _category.isEmpty && !_lowOnly, onSelected: (_) => setState(() { _category = ''; _lowOnly = false; _future = _load(); })),
+            ChoiceChip(label: Text(tr('All')), selected: _category.isEmpty && !_lowOnly, onSelected: (_) => setState(() { _category = ''; _lowOnly = false; _future = _load(); })),
             ChoiceChip(
-              label: const Text('Low stock'),
+              label: Text(tr('Low stock')),
               selected: _lowOnly,
               avatar: const Icon(Icons.warning_amber_rounded, size: 16),
               onSelected: (_) => setState(() { _lowOnly = true; _category = ''; _future = _load(); }),
@@ -232,7 +233,7 @@ class _StockTabState extends State<_StockTab> {
                     if (saved == true) _reload();
                   },
                   icon: const Icon(Icons.south_west_rounded, size: 18),
-                  label: const Text('Receive Stock'),
+                  label: Text(tr('Receive Stock')),
                 ),
               ),
               OutlinedButton.icon(
@@ -241,7 +242,7 @@ class _StockTabState extends State<_StockTab> {
                   if (saved == true) _reload();
                 },
                 icon: const Icon(Icons.north_east_rounded, size: 18),
-                label: const Text('Record Consumption'),
+                label: Text(tr('Record Consumption')),
               ),
               if (widget.rawOnly) ...[
                 OutlinedButton.icon(
@@ -250,7 +251,7 @@ class _StockTabState extends State<_StockTab> {
                     if (saved == true) _reload();
                   },
                   icon: const Icon(Icons.science_rounded, size: 18),
-                  label: const Text('Recipe Consumption'),
+                  label: Text(tr('Recipe Consumption')),
                 ),
                 OutlinedButton.icon(
                   onPressed: () async {
@@ -258,7 +259,7 @@ class _StockTabState extends State<_StockTab> {
                     if (saved == true) _reload();
                   },
                   icon: const Icon(Icons.edit_note_rounded, size: 18),
-                  label: const Text('Edit Recipes'),
+                  label: Text(tr('Edit Recipes')),
                 ),
                 OutlinedButton.icon(
                   onPressed: _exporting ? null : () => _exportRaw(all, pdf: true),
@@ -277,7 +278,7 @@ class _StockTabState extends State<_StockTab> {
                   if (saved == true) _reload();
                 },
                 icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('New Material'),
+                label: Text(tr('New Material')),
               ),
             ],
           ]),

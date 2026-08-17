@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
+import '../../core/i18n.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 import 'dispatch_pdf.dart';
@@ -54,10 +55,10 @@ class _DispatchPageState extends State<DispatchPage> with SingleTickerProviderSt
             isScrollable: true,
             tabAlignment: TabAlignment.start,
             tabs: [
-              Tab(text: canManage ? 'Dispatch Entry' : 'Dispatch Entry (view only)'),
-              const Tab(text: 'Truck Loading Calculator'),
-              const Tab(text: 'Dispatch History'),
-              const Tab(text: 'Reports'),
+              Tab(text: canManage ? tr('Dispatch Entry') : 'Dispatch Entry (view only)'),
+              Tab(text: tr('Truck Loading Calculator')),
+              Tab(text: tr('Dispatch History')),
+              Tab(text: tr('Reports')),
             ],
           ),
         ),
@@ -468,7 +469,7 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
             child: FilledButton.icon(
               onPressed: saving || calc == null ? null : _submit,
               icon: const Icon(Icons.local_shipping_rounded, size: 19),
-              label: Text(saving ? 'Dispatching…' : 'Confirm & Dispatch'),
+              label: Text(saving ? 'Dispatching…' : tr('Confirm & Dispatch')),
             ),
           ),
           const SizedBox(height: 8),
