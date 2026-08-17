@@ -76,13 +76,13 @@ class _LossPageState extends State<LossPage> {
       final columns = ['Product / Material', 'Projection·CB', 'Opening·Extra', 'Actual·Total', 'Op+Act·Loss%', '%Adh', 'Closing'];
       final rows = <List<dynamic>>[];
       for (final t in (data['top'] as List).cast<Map<String, dynamic>>()) {
-        rows.add([t['name'], t['projection'], t['opening'], t['actual'], t['openingActual'], t['adherence'], t['closing']]);
+        rows.add([t['name'], t['projection'], t['opening'], t['actual'], t['openingActual'], ((t['adherence'] as num?) ?? 0).toStringAsFixed(1), t['closing']]);
       }
       rows.add(['', '', '', '', '', '', '']);
       for (final s in (data['sections'] as List).cast<Map<String, dynamic>>()) {
         rows.add(['▶ ${s['name']}', 'CB', 'Extra', 'Total used', 'Loss%', '', '']);
         for (final r in (s['rows'] as List).cast<Map<String, dynamic>>()) {
-          rows.add([r['name'], r['cb'], r['extra'], r['total'], r['lossPct'], '', '']);
+          rows.add([r['name'], r['cb'], r['extra'], r['total'], '${((r['lossPct'] as num?) ?? 0).toStringAsFixed(2)}%', '', '']);
         }
         rows.add(['', '', '', '', '', '', '']);
       }
@@ -196,7 +196,7 @@ class _LossPageState extends State<LossPage> {
                     t['name'] == 'Total' ? qtyInt(t['opening']) : edit('open:${t['productId']}', (t['opening'] as num?) ?? 0, '${t['name']} — Opening (last month closing + Neemrana/Matiala stock)'),
                     t['name'] == 'Total' ? qtyInt(t['actual']) : edit('act:${t['productId']}', (t['actual'] as num?) ?? 0, '${t['name']} — Actual production (month total)'),
                     qtyInt(t['openingActual']),
-                    '${t['adherence']}',
+                    ((t['adherence'] as num?) ?? 0).toStringAsFixed(1),
                     t['name'] == 'Total' ? '' : edit('close:${t['productId']}', num.tryParse('${t['closing']}') ?? 0, '${t['name']} — Closing'),
                   ],
               ],
@@ -215,7 +215,7 @@ class _LossPageState extends State<LossPage> {
                       edit('cb:${s['productId']}:${r['materialId']}', (r['cb'] as num?) ?? 0, '${r['name']} — CB (as per BOM × production)'),
                       edit('extra:${s['productId']}:${r['materialId']}', (r['extra'] as num?) ?? 0, '${r['name']} — Extra (manual consumption)'),
                       qty(r['total']),
-                      Text('${r['lossPct']}%',
+                      Text('${((r['lossPct'] as num?) ?? 0).toStringAsFixed(2)}%',
                           style: TextStyle(
                             fontWeight: FontWeight.w700,
                             color: ((r['lossPct'] as num?) ?? 0) > 2 ? AppColors.red : AppColors.green,
