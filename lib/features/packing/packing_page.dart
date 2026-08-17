@@ -478,6 +478,8 @@ class _TxnDialog extends StatefulWidget {
 class _TxnDialogState extends State<_TxnDialog> {
   List<Map<String, dynamic>> materials = [];
   int? materialId;
+  List<Map<String, dynamic>> products = [];
+  int? productId; // consumption is tagged to ONE product (no sharing in Loss%)
   final qty = TextEditingController();
   final reference = TextEditingController();
   final remark = TextEditingController();
@@ -500,16 +502,27 @@ class _TxnDialogState extends State<_TxnDialog> {
         materialId = materials.isNotEmpty ? materials.first['id'] as int : null;
       });
     }).catchError((e) { setState(() => loadError = '$e'); });
+    if (widget.kind == 'consume' && !widget.rawOnly) {
+      context.read<AuthController>().api.get('/products').then((json) {
+        if (!mounted) return;
+        setState(() => products = ((json as Map)['products'] as List).cast<Map<String, dynamic>>());
+      }).catchError((_) {});
+    }
   }
 
   Map<String, dynamic>? get _material =>
       materialId == null ? null : materials.firstWhere((m) => m['id'] == materialId, orElse: () => materials.first);
 
   Future<void> _save() async {
+    if (!isReceive && !widget.rawOnly && productId == null) {
+      showErr(context, 'Choose which product this consumption is for (Loss% sheet).');
+      return;
+    }
     setState(() => busy = true);
     try {
       await context.read<AuthController>().api.post('/packing/${isReceive ? 'receive' : 'consume'}', {
         'materialId': materialId,
+        if (!isReceive && productId != null) 'productId': productId,
         'qty': num.tryParse(qty.text) ?? 0,
         'reference': reference.text.trim(),
         'remark': remark.text.trim(),
@@ -543,6 +556,16 @@ class _TxnDialogState extends State<_TxnDialog> {
                       items: [for (final m in materials) DropdownMenuItem(value: m['id'] as int, child: Text(widget.rawOnly ? '${m['name']}' : '${m['name']} (${m['category']})', overflow: TextOverflow.ellipsis))],
                       onChanged: (v) => setState(() => materialId = v),
                     ),
+                    if (widget.kind == 'consume' && !widget.rawOnly) ...[
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<int>(
+                        initialValue: productId,
+                        isExpanded: true,
+                        decoration: const InputDecoration(labelText: 'For product * (Loss% sheet)'),
+                        items: [for (final p in products) DropdownMenuItem(value: p['id'] as int, child: Text(p['name'] as String, overflow: TextOverflow.ellipsis))],
+                        onChanged: (v) => setState(() => productId = v),
+                      ),
+                    ],
                     if (_material != null)
                       Padding(
                         padding: const EdgeInsets.only(top: 8),
