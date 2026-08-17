@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
@@ -36,7 +37,7 @@ class _DispatchDetailPageState extends State<DispatchDetailPage> {
     setState(() => exporting = true);
     try {
       final bytes = await DispatchPdf.challan(d, items);
-      await Printing.sharePdf(bytes: bytes, filename: '${d['code']}-challan.pdf');
+      await Printing.sharePdf(bytes: bytes, filename: '${d['code']}-packing-slip.pdf');
     } catch (e) {
       if (mounted) showErr(context, e);
     } finally {
@@ -111,11 +112,12 @@ class _DispatchDetailPageState extends State<DispatchDetailPage> {
           SectionCard(
             title: 'Loaded Items',
             child: AppDataTable(
-              columns: const ['Product', 'Cartons', 'Trays', 'Bottles', 'Carton kg', 'Tray kg', 'Gross kg'],
+              columns: ['Product', 'Batch', U.carton, U.tray, U.piece, '${U.cb} kg', '${U.tray} kg', 'Gross kg'],
               rows: [
                 for (final it in items)
                   [
                     Text(it['product_name'] as String, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    (it['batch_code'] ?? '—').toString(),
                     qtyInt(it['cartons']),
                     qtyInt(it['trays'] ?? 0),
                     qtyInt(it['total_bottles']),

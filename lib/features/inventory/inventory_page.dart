@@ -3,6 +3,7 @@ import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/download.dart';
+import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
@@ -90,9 +91,9 @@ class _InventoryPageState extends State<InventoryPage> {
               crossAxisCount: cols, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
               mainAxisSpacing: 12, crossAxisSpacing: 12, childAspectRatio: ratio,
               children: [
-                KpiCard(label: 'Stock on Hand (CB)', value: qtyInt(s['total_cb']), icon: Icons.warehouse_rounded, tint: AppColors.cyan),
-                KpiCard(label: 'Trays on Hand', value: qtyInt(s['total_trays']), icon: Icons.dinner_dining_rounded, tint: AppColors.teal),
-                KpiCard(label: 'Total Bottles', value: qtyInt(s['total_bottles']), icon: Icons.liquor_rounded, tint: AppColors.blue),
+                KpiCard(label: 'Stock on Hand (${U.cb})', value: qtyInt(s['total_cb']), icon: Icons.warehouse_rounded, tint: AppColors.cyan),
+                KpiCard(label: '${U.tray} on Hand', value: qtyInt(s['total_trays']), icon: Icons.dinner_dining_rounded, tint: AppColors.teal),
+                KpiCard(label: 'Total ${U.piece}', value: qtyInt(s['total_bottles']), icon: Icons.liquor_rounded, tint: AppColors.blue),
                 KpiCard(label: 'Low Stock Items', value: qtyInt(s['low_count']), icon: Icons.warning_amber_rounded, tint: AppColors.red),
               ],
             );
@@ -139,7 +140,7 @@ class _InventoryPageState extends State<InventoryPage> {
             child: items.isEmpty
                 ? EmptyState(_lowOnly ? 'No products below minimum stock 🎉' : 'No inventory yet')
                 : AppDataTable(
-                    columns: const ['Product', 'Cartons (CB)', 'Trays', 'Total Bottles', 'Gross kg', 'Min (CB)', 'Status', ''],
+                    columns: ['Product', '${U.carton} (${U.cb})', U.tray, 'Total ${U.piece}', 'Gross kg', 'Min (${U.cb})', 'Status', ''],
                     rows: [
                       for (final it in items)
                         [
@@ -217,10 +218,10 @@ class _SetStockDialogState extends State<SetStockDialog> {
               style: TextStyle(fontSize: 12.5, color: Theme.of(context).colorScheme.onSurfaceVariant)),
           const SizedBox(height: 14),
           Row(children: [
-            Expanded(child: TextField(controller: cb, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Cartons (CB) *'))),
+            Expanded(child: TextField(controller: cb, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${U.carton} (${U.cb}) *'))),
             if (_hasTray) ...[
               const SizedBox(width: 12),
-              Expanded(child: TextField(controller: trays, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Trays'))),
+              Expanded(child: TextField(controller: trays, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: U.tray))),
             ],
           ]),
           const SizedBox(height: 12),
@@ -304,10 +305,10 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                     ),
                     const SizedBox(height: 12),
                     Row(children: [
-                      Expanded(child: TextField(controller: cb, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Cartons (CB)'))),
+                      Expanded(child: TextField(controller: cb, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${U.carton} (${U.cb})'))),
                       if (_hasTray) ...[
                         const SizedBox(width: 12),
-                        Expanded(child: TextField(controller: trays, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Trays'))),
+                        Expanded(child: TextField(controller: trays, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: U.tray))),
                       ],
                     ]),
                     if (_hasTray)

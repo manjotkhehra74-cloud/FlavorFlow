@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
@@ -71,7 +72,7 @@ class _ProductionPageState extends State<ProductionPage> {
             child: rows.isEmpty
                 ? const EmptyState('No batches')
                 : AppDataTable(
-                    columns: const ['Batch', 'Product', 'Planned CB', 'Produced CB', 'Trays', 'Gross kg (planned)', 'Planned Date', 'Status', 'Actions'],
+                    columns: ['Batch', 'Product', 'Planned ${U.cb}', 'Produced ${U.cb}', U.tray, 'Gross kg (planned)', 'Planned Date', 'Status', 'Actions'],
                     rows: [
                       for (final b in rows)
                         [
@@ -147,10 +148,10 @@ class _ProductionPageState extends State<ProductionPage> {
       builder: (dialogCtx) => AlertDialog(
         title: Text('Delete ${b['code']}?'),
         content: Text(done
-            ? '${b['product_name']} · produced ${qtyInt(b['produced_cb'])} CB + ${qtyInt(b['produced_trays'] ?? 0)} trays.\nDeleting removes this produced stock from Inventory and reverses the packing it consumed. If goods are already dispatched, deletion will be refused with an explanation.'
+            ? '${b['product_name']} · produced ${qtyInt(b['produced_cb'])} ${U.cb} + ${qtyInt(b['produced_trays'] ?? 0)} ${U.trayLc}.\nDeleting removes this produced stock from Inventory and reverses the packing it consumed. If goods are already dispatched, deletion will be refused with an explanation.'
             : running
-                ? '${b['product_name']} · ${qtyInt(b['planned_cb'])} CB planned (in progress).\nNo stock has been added yet — deleting is safe and permanent.'
-                : '${b['product_name']} · ${qtyInt(b['planned_cb'])} CB planned.\nThis planned batch will be deleted permanently. This cannot be undone.'),
+                ? '${b['product_name']} · ${qtyInt(b['planned_cb'])} ${U.cb} planned (in progress).\nNo stock has been added yet — deleting is safe and permanent.'
+                : '${b['product_name']} · ${qtyInt(b['planned_cb'])} ${U.cb} planned.\nThis planned batch will be deleted permanently. This cannot be undone.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogCtx, false), child: const Text('Cancel')),
           FilledButton(
@@ -182,10 +183,10 @@ class _ProductionPageState extends State<ProductionPage> {
         builder: (dialogCtx, setLocal) => AlertDialog(
           title: Text('Complete ${b['code']}?'),
           content: SizedBox(width: 400, child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('${b['product_name']} · planned ${qtyInt(b['planned_cb'])} CB'),
+            Text('${b['product_name']} · planned ${qtyInt(b['planned_cb'])} ${U.cb}'),
             const SizedBox(height: 12),
             Row(children: [
-              Expanded(child: TextField(controller: qtyCtl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Produced cartons (CB)'))),
+              Expanded(child: TextField(controller: qtyCtl, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: 'Produced ${U.carton.toLowerCase()} (${U.cb})'))),
               if (hasTray) ...[
                 const SizedBox(width: 12),
                 Expanded(child: TextField(controller: trayCtl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Produced trays'))),
@@ -301,7 +302,7 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
                     labelText: 'Batch code',
                     hintText: autoCode.isEmpty ? 'Leave blank for auto code' : 'Leave blank for auto ($autoCode)',
                     helperText: editing
-                        ? 'Batch code must stay unique'
+                        ? 'Same code is allowed again on a different date'
                         : (autoCode.isEmpty ? 'You may type your own code, e.g. SS-740-A' : 'Auto code would be $autoCode — or type your own, e.g. SS-740-A'),
                   ),
                 ),
@@ -324,7 +325,7 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
                     child: TextField(
                       controller: cb,
                       keyboardType: TextInputType.number,
-                      decoration: InputDecoration(labelText: completed ? 'Produced cartons (CB) *' : 'Planned quantity (CB) *'),
+                      decoration: InputDecoration(labelText: completed ? 'Produced ${U.carton.toLowerCase()} (${U.cb}) *' : 'Planned quantity (${U.cb}) *'),
                     ),
                   ),
                   if (completed && hasTray) ...[
@@ -347,7 +348,7 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
                     child: InkWell(
                       borderRadius: BorderRadius.circular(12),
                       onTap: () async {
-                        final d = await showDatePicker(context: context, initialDate: planned, firstDate: DateTime.now().subtract(const Duration(days: 30)), lastDate: DateTime.now().add(const Duration(days: 365)));
+                        final d = await showDatePicker(context: context, initialDate: planned, firstDate: DateTime(DateTime.now().year, DateTime.now().month - 1, 1), lastDate: DateTime.now().add(const Duration(days: 365)));
                         if (d != null) setState(() => planned = d);
                       },
                       child: InputDecorator(
