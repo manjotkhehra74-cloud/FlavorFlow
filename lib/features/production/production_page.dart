@@ -250,7 +250,7 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
   final code = TextEditingController();
   final remarks = TextEditingController();
   String autoCode = '';
-  DateTime planned = DateTime.now().add(const Duration(days: 1));
+  DateTime planned = DateTime.now(); // default: today (factory logs same-day)
   bool busy = false;
 
   bool get editing => widget.batch != null;
