@@ -3,31 +3,13 @@ import 'package:flutter/material.dart';
 /// FlavorFlow ERP theme — enterprise console look (SAP Business One / Fiori inspired):
 /// flat white surfaces, hairline borders, dense controls, dark navigation shell,
 /// Inter typography with tabular numbers.
-ThemeData buildTheme({bool dark = false}) {
+ThemeData buildTheme() {
   const primary = Color(0xFF0A6ED1); // business blue
-  final ink = dark ? const Color(0xFFE4EAF0) : const Color(0xFF1B2733);
-  final subInk = dark ? const Color(0xFF9AA8B5) : const Color(0xFF5C6B7A);
+  const ink = Color(0xFF1B2733);
+  const subInk = Color(0xFF5C6B7A);
 
-  final base = ColorScheme.fromSeed(seedColor: primary, brightness: dark ? Brightness.dark : Brightness.light);
-  final scheme = dark
-      ? base.copyWith(
-          primary: const Color(0xFF64A8E8),
-          onPrimary: const Color(0xFF0B2A47),
-          primaryContainer: const Color(0xFF15385C),
-          onPrimaryContainer: const Color(0xFFBBD9F5),
-          secondary: const Color(0xFF6FB4E4),
-          surface: const Color(0xFF14191F),
-          onSurface: const Color(0xFFE4EAF0),
-          onSurfaceVariant: const Color(0xFF9AA8B5),
-          surfaceContainerLowest: const Color(0xFF0F1419),
-          surfaceContainerLow: const Color(0xFF181E25),
-          surfaceContainerHigh: const Color(0xFF1F262E),
-          surfaceContainerHighest: const Color(0xFF262E37),
-          outline: const Color(0xFF5B6875),
-          outlineVariant: const Color(0xFF313A44),
-          error: const Color(0xFFFF6B6B),
-        )
-      : base.copyWith(
+  final base = ColorScheme.fromSeed(seedColor: primary, brightness: Brightness.light);
+  final scheme = base.copyWith(
     primary: primary,
     onPrimary: Colors.white,
     primaryContainer: const Color(0xFFE1EEFB),
@@ -61,7 +43,7 @@ ThemeData buildTheme({bool dark = false}) {
     colorScheme: scheme,
     fontFamily: family,
     fontFamilyFallback: const ['Roboto', 'Segoe UI', 'Arial'],
-    scaffoldBackgroundColor: dark ? const Color(0xFF0F1419) : const Color(0xFFF3F5F9),
+    scaffoldBackgroundColor: const Color(0xFFF3F5F9),
     visualDensity: VisualDensity.standard,
     textTheme: TextTheme(
       headlineSmall: txt(20, FontWeight.w700, color: ink, ls: -0.3),
@@ -75,17 +57,17 @@ ThemeData buildTheme({bool dark = false}) {
       labelSmall: txt(11, FontWeight.w600, color: subInk, ls: 0.4),
     ),
     appBarTheme: AppBarTheme(
-      backgroundColor: scheme.surface,
+      backgroundColor: Colors.white,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       scrolledUnderElevation: 0,
       centerTitle: false,
       toolbarHeight: 54,
       titleTextStyle: txt(16.5, FontWeight.w700, color: ink, ls: -0.2),
-      iconTheme: IconThemeData(color: subInk, size: 21),
+      iconTheme: const IconThemeData(color: subInk, size: 21),
     ),
     cardTheme: CardThemeData(
-      color: scheme.surface,
+      color: Colors.white,
       elevation: 0,
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
@@ -96,7 +78,7 @@ ThemeData buildTheme({bool dark = false}) {
     ),
     inputDecorationTheme: InputDecorationThemeData(
       filled: true,
-      fillColor: scheme.surface,
+      fillColor: Colors.white,
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: Color(0xFFC3CEDA))),
       enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: Color(0xFFC3CEDA))),
@@ -105,7 +87,7 @@ ThemeData buildTheme({bool dark = false}) {
       isDense: true,
     ),
     dataTableTheme: DataTableThemeData(
-      headingRowColor: WidgetStatePropertyAll(dark ? const Color(0xFF1F262E) : const Color(0xFFF5F8FB)),
+      headingRowColor: const WidgetStatePropertyAll(Color(0xFFF5F8FB)),
       headingRowHeight: 38,
       dataRowMinHeight: 40,
       dataRowMaxHeight: 46,
@@ -119,7 +101,7 @@ ThemeData buildTheme({bool dark = false}) {
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         backgroundColor: primary,
-        foregroundColor: scheme.onPrimary,
+        foregroundColor: Colors.white,
         disabledBackgroundColor: const Color(0xFFBCD3EA),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
         minimumSize: const Size(0, 36),
@@ -155,7 +137,7 @@ ThemeData buildTheme({bool dark = false}) {
     ),
     dialogTheme: DialogThemeData(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      backgroundColor: scheme.surface,
+      backgroundColor: Colors.white,
       surfaceTintColor: Colors.transparent,
       titleTextStyle: txt(16, FontWeight.w700, color: ink),
     ),
@@ -170,7 +152,7 @@ ThemeData buildTheme({bool dark = false}) {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3)),
     ),
     popupMenuTheme: PopupMenuThemeData(
-      color: scheme.surface,
+      color: Colors.white,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: Color(0xFFE2E8EF))),
       textStyle: txt(13, FontWeight.w500, color: ink),

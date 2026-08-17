@@ -3,11 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/api.dart';
-import '../../core/biometric.dart';
-import '../../core/i18n.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
-import '../../ui/app_shell.dart' show LanguageDialog;
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -20,167 +17,24 @@ class _LoginPageState extends State<LoginPage> {
   final _password = TextEditingController();
   bool _obscure = true;
   String? _error;
-  bool _bioAvailable = false; // device supports fingerprint/face/PIN
-  bool _bioEnabled = false; // quick login already set up on this device
 
-  @override
-  void initState() {
-    super.initState();
-    _checkBio();
-  }
-
-  Future<void> _checkBio() async {
-    final avail = await BiometricAuth.available();
-    final enabled = await BiometricAuth.enabled();
-    if (!mounted) return;
-    setState(() { _bioAvailable = avail; _bioEnabled = enabled; });
-    // Prefill the saved email for convenience.
-    if (enabled && _email.text.isEmpty) {
-      final saved = await BiometricAuth.savedEmail();
-      if (saved != null && mounted) setState(() => _email.text = saved);
-    }
-    // Biometrics registered → the fingerprint prompt pops automatically on
-    // open, so a returning user just touches the sensor and is in.
-    if (enabled && mounted) {
-      await Future.delayed(const Duration(milliseconds: 350)); // let the screen settle
-      if (mounted) _bioLogin();
-    }
-  }
+  static const _demo = [
+    ['Super Admin', 'super.admin@flavorflow.in', 'Super@123', Color(0xFF7C3AED)],
+    ['Admin', 'admin@flavorflow.in', 'Admin@123', Color(0xFF2563EB)],
+    ['Production Manager', 'pm@flavorflow.in', 'Prod@123', Color(0xFF0891B2)],
+    ['Production Supervisor', 'ps@flavorflow.in', 'Super@1234', Color(0xFF0D9488)],
+    ['Store Manager', 'sm@flavorflow.in', 'Store@123', Color(0xFFD97706)],
+    ['Store Keeper', 'sk@flavorflow.in', 'Keeper@123', Color(0xFF65A30D)],
+    ['Dispatch Manager', 'disp@flavorflow.in', 'Dispatch@123', Color(0xFFEA580C)],
+    ['Director (Read Only)', 'director@flavorflow.in', 'Director@123', Color(0xFF475569)],
+  ];
 
   Future<void> _submit() async {
-    final email = _email.text.trim();
-    final password = _password.text;
-    if (email.isEmpty || password.isEmpty) {
-      setState(() => _error = 'Enter your email and password.');
-      return;
-    }
-
-    // FIRST-TIME login on a biometric-capable device: offer registration
-    // BEFORE logging in (after login the router navigates away, which used
-    // to kill the popup within a second). "Later" simply skips it.
-    var wantBio = false;
-    if (_bioAvailable && !_bioEnabled) {
-      final choice = await showDialog<bool>(
-            context: context,
-            barrierDismissible: false,
-            builder: (ctx) => AlertDialog(
-              title: const Text('Register biometric login?'),
-              content: const Text(
-                  'Sign in next time with just your fingerprint / face / device PIN — no password typing.\n\nStored only in this phone\'s encrypted keystore.'),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Later')),
-                FilledButton.icon(
-                  onPressed: () => Navigator.pop(ctx, true),
-                  icon: const Icon(Icons.fingerprint_rounded, size: 19),
-                  label: const Text('Register'),
-                ),
-              ],
-            ),
-          ) ??
-          false;
-      if (choice && mounted) {
-        // fingerprint/face verification happens NOW, before login
-        wantBio = await BiometricAuth.verifyOnly('Verify to register biometric login');
-        if (!wantBio && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Verification cancelled — you can register later from below the login form.')));
-        }
-      }
-    }
-    if (!mounted) return;
-
-    final err = await _loginWith2fa(email, password);
-    if (!mounted) return;
-    if (err != null) {
-      setState(() => _error = err);
-      return;
-    }
-    BiometricAuth.rememberSession(email, password);
-    // Password verified by the server + fingerprint already verified → save.
-    if (wantBio) await BiometricAuth.enableVerified(email, password);
-    if (mounted) context.go('/dashboard');
-  }
-
-  /// Login that handles the 2FA step: when the server replies TOTP_REQUIRED
-  /// an authenticator-code dialog opens and the login is retried with it.
-  Future<String?> _loginWith2fa(String email, String password) async {
     final auth = context.read<AuthController>();
-    var err = await auth.login(email, password);
-    while (err != null && err.contains('TOTP_REQUIRED')) {
-      if (!mounted) return err;
-      final code = await _ask2faCode();
-      if (code == null) return 'Login cancelled — authenticator code is required.';
-      err = await auth.login(email, password, totpCode: code);
-      if (err != null && !err.contains('TOTP_REQUIRED')) return err;
-    }
-    return err;
-  }
-
-  Future<String?> _ask2faCode() async {
-    final ctl = TextEditingController();
-    final v = await showDialog<String>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Two-factor code'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('Enter the 6-digit code from your authenticator app (Google/Microsoft Authenticator).', style: TextStyle(fontSize: 13)),
-          const SizedBox(height: 12),
-          TextField(
-            controller: ctl,
-            autofocus: true,
-            keyboardType: TextInputType.number,
-            maxLength: 6,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 22, letterSpacing: 8, fontWeight: FontWeight.w700),
-            decoration: const InputDecoration(counterText: '', hintText: '000000'),
-            onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
-          ),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, ctl.text.trim()), child: const Text('Verify')),
-        ],
-      ),
-    );
-    return (v == null || v.length != 6) ? null : v;
-  }
-
-  /// Manual registration from below the login form: verify fingerprint,
-  /// then log in with the typed credentials and save them on success.
-  Future<void> _registerBiometrics() async {
-    final email = _email.text.trim();
-    final password = _password.text;
-    if (email.isEmpty || password.isEmpty) {
-      setState(() => _error = 'Type your email and password first, then tap Register biometric login.');
-      return;
-    }
-    final ok = await BiometricAuth.verifyOnly('Verify to register biometric login');
-    if (!ok || !mounted) return;
-    final err = await _loginWith2fa(email, password);
+    final err = await auth.login(_email.text.trim(), _password.text);
     if (!mounted) return;
     if (err != null) {
       setState(() => _error = err);
-      return;
-    }
-    BiometricAuth.rememberSession(email, password);
-    await BiometricAuth.enableVerified(email, password);
-    if (mounted) context.go('/dashboard');
-  }
-
-  /// Fingerprint / passkey button: OS prompt → stored credentials → sign in.
-  Future<void> _bioLogin() async {
-    final creds = await BiometricAuth.authenticate();
-    if (creds == null || !mounted) return;
-    final err = await _loginWith2fa(creds.email, creds.password);
-    if (!mounted) return;
-    if (err != null) {
-      // Password likely changed on the server — drop the stale credentials.
-      await BiometricAuth.disable();
-      setState(() {
-        _bioEnabled = false;
-        _error = '$err\nBiometric login was reset — sign in with your password once to re-enable it.';
-      });
     } else {
       context.go('/dashboard');
     }
@@ -216,7 +70,7 @@ class _LoginPageState extends State<LoginPage> {
                   const SizedBox(width: 12),
                   const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text('FlavorFlow ERP', style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700, letterSpacing: -0.2)),
-                    Text('MANUFACTURING SUITE', style: TextStyle(color: Shell.groupLabel, fontSize: 8.5, fontWeight: FontWeight.w600, letterSpacing: 1.8)),
+                    Text('SAUCES & VINEGAR SUITE', style: TextStyle(color: Shell.groupLabel, fontSize: 8.5, fontWeight: FontWeight.w600, letterSpacing: 1.8)),
                   ]),
                 ]),
                 const SizedBox(height: 40),
@@ -273,16 +127,9 @@ class _LoginPageState extends State<LoginPage> {
                 ]),
                 const SizedBox(height: 26),
               ],
-              Row(children: [
-                Expanded(child: Text(tr('Sign in'), style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: scheme.onSurface, letterSpacing: -0.4))),
-                IconButton(
-                  tooltip: '${tr('Language')} · ਭਾਸ਼ਾ · भाषा',
-                  icon: Icon(Icons.translate_rounded, size: 20, color: scheme.onSurfaceVariant),
-                  onPressed: () => showDialog(context: context, builder: (_) => const LanguageDialog()),
-                ),
-              ]),
+              Text('Sign in', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: scheme.onSurface, letterSpacing: -0.4)),
               const SizedBox(height: 5),
-              Text(tr('Your workspace adapts to your role.'), style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
+              Text('Your workspace adapts to your role.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
               const SizedBox(height: 24),
               if (_error != null) ...[
                 Container(
@@ -304,16 +151,15 @@ class _LoginPageState extends State<LoginPage> {
                 controller: _email,
                 keyboardType: TextInputType.emailAddress,
                 autofillHints: const [AutofillHints.email],
-                decoration: InputDecoration(labelText: tr('Email'), prefixIcon: const Icon(Icons.alternate_email_rounded, size: 19)),
+                decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.alternate_email_rounded, size: 19)),
                 onSubmitted: (_) => _submit(),
               ),
               const SizedBox(height: 13),
               TextField(
                 controller: _password,
                 obscureText: _obscure,
-                autofillHints: const [AutofillHints.password],
                 decoration: InputDecoration(
-                  labelText: tr('Password'),
+                  labelText: 'Password',
                   prefixIcon: const Icon(Icons.lock_outline_rounded, size: 19),
                   suffixIcon: IconButton(
                     icon: Icon(_obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 19),
@@ -328,27 +174,34 @@ class _LoginPageState extends State<LoginPage> {
                 style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
                 child: busy
                     ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white))
-                    : Text(tr('Sign in')),
+                    : const Text('Sign in'),
               ),
-              if (_bioEnabled) ...[
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: busy ? null : _bioLogin,
-                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 13)),
-                  icon: const Icon(Icons.fingerprint_rounded, size: 22),
-                  label: const Text('Login with biometrics'),
-                ),
-              ] else if (_bioAvailable) ...[
-                const SizedBox(height: 12),
-                // Manual registration: type id/password above, then tap here.
-                TextButton.icon(
-                  onPressed: busy ? null : _registerBiometrics,
-                  icon: const Icon(Icons.fingerprint_rounded, size: 20),
-                  label: const Text('Register biometric login'),
-                ),
-              ],
               const SizedBox(height: 26),
               Divider(color: scheme.outlineVariant),
+              const SizedBox(height: 14),
+              Text('DEMO ACCOUNTS — TAP TO FILL',
+                  style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, letterSpacing: 1.2, color: scheme.onSurfaceVariant)),
+              const SizedBox(height: 10),
+              Wrap(spacing: 7, runSpacing: 7, children: [
+                for (final d in _demo)
+                  InkWell(
+                    borderRadius: BorderRadius.circular(5),
+                    onTap: () => setState(() {
+                      _email.text = d[1] as String;
+                      _password.text = d[2] as String;
+                      _error = null;
+                    }),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5.5),
+                      decoration: BoxDecoration(
+                        color: (d[3] as Color).withValues(alpha: 0.07),
+                        borderRadius: BorderRadius.circular(5),
+                        border: Border.all(color: (d[3] as Color).withValues(alpha: 0.30)),
+                      ),
+                      child: Text(d[0] as String, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: d[3] as Color)),
+                    ),
+                  ),
+              ]),
               const SizedBox(height: 16),
               _ServerBar(),
             ]),

@@ -4,8 +4,6 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'dart:typed_data';
 
-import '../../core/company.dart';
-
 /// PDF builder for dispatch challans & truck-loading estimates.
 /// Roboto is embedded so all glyphs render correctly.
 class DispatchPdf {
@@ -21,16 +19,13 @@ class DispatchPdf {
   static String kg(Object? v) => '${_num.format(v is num ? v : num.tryParse('$v') ?? 0)} kg';
 
   /// Confirmed dispatch challan (from dispatch detail API payload).
-  /// Includes the per-line production batch code when recorded.
   static Future<Uint8List> challan(Map<String, dynamic> d, List<Map<String, dynamic>> items) async {
     await _loadFonts();
-    final hasBatch = items.any((it) => (it['batch_code'] ?? '').toString().isNotEmpty);
     final rows = <List<String>>[
       for (var i = 0; i < items.length; i++)
         [
           '${i + 1}',
           '${items[i]['product_name']}',
-          if (hasBatch) '${items[i]['batch_code'] ?? '—'}',
           '${items[i]['cartons']}',
           '${items[i]['trays'] ?? 0}',
           '${items[i]['total_bottles']}',
@@ -41,9 +36,8 @@ class DispatchPdf {
     ];
     final doc = pw.Document();
     doc.addPage(_page(
-      title: 'DISPATCH PACKING SLIP',
-      subtitle: '', // dispatch number intentionally not printed on the slip
-      headers: hasBatch ? _headersWithBatch : _headers,
+      title: 'DISPATCH CHALLAN',
+      subtitle: '${d['code']}',
       meta: [
         ['Dispatch Date', _dateWithDay(d['dispatch_date'])],
         ['Truck / Vehicle No.', '${d['truck_number']}'],
@@ -53,11 +47,10 @@ class DispatchPdf {
       remarks: '${d['remarks'] ?? ''}',
       rows: rows,
       totals: [
-        'TOTAL', '', if (hasBatch) '', '${d['total_cartons']}', '${d['total_trays'] ?? 0}', '${d['total_bottles']}',
+        'TOTAL', '', '${d['total_cartons']}', '${d['total_trays'] ?? 0}', '${d['total_bottles']}',
         kg(d['carton_weight']), kg(d['tray_weight'] ?? 0), kg(d['gross_weight']),
       ],
       footnote: 'Date & day are recorded automatically at dispatch time.',
-      preparedBy: '${d['created_by_name'] ?? ''}',
     ));
     return doc.save();
   }
@@ -103,8 +96,7 @@ class DispatchPdf {
     return doc.save();
   }
 
-  static List<String> get _headers => ['#', 'Product', U.carton, U.tray, U.piece, '${U.cb} Wt', '${U.tray} Wt', 'Gross Wt'];
-  static List<String> get _headersWithBatch => ['#', 'Product', 'Batch', U.carton, U.tray, U.piece, '${U.cb} Wt', '${U.tray} Wt', 'Gross Wt'];
+  static const _headers = ['#', 'Product', 'Cartons', 'Trays', 'Bottles', 'Carton Wt', 'Tray Wt', 'Gross Wt'];
 
   static pw.Page _page({
     required String title,
@@ -114,11 +106,7 @@ class DispatchPdf {
     required List<String> totals,
     required String footnote,
     String remarks = '',
-    List<String>? headers,
-    String preparedBy = '',
   }) {
-    final company = CompanyProfile.current;
-    final List<String> hdrs = headers ?? _headers;
     const primary = PdfColor.fromInt(0xFF2456C8);
     const headerBg = PdfColor.fromInt(0xFFEFF4FF);
     const greyTxt = PdfColor.fromInt(0xFF64748B);
@@ -136,12 +124,15 @@ class DispatchPdf {
               style: ts(header ? 8.6 : 9, bold: bold || header, color: color ?? (header ? primary : null))),
         );
 
-    final hasBatch = hdrs.length == _headersWithBatch.length;
-    final widths = <int, pw.TableColumnWidth>{
+    final widths = {
       0: const pw.FixedColumnWidth(26),
-      1: pw.FlexColumnWidth(hasBatch ? 2.2 : 2.6),
-      if (hasBatch) 2: const pw.FlexColumnWidth(1.2),
-      for (var i = hasBatch ? 3 : 2; i < hdrs.length; i++) i: const pw.FlexColumnWidth(1.1),
+      1: const pw.FlexColumnWidth(2.6),
+      2: const pw.FlexColumnWidth(1.0),
+      3: const pw.FlexColumnWidth(0.9),
+      4: const pw.FlexColumnWidth(1.0),
+      5: const pw.FlexColumnWidth(1.25),
+      6: const pw.FlexColumnWidth(1.2),
+      7: const pw.FlexColumnWidth(1.3),
     };
 
     return pw.Page(
@@ -151,10 +142,10 @@ class DispatchPdf {
         // brand row
         pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
           pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-            pw.Text(company.name, style: ts(15, bold: true)),
+            pw.Text('FlavorFlow Foods Pvt. Ltd.', style: ts(15, bold: true)),
             pw.SizedBox(height: 2),
-            if (company.address.isNotEmpty) pw.Text(company.address, style: ts(9, color: greyTxt)),
-            if (company.taxLine.isNotEmpty) pw.Text(company.taxLine, style: ts(9, color: greyTxt)),
+            pw.Text('Industrial Area, Jalandhar, Punjab 144004', style: ts(9, color: greyTxt)),
+            pw.Text('GSTIN 03AAAAA0000A1Z5 · dispatch@flavorflow.in', style: ts(9, color: greyTxt)),
           ]),
           pw.Spacer(),
           pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
@@ -163,10 +154,8 @@ class DispatchPdf {
               decoration: pw.BoxDecoration(color: headerBg, borderRadius: pw.BorderRadius.circular(6)),
               child: pw.Text(title, style: ts(12, bold: true, color: primary)),
             ),
-            if (subtitle.isNotEmpty) ...[
-              pw.SizedBox(height: 4),
-              pw.Text(subtitle, style: ts(11, bold: true)),
-            ],
+            pw.SizedBox(height: 4),
+            pw.Text(subtitle, style: ts(11, bold: true)),
           ]),
         ]),
         pw.SizedBox(height: 14),
@@ -196,17 +185,17 @@ class DispatchPdf {
           children: [
             pw.TableRow(
               decoration: const pw.BoxDecoration(color: headerBg),
-              children: [for (var i = 0; i < hdrs.length; i++) cell(hdrs[i], header: true, right: i >= (hasBatch ? 3 : 2))],
+              children: [for (var i = 0; i < _headers.length; i++) cell(_headers[i], header: true, right: i >= 2)],
             ),
             for (final r in rows)
-              pw.TableRow(children: [for (var i = 0; i < r.length; i++) cell(r[i], right: i >= (hasBatch ? 3 : 2))]),
+              pw.TableRow(children: [for (var i = 0; i < r.length; i++) cell(r[i], right: i >= 2)]),
             pw.TableRow(
               decoration: const pw.BoxDecoration(color: headerBg),
               children: [
                 for (var i = 0; i < totals.length; i++)
                   i == 0
                       ? pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 7, vertical: 6), child: pw.Text('TOTAL', style: ts(9, bold: true, color: primary)))
-                      : cell(totals[i], bold: true, right: i >= (hasBatch ? 3 : 2), color: primary),
+                      : cell(totals[i], bold: true, right: i >= 2, color: primary),
               ],
             ),
           ],
@@ -227,18 +216,17 @@ class DispatchPdf {
             style: ts(8, color: greyTxt)),
         pw.Spacer(),
 
-        // signature block: only "Prepared By" — shows the logged-in user's
-        // name (the account the slip was generated from).
-        pw.Row(mainAxisAlignment: pw.MainAxisAlignment.end, children: [
-          pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.center, children: [
-            if (preparedBy.isNotEmpty) ...[
-              pw.Text(preparedBy, style: ts(9.5, bold: true)),
-              pw.SizedBox(height: 2),
-            ],
-            pw.Container(width: 150, height: 1, color: const PdfColor.fromInt(0xFF94A3B8)),
-            pw.SizedBox(height: 4),
-            pw.Text('PREPARED BY', style: ts(8, bold: true)),
-          ]),
+        // signature blocks
+        pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+          pw.Text('Prepared by (Store)', style: ts(9)),
+          pw.Text('Transport In-charge', style: ts(9)),
+          pw.Text('Received by', style: ts(9)),
+        ]),
+        pw.SizedBox(height: 4),
+        pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+          pw.Container(width: 150, height: 1, color: const PdfColor.fromInt(0xFF94A3B8)),
+          pw.Container(width: 150, height: 1, color: const PdfColor.fromInt(0xFF94A3B8)),
+          pw.Container(width: 150, height: 1, color: const PdfColor.fromInt(0xFF94A3B8)),
         ]),
       ]),
     );

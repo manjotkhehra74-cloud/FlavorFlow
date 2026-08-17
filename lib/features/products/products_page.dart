@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
@@ -28,35 +27,6 @@ class _ProductsPageState extends State<ProductsPage> {
   }
 
   void _reload() => setState(() => _future = _load());
-
-  Future<void> _deleteProduct(Map<String, dynamic> p) async {
-    final ok = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: Text('Delete ${p['name']}?'),
-            content: const Text('The product will be removed from the Product Master, all dropdowns AND its stock will be removed from Inventory.\n\nPast dispatches, batches and reports that used it are kept unchanged.'),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-              FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error),
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Delete'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-    if (!ok || !mounted) return;
-    try {
-      await context.read<AuthController>().api.delete('/products/${p['id']}');
-      if (mounted) {
-        showOk(context, '${p['name']} deleted.');
-        _reload();
-      }
-    } catch (e) {
-      if (mounted) showErr(context, e);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -88,7 +58,7 @@ class _ProductsPageState extends State<ProductsPage> {
           SectionCard(
             title: 'Finished Goods Master',
             child: AppDataTable(
-              columns: ['Product', 'Wt per ${U.cb} (kg)', 'Wt w/o ${U.cb} (kg)', '${U.piece} / ${U.cb}', '${U.piece} / ${U.tray}', '${U.tray} Wt (kg)', 'Min Stock (${U.cb})', 'Stock (${U.cb})', U.tray, ''],
+              columns: const ['Product', 'Wt per CB (kg)', 'Wt w/o CB (kg)', 'Bottles / CB', 'Bottles / Tray', 'Tray Wt (kg)', 'Min Stock (CB)', 'Stock (CB)', 'Trays', ''],
               rows: [
                 for (var i = 0; i < products.length; i++)
                   [
@@ -102,21 +72,14 @@ class _ProductsPageState extends State<ProductsPage> {
                     qtyInt(products[i]['qty_cb']),
                     qtyInt(products[i]['qty_trays']),
                     if (canManage)
-                      Row(mainAxisSize: MainAxisSize.min, children: [
-                        IconButton(
-                          icon: const Icon(Icons.edit_outlined, size: 19),
-                          tooltip: 'Edit',
-                          onPressed: () async {
-                            final saved = await showDialog<bool>(context: context, builder: (_) => ProductFormDialog(product: products[i]));
-                            if (saved == true) _reload();
-                          },
-                        ),
-                        IconButton(
-                          icon: Icon(Icons.delete_outline_rounded, size: 19, color: Theme.of(context).colorScheme.error),
-                          tooltip: 'Delete',
-                          onPressed: () => _deleteProduct(products[i]),
-                        ),
-                      ])
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined, size: 19),
+                        tooltip: 'Edit',
+                        onPressed: () async {
+                          final saved = await showDialog<bool>(context: context, builder: (_) => ProductFormDialog(product: products[i]));
+                          if (saved == true) _reload();
+                        },
+                      )
                     else
                       const SizedBox.shrink(),
                   ],
@@ -184,21 +147,21 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
           TextField(controller: name, decoration: const InputDecoration(labelText: 'Product name *')),
           const SizedBox(height: 12),
           Row(children: [
-            Expanded(child: TextField(controller: wcb, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: 'Weight per ${U.cb} (kg) *'))),
+            Expanded(child: TextField(controller: wcb, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Weight per CB (kg) *'))),
             const SizedBox(width: 12),
-            Expanded(child: TextField(controller: wncb, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: 'Weight w/o ${U.cb} (kg) *'))),
+            Expanded(child: TextField(controller: wncb, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Weight w/o CB (kg) *'))),
           ]),
           const SizedBox(height: 12),
           Row(children: [
-            Expanded(child: TextField(controller: bpc, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${U.piece} per ${U.cb} *'))),
+            Expanded(child: TextField(controller: bpc, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bottles per CB *'))),
             const SizedBox(width: 12),
-            Expanded(child: TextField(controller: minStock, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: 'Min stock (${U.cb})'))),
+            Expanded(child: TextField(controller: minStock, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Min stock (CB)'))),
           ]),
           const SizedBox(height: 12),
           Row(children: [
-            Expanded(child: TextField(controller: bpt, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${U.piece} per ${U.trayLc} (0 = no ${U.trayLc})'))),
+            Expanded(child: TextField(controller: bpt, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bottles per tray (0 = no tray)'))),
             const SizedBox(width: 12),
-            Expanded(child: TextField(controller: trayWt, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${U.tray} weight (kg)'))),
+            Expanded(child: TextField(controller: trayWt, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Tray weight (kg)'))),
           ]),
           const SizedBox(height: 8),
           Text('Only Soya 740gm, Vinegar 610ml (white & brown), Soya 1.3kg and Vinegar 1.0 are tray-packed. Leave tray fields empty for others.',

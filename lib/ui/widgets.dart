@@ -21,8 +21,6 @@ IconData iconFor(String? name) {
     case 'calculate': return Icons.calculate_outlined;
     case 'add_box': return Icons.add_box_outlined;
     case 'widgets': return Icons.widgets_outlined;
-    case 'science': return Icons.science_outlined;
-    case 'settings': return Icons.settings_outlined;
     case 'liquor': return Icons.liquor_outlined;
     case 'dinner_dining': return Icons.dinner_dining_outlined;
     case 'category': return Icons.category_outlined;
@@ -179,7 +177,7 @@ class KpiCard extends StatelessWidget {
             Expanded(
               child: Text(label.toUpperCase(),
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.9, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.9, color: Color(0xFF64748B))),
             ),
             Icon(icon, size: 16, color: tint),
           ]),
@@ -188,9 +186,9 @@ class KpiCard extends StatelessWidget {
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
             child: Text(value,
-                style: TextStyle(
-                    fontSize: 23, fontWeight: FontWeight.w700, letterSpacing: -0.5, color: Theme.of(context).colorScheme.onSurface,
-                    fontFeatures: const [FontFeature.tabularFigures()])),
+                style: const TextStyle(
+                    fontSize: 23, fontWeight: FontWeight.w700, letterSpacing: -0.5, color: Color(0xFF1B2733),
+                    fontFeatures: [FontFeature.tabularFigures()])),
           ),
         ]),
       ),

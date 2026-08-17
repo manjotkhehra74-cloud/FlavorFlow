@@ -1,7 +1,5 @@
 package `in`.flavorflow.sauce_erp
 
-import io.flutter.embedding.android.FlutterFragmentActivity
+import io.flutter.embedding.android.FlutterActivity
 
-// FlutterFragmentActivity is required by local_auth (biometric login) —
-// with plain FlutterActivity the fingerprint prompt silently fails.
-class MainActivity : FlutterFragmentActivity()
+class MainActivity : FlutterActivity()

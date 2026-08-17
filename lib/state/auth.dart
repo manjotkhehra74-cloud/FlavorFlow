@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/api.dart';
-import '../core/biometric.dart';
 
 class UserSession {
   final int id;
@@ -50,22 +49,12 @@ class AuthController extends ChangeNotifier {
   Future<void> restore() async {
     try {
       await api.loadSavedBase();
-      if (!kIsWeb) {
-        // SECURITY (mobile): the session never survives an app close —
-        // back button, swipe from recents or force-stop all end it. Every
-        // fresh open lands on the login screen (password or biometrics).
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.remove('token');
-        api.token = null;
-        session = null;
-      } else {
-        final prefs = await SharedPreferences.getInstance();
-        final token = prefs.getString('token');
-        if (token != null) {
-          api.token = token;
-          final json = await api.get('/auth/me');
-          session = UserSession.fromJson((json as Map).cast<String, dynamic>());
-        }
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      if (token != null) {
+        api.token = token;
+        final json = await api.get('/auth/me');
+        session = UserSession.fromJson((json as Map).cast<String, dynamic>());
       }
     } catch (_) {
       api.token = null;
@@ -75,17 +64,11 @@ class AuthController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Returns null on success, 'TOTP_REQUIRED' when the account has 2FA on
-  /// and no/wrong code was given, or a user-facing error message.
-  Future<String?> login(String email, String password, {String? totpCode}) async {
+  Future<String?> login(String email, String password) async {
     busy = true;
     notifyListeners();
     try {
-      final json = await api.post('/auth/login', {
-        'email': email,
-        'password': password,
-        if (totpCode != null) 'totpCode': totpCode,
-      });
+      final json = await api.post('/auth/login', {'email': email, 'password': password});
       final map = (json as Map).cast<String, dynamic>();
       api.token = map['token'] as String;
       session = UserSession.fromJson(map);
@@ -116,9 +99,6 @@ class AuthController extends ChangeNotifier {
     } catch (_) {/* ignore */}
     api.token = null;
     session = null;
-    // In-memory credentials are dropped; the saved passkey (secure storage)
-    // stays so "Login with passkey" keeps working on the login screen.
-    BiometricAuth.forgetSession();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('token');
     notifyListeners();
