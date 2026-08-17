@@ -1,5 +1,8 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:geolocator/geolocator.dart';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:printing/printing.dart';
@@ -10,6 +13,7 @@ import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../core/i18n.dart';
 import '../../state/auth.dart';
+import '../../ui/scan_page.dart';
 import '../../ui/widgets.dart';
 import 'dispatch_pdf.dart';
 
@@ -157,7 +161,24 @@ class _LinesEditor extends StatelessWidget {
                     child: TextField(
                       controller: lines[i].batchCode,
                       textCapitalization: TextCapitalization.characters,
-                      decoration: const InputDecoration(labelText: 'Batch code', hintText: 'e.g. SS-740-A', helperText: 'Stock deducts batch-wise', helperMaxLines: 1),
+                      decoration: InputDecoration(
+                        labelText: 'Batch code',
+                        hintText: 'e.g. SS-740-A',
+                        helperText: 'Stock deducts batch-wise',
+                        helperMaxLines: 1,
+                        // QR/barcode scan — no typing on the factory floor
+                        suffixIcon: IconButton(
+                          tooltip: 'Scan batch code',
+                          icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
+                          onPressed: () async {
+                            final v = await ScanPage.scan(context, title: 'Scan batch code');
+                            if (v != null) {
+                              lines[i].batchCode.text = v.toUpperCase();
+                              onChanged();
+                            }
+                          },
+                        ),
+                      ),
                       onChanged: (_) => onChanged(),
                     ),
                   ),
@@ -381,6 +402,24 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
     return otherDest.text.trim().toUpperCase();
   }
 
+  /// Best-effort GPS stamp (lat,long) — never blocks the dispatch.
+  Future<String> _locationStamp() async {
+    if (kIsWeb) return '';
+    try {
+      var perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) {
+        perm = await Geolocator.requestPermission();
+      }
+      if (perm == LocationPermission.denied || perm == LocationPermission.deniedForever) return '';
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.low, timeLimit: Duration(seconds: 5)),
+      );
+      return '[loc ${pos.latitude.toStringAsFixed(5)},${pos.longitude.toStringAsFixed(5)}]';
+    } catch (_) {
+      return '';
+    }
+  }
+
   Future<void> _submit() async {
     if (destination == 'Other' && _destination.isEmpty) {
       showErr(context, 'Please type the destination name.');
@@ -389,11 +428,12 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
     setState(() => saving = true);
     try {
       final list = nonZeroItems();
+      final loc = await _locationStamp();
       final json = await context.read<AuthController>().api.post('/dispatch', {
         'dispatchDate': ymd(date),
         'destination': _destination,
         'truckNumber': truck.text.trim(),
-        'remarks': remarks.text.trim(),
+        'remarks': ('${remarks.text.trim()} $loc').trim(),
         'items': list,
       });
       if (!mounted) return;

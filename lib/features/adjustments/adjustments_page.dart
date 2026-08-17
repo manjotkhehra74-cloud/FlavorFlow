@@ -1,4 +1,8 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -116,6 +120,16 @@ class _AdjustmentFormDialogState extends State<AdjustmentFormDialog> {
   final cb = TextEditingController();
   final reason = TextEditingController();
   bool busy = false;
+  XFile? photo; // damage-proof photo (camera/gallery)
+
+  Future<void> _pickPhoto(ImageSource src) async {
+    try {
+      final x = await ImagePicker().pickImage(source: src, maxWidth: 1600, imageQuality: 80);
+      if (x != null && mounted) setState(() => photo = x);
+    } catch (e) {
+      if (mounted) showErr(context, e);
+    }
+  }
 
   @override
   void initState() {
@@ -137,7 +151,7 @@ class _AdjustmentFormDialogState extends State<AdjustmentFormDialog> {
         'productId': productId,
         'adjType': type,
         'qtyCb': int.tryParse(cb.text) ?? 0,
-        'reason': reason.text.trim(),
+        'reason': reason.text.trim() + (photo != null ? ' [photo attached]' : ''),
       });
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
@@ -182,6 +196,35 @@ class _AdjustmentFormDialogState extends State<AdjustmentFormDialog> {
                 TextField(controller: cb, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${U.carton} (${U.cb})')),
                 const SizedBox(height: 12),
                 TextField(controller: reason, maxLines: 2, decoration: const InputDecoration(labelText: 'Reason *', hintText: 'e.g. Damaged cartons, QC sample, sales return…')),
+                if (!kIsWeb) ...[
+                  const SizedBox(height: 12),
+                  Row(children: [
+                    OutlinedButton.icon(
+                      onPressed: () => _pickPhoto(ImageSource.camera),
+                      icon: const Icon(Icons.photo_camera_outlined, size: 18),
+                      label: const Text('Photo'),
+                    ),
+                    const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      onPressed: () => _pickPhoto(ImageSource.gallery),
+                      icon: const Icon(Icons.photo_library_outlined, size: 18),
+                      label: const Text('Gallery'),
+                    ),
+                    if (photo != null) ...[
+                      const SizedBox(width: 10),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Image.file(File(photo!.path), width: 42, height: 42, fit: BoxFit.cover),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, size: 17),
+                        onPressed: () => setState(() => photo = null),
+                      ),
+                    ],
+                  ]),
+                  Text('Damage/QC proof photo — approver nu record vaste (phone ch save rahegi).',
+                      style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant)),
+                ],
               ]),
       ),
       actions: [

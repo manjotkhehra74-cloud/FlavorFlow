@@ -5,6 +5,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../core/app_settings.dart';
 import '../../core/biometric.dart';
+import '../../core/notifier.dart';
 import '../../core/i18n.dart';
 import '../../state/auth.dart';
 import '../../ui/app_shell.dart' show LanguageDialog, CompanyProfileDialog;
@@ -131,6 +132,43 @@ class _SettingsPageState extends State<SettingsPage> {
           ],
           selected: {settings.textScale},
           onSelectionChanged: (v) => settings.setTextScale(v.first),
+        ),
+      ),
+      _tile(
+        icon: Icons.alarm_rounded,
+        title: 'Daily entry reminder',
+        subtitle: settings.dailyReminder
+            ? 'ON — roz ${settings.dailyReminderHour > 12 ? settings.dailyReminderHour - 12 : settings.dailyReminderHour} ${settings.dailyReminderHour >= 12 ? 'PM' : 'AM'} vaje yaad karauga (+ month-end Loss% close)'
+            : 'OFF — production/dispatch entry da roz da reminder',
+        trailing: Switch(
+          value: settings.dailyReminder,
+          onChanged: (v) async {
+            if (v) {
+              final hour = await showDialog<int>(
+                context: context,
+                builder: (ctx) => SimpleDialog(
+                  title: const Text('Reminder time'),
+                  children: [
+                    for (final h in [9, 12, 17, 18, 20])
+                      SimpleDialogOption(
+                        onPressed: () => Navigator.pop(ctx, h),
+                        child: Text(h > 12 ? '${h - 12}:00 PM' : h == 12 ? '12:00 PM' : '$h:00 AM'),
+                      ),
+                  ],
+                ),
+              );
+              if (hour == null) return;
+              await settings.setDailyReminder(true, hour);
+              await Reminders.enableDaily(hour);
+              await Reminders.enableMonthEnd();
+              if (context.mounted) showOk(context, 'Reminder set — roz + month-end.');
+            } else {
+              await settings.setDailyReminder(false, settings.dailyReminderHour);
+              await Reminders.disableAll();
+              if (context.mounted) showOk(context, 'Reminders off.');
+            }
+            setState(() {});
+          },
         ),
       ),
       _tile(

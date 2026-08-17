@@ -24,6 +24,10 @@ dependencies:
   flutter_secure_storage: ^9.2.2
   qr_flutter: ^4.1.0
   flutter_local_notifications: ^18.0.1
+  mobile_scanner: ^6.0.2
+  geolocator: ^13.0.2
+  image_picker: ^1.1.2
+  timezone: ^0.10.0
 
 dev_dependencies:
   flutter_test:

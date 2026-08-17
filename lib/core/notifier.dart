@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/data/latest.dart' as tzdata;
+import 'package:timezone/timezone.dart' as tz;
 
 /// Phone notifications (status-bar) for new ERP alerts.
 ///
@@ -60,6 +62,82 @@ class PhoneNotifier {
         );
         if (id > _lastSeenId) _lastSeenId = id;
       }
+    } catch (_) {}
+  }
+}
+
+/// ---------------- Daily reminders (exact alarms) ----------------
+/// 1) Daily production-entry reminder at a chosen hour (default 5 PM)
+/// 2) Month-end reminder (last day, 6 PM): export + close the Loss% sheet.
+class Reminders {
+  static const _idDaily = 900001;
+  static const _idMonthEnd = 900002;
+
+  static Future<void> _init() async {
+    tzdata.initializeTimeZones();
+    tz.setLocalLocation(tz.getLocation('Asia/Kolkata'));
+  }
+
+  static Future<void> enableDaily(int hour) async {
+    if (kIsWeb) return;
+    try {
+      await PhoneNotifier.init();
+      await _init();
+      final plugin = FlutterLocalNotificationsPlugin();
+      await plugin.cancel(_idDaily);
+      final now = tz.TZDateTime.now(tz.local);
+      var at = tz.TZDateTime(tz.local, now.year, now.month, now.day, hour);
+      if (at.isBefore(now)) at = at.add(const Duration(days: 1));
+      await plugin.zonedSchedule(
+        _idDaily,
+        'FlavorFlow ERP — daily entry',
+        'Aj di production, dispatch te consumption entries kar lao.',
+        at,
+        const NotificationDetails(
+          android: AndroidNotificationDetails('ff_reminders', 'Reminders',
+              channelDescription: 'Daily entry & month-end reminders',
+              importance: Importance.high, priority: Priority.high),
+        ),
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        matchDateTimeComponents: DateTimeComponents.time, // repeat daily
+      );
+    } catch (_) {}
+  }
+
+  static Future<void> enableMonthEnd() async {
+    if (kIsWeb) return;
+    try {
+      await PhoneNotifier.init();
+      await _init();
+      final plugin = FlutterLocalNotificationsPlugin();
+      await plugin.cancel(_idMonthEnd);
+      final now = tz.TZDateTime.now(tz.local);
+      // last day of current month, 18:00
+      var lastDay = tz.TZDateTime(tz.local, now.year, now.month + 1, 1, 18).subtract(const Duration(days: 1));
+      if (lastDay.isBefore(now)) {
+        lastDay = tz.TZDateTime(tz.local, now.year, now.month + 2, 1, 18).subtract(const Duration(days: 1));
+      }
+      await plugin.zonedSchedule(
+        _idMonthEnd,
+        'FlavorFlow ERP — month end',
+        'Loss% sheet export karke month close kar lao (closing → next opening).',
+        lastDay,
+        const NotificationDetails(
+          android: AndroidNotificationDetails('ff_reminders', 'Reminders',
+              channelDescription: 'Daily entry & month-end reminders',
+              importance: Importance.high, priority: Priority.high),
+        ),
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      );
+    } catch (_) {}
+  }
+
+  static Future<void> disableAll() async {
+    if (kIsWeb) return;
+    try {
+      final plugin = FlutterLocalNotificationsPlugin();
+      await plugin.cancel(_idDaily);
+      await plugin.cancel(_idMonthEnd);
     } catch (_) {}
   }
 }
