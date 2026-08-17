@@ -104,16 +104,34 @@ class _SetupPageState extends State<SetupPage> {
                   style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 14),
-                for (final r in CompanyProfile.industries)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 7),
-                    child: _ChoiceTile(
-                      selected: industry == r[0],
-                      title: r[1],
-                      subtitle: '${r[2]} (${r[3]}) · ${r[4]} · ${r[5]}',
-                      onTap: () => setState(() => industry = r[0]),
-                    ),
-                  ),
+                DropdownButtonFormField<String>(
+                  initialValue: industry,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Industry *'),
+                  hint: const Text('Select your industry'),
+                  items: [
+                    for (final r in CompanyProfile.industries)
+                      DropdownMenuItem(value: r[0], child: Text(r[1], overflow: TextOverflow.ellipsis)),
+                  ],
+                  onChanged: (v) => setState(() => industry = v),
+                ),
+                if (industry != null) ...[
+                  const SizedBox(height: 10),
+                  Builder(builder: (context) {
+                    final r = CompanyProfile.industries.firstWhere((x) => x[0] == industry, orElse: () => CompanyProfile.industries.last);
+                    return Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: scheme.primaryContainer.withValues(alpha: 0.35),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: scheme.primary.withValues(alpha: 0.3)),
+                      ),
+                      child: Text('Units: ${r[2]} (${r[3]}) · ${r[4]} · ${r[5]}',
+                          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: scheme.onSurface)),
+                    );
+                  }),
+                ],
                 const SizedBox(height: 14),
                 Row(children: [
                   TextButton(onPressed: () => setState(() => step = 0), child: const Text('Back')),
