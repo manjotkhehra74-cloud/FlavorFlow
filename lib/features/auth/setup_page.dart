@@ -78,15 +78,16 @@ class _SetupPageState extends State<SetupPage> {
                 const SizedBox(height: 4),
                 Text('ਆਪਣੀ ਭਾਸ਼ਾ ਚੁਣੋ · अपनी भाषा चुनें', style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
                 const SizedBox(height: 14),
-                for (final lang in L10n.languages)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: _ChoiceTile(
-                      selected: language == lang[0],
-                      title: lang[1],
-                      onTap: () => setState(() => language = lang[0]),
-                    ),
-                  ),
+                DropdownButtonFormField<String>(
+                  initialValue: language,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Language / ਭਾਸ਼ਾ / भाषा *'),
+                  items: [
+                    for (final lang in L10n.languages)
+                      DropdownMenuItem(value: lang[0], child: Text(lang[1])),
+                  ],
+                  onChanged: (v) => setState(() => language = v ?? 'en'),
+                ),
                 const SizedBox(height: 14),
                 FilledButton(
                   style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
@@ -153,39 +154,3 @@ class _SetupPageState extends State<SetupPage> {
   }
 }
 
-class _ChoiceTile extends StatelessWidget {
-  final bool selected;
-  final String title;
-  final String? subtitle;
-  final VoidCallback onTap;
-  const _ChoiceTile({required this.selected, required this.title, this.subtitle, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return InkWell(
-      borderRadius: BorderRadius.circular(10),
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-        decoration: BoxDecoration(
-          color: selected ? scheme.primaryContainer.withValues(alpha: 0.45) : null,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: selected ? scheme.primary : scheme.outlineVariant, width: selected ? 1.6 : 1),
-        ),
-        child: Row(children: [
-          Icon(selected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
-              size: 20, color: selected ? scheme.primary : scheme.outline),
-          const SizedBox(width: 11),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(title, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: scheme.onSurface)),
-              if (subtitle != null)
-                Text(subtitle!, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
-            ]),
-          ),
-        ]),
-      ),
-    );
-  }
-}

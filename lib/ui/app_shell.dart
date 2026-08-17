@@ -541,18 +541,19 @@ class LanguageDialog extends StatelessWidget {
     final l10n = context.watch<L10n>();
     return AlertDialog(
       title: Text('${tr('Language')} · ਭਾਸ਼ਾ · भाषा'),
-      content: Column(mainAxisSize: MainAxisSize.min, children: [
-        for (final lang in L10n.languages)
-          RadioListTile<String>(
-            value: lang[0],
-            groupValue: l10n.code,
-            title: Text(lang[1]),
-            onChanged: (v) async {
-              await L10n.instance.set(v ?? 'en');
-              if (context.mounted) Navigator.pop(context);
-            },
-          ),
-      ]),
+      content: DropdownButtonFormField<String>(
+        initialValue: l10n.code,
+        isExpanded: true,
+        decoration: const InputDecoration(labelText: 'Language / ਭਾਸ਼ਾ / भाषा'),
+        items: [
+          for (final lang in L10n.languages)
+            DropdownMenuItem(value: lang[0], child: Text(lang[1])),
+        ],
+        onChanged: (v) async {
+          await L10n.instance.set(v ?? 'en');
+          if (context.mounted) Navigator.pop(context);
+        },
+      ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('Cancel'))),
       ],
