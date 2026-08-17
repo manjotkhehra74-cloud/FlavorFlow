@@ -86,6 +86,10 @@ class _AppShellState extends State<AppShell> {
     if (pi != -1 && !nav.any((e) => e['path'] == '/raw')) {
       nav.insert(pi + 1, {'path': '/raw', 'label': 'Raw Material', 'icon': 'science', 'group': nav[pi]['group']});
     }
+    final ri = nav.indexWhere((e) => e['path'] == '/raw');
+    if (ri != -1 && !nav.any((e) => e['path'] == '/loss')) {
+      nav.insert(ri + 1, {'path': '/loss', 'label': 'Packing Loss %', 'icon': 'percent', 'group': nav[ri]['group']});
+    }
     // Settings entry at the end of the menu for every user.
     if (!nav.any((e) => e['path'] == '/settings')) {
       nav.add({'path': '/settings', 'label': 'Settings', 'icon': 'settings', 'group': nav.isNotEmpty ? (nav.last['group'] ?? 'System') : 'System'});
