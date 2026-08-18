@@ -136,7 +136,7 @@ class _ReportsPageState extends State<ReportsPage> {
           borderRadius: BorderRadius.circular(5),
           border: Border.all(color: sel ? AppColors.blue : const Color(0xFFC3CEDA)),
         ),
-        child: Text(r['title'] as String,
+        child: Text(tr(r['title'] as String),
             style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: sel ? Theme.of(context).colorScheme.onPrimaryContainer : Theme.of(context).colorScheme.onSurface)),
       ),
     );
@@ -157,10 +157,10 @@ class _ReportsPageState extends State<ReportsPage> {
           ),
           padding: EdgeInsets.fromLTRB(sel ? 9 : 12, 9, 10, 9),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(r['title'] as String,
+            Text(tr(r['title'] as String),
                 style: TextStyle(fontSize: 12.6, fontWeight: FontWeight.w600, color: sel ? Theme.of(context).colorScheme.onPrimaryContainer : Theme.of(context).colorScheme.onSurface)),
             const SizedBox(height: 2),
-            Text(r['desc'] as String,
+            Text(tr(r['desc'] as String),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant, height: 1.35)),
@@ -197,7 +197,7 @@ class _ReportsPageState extends State<ReportsPage> {
         ),
       ]),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(_selected!['desc'] as String, style: TextStyle(fontSize: 11.5, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        Text(tr(_selected!['desc'] as String), style: TextStyle(fontSize: 11.5, color: Theme.of(context).colorScheme.onSurfaceVariant)),
         const SizedBox(height: 12),
         FutureBuilder<Map<String, dynamic>>(
           future: _reportFuture,

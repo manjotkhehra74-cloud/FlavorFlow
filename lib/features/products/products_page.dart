@@ -72,7 +72,7 @@ class _ProductsPageState extends State<ProductsPage> {
         return ListView(padding: const EdgeInsets.all(20), children: [
           Row(children: [
             Expanded(
-              child: Text('${products.length} finished goods · carton & tray weights, bottle packing',
+              child: Text('${products.length} ${tr('finished goods · carton & tray weights, bottle packing')}',
                   style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
             ),
             if (canManage)

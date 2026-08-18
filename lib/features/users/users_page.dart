@@ -127,7 +127,7 @@ class _UsersPageState extends State<UsersPage> {
         final roleMap = {for (final r in roles) r['id'] as String: r};
         return ListView(padding: const EdgeInsets.all(20), children: [
           Row(children: [
-            Expanded(child: Text('${users.length} accounts · each role has its own dashboard & permissions', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant))),
+            Expanded(child: Text('${users.length} ${tr('accounts · each role has its own dashboard & permissions')}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant))),
             if (canManage)
               FilledButton.icon(
                 onPressed: () async {

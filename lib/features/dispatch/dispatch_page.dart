@@ -501,7 +501,7 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
               width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(color: scheme.surfaceContainerHighest.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(12)),
-              child: Text('Add cartons or trays to see the live weight summary.',
+              child: Text(tr('Add cartons or trays to see the live weight summary.'),
                   style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
             ),
           SizedBox(
@@ -513,7 +513,7 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
             ),
           ),
           const SizedBox(height: 8),
-          Text('Date & day are stamped automatically. Stock is deducted and the team is notified.',
+          Text(tr('Date & day are stamped automatically. Stock is deducted and the team is notified.'),
               style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
         ]));
         if (wide) {
@@ -615,7 +615,7 @@ class _CalculatorTabState extends State<_CalculatorTab> with _CalcMixin {
               child: Column(children: [
                 Icon(Icons.calculate_outlined, size: 38, color: scheme.outline),
                 const SizedBox(height: 8),
-                Text('Enter cartons / trays to auto-calculate\nweights, bottles and carton counts.',
+                Text(tr('Enter cartons / trays to auto-calculate\nweights, bottles and carton counts.'),
                     textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
               ]),
             ),

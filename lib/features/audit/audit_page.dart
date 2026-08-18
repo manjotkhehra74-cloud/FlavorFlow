@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/format.dart';
+import '../../core/i18n.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 
@@ -42,7 +43,7 @@ class _AuditPageState extends State<AuditPage> {
           Wrap(spacing: 8, runSpacing: 8, children: [
             for (final e in _entities)
               ChoiceChip(
-                label: Text(e.isEmpty ? 'All' : e[0].toUpperCase() + e.substring(1)),
+                label: Text(e.isEmpty ? tr('All') : tr(e[0].toUpperCase() + e.substring(1))),
                 selected: _entity == e,
                 onSelected: (_) => setState(() { _entity = e; _future = _load(); }),
               ),

@@ -158,7 +158,7 @@ class _LossPageState extends State<LossPage> {
 
         return ListView(padding: const EdgeInsets.all(18), children: [
           Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-            Text('Month: ${data['ym']}${_isArchive ? '  (archived)' : ''}',
+            Text('${tr('Month')}: ${data['ym']}${_isArchive ? '  (archived)' : ''}',
                 style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
             if (archives.isNotEmpty || _isArchive)
               DropdownButton<String>(
@@ -184,7 +184,7 @@ class _LossPageState extends State<LossPage> {
           ]),
           const SizedBox(height: 12),
           SectionCard(
-            title: 'Production & Stock (${data['ym']})',
+            title: '${tr('Production & Stock')} (${data['ym']})',
             child: AppDataTable(
               columns: const ['Product', 'Projection', 'Opening', 'Actual', 'Opening+Actual', '%Adherence', 'Closing'],
               rows: [

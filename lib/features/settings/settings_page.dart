@@ -240,14 +240,14 @@ class _SettingsPageState extends State<SettingsPage> {
         subtitle: 'Version 1.1.0 · Universal manufacturing ERP',
       ),
       const SizedBox(height: 8),
-      Text('Role: ${session?.roleLabel ?? ''} · ${session?.email ?? ''}',
+      Text('${tr('Role')}: ${session?.roleLabel ?? ''} · ${session?.email ?? ''}',
           style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
     ]);
   }
 
   Widget _section(String t) => Padding(
         padding: const EdgeInsets.fromLTRB(4, 18, 4, 8),
-        child: Text(t, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, letterSpacing: 1.2, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        child: Text(tr(t), style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, letterSpacing: 1.2, color: Theme.of(context).colorScheme.onSurfaceVariant)),
       );
 
   Widget _tile({required IconData icon, required String title, String? subtitle, Widget? trailing, VoidCallback? onTap}) {
@@ -258,8 +258,8 @@ class _SettingsPageState extends State<SettingsPage> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: scheme.outlineVariant)),
       child: ListTile(
         leading: Icon(icon, size: 22, color: scheme.primary),
-        title: Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-        subtitle: subtitle == null ? null : Text(subtitle, style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
+        title: Text(tr(title), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+        subtitle: subtitle == null ? null : Text(tr(subtitle), style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
         trailing: trailing,
         onTap: onTap,
       ),
@@ -287,8 +287,8 @@ Future<String?> _askCode(BuildContext context, String message) async {
         ),
       ]),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-        FilledButton(onPressed: () => Navigator.pop(ctx, ctl.text.trim()), child: const Text('Confirm')),
+        TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('Cancel'))),
+        FilledButton(onPressed: () => Navigator.pop(ctx, ctl.text.trim()), child: Text(tr('Confirm'))),
       ],
     ),
   );
