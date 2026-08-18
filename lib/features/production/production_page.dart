@@ -50,7 +50,7 @@ class _ProductionPageState extends State<ProductionPage> {
           Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
             for (final s in ['', 'PLANNED', 'IN_PROGRESS', 'COMPLETED'])
               ChoiceChip(
-                label: Text(s.isEmpty ? 'All' : s.replaceAll('_', ' ').toLowerCase()),
+                label: Text(s.isEmpty ? tr('All') : tr(s.replaceAll('_', ' ').toLowerCase())),
                 selected: _status == s,
                 onSelected: (_) => setState(() { _status = s; _future = _load(); }),
               ),

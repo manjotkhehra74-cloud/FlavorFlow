@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
+import '../../core/i18n.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 
@@ -57,7 +58,7 @@ class _ApprovalsPageState extends State<ApprovalsPage> with SingleTickerProvider
           Expanded(
             child: TabBar(
               controller: _tab,
-              tabs: const [Tab(text: 'Pending Approval'), Tab(text: 'Approval History')],
+              tabs: const [Tab(text: tr('Pending Approval')), Tab(text: tr('Approval History'))],
             ),
           ),
           const SizedBox(width: 16),

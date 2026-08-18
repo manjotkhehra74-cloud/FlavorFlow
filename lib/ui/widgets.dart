@@ -127,7 +127,7 @@ class StatusChip extends StatelessWidget {
         border: Border.all(color: p.$1.withValues(alpha: 0.30)),
       ),
       child: Text(
-        status.replaceAll('_', ' '),
+        tr(status.replaceAll('_', ' ')),
         style: TextStyle(color: p.$1, fontSize: 10.5, fontWeight: FontWeight.w700, letterSpacing: 0.4),
       ),
     );

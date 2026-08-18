@@ -433,7 +433,7 @@ class _LedgerTabState extends State<_LedgerTab> {
           Wrap(spacing: 8, runSpacing: 8, children: [
             for (final t in ['', 'RECEIVED', 'CONSUMED'])
               ChoiceChip(
-                label: Text(t.isEmpty ? 'All' : t.toLowerCase()),
+                label: Text(t.isEmpty ? tr('All') : tr(t.toLowerCase())),
                 selected: _type == t,
                 onSelected: (_) => setState(() { _type = t; _future = _load(); }),
               ),

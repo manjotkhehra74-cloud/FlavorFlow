@@ -59,7 +59,7 @@ class _DispatchPageState extends State<DispatchPage> with SingleTickerProviderSt
             isScrollable: true,
             tabAlignment: TabAlignment.start,
             tabs: [
-              Tab(text: canManage ? tr('Dispatch Entry') : 'Dispatch Entry (view only)'),
+              Tab(text: canManage ? tr('Dispatch Entry') : tr('Dispatch Entry (view only)')),
               Tab(text: tr('Truck Loading Calculator')),
               Tab(text: tr('Dispatch History')),
               Tab(text: tr('Reports')),
@@ -187,7 +187,7 @@ class _LinesEditor extends StatelessWidget {
             ),
           ]),
         ),
-      TextButton.icon(onPressed: onAdd, icon: const Icon(Icons.add_rounded, size: 18), label: const Text('Add product line')),
+      TextButton.icon(onPressed: onAdd, icon: const Icon(Icons.add_rounded, size: 18), label: Text(tr('Add product line'))),
     ]);
   }
 }
@@ -325,7 +325,7 @@ class _DateField extends StatelessWidget {
         if (d != null) onPick(d);
       },
       child: InputDecorator(
-        decoration: const InputDecoration(labelText: 'Dispatch date *'),
+        decoration: InputDecoration(labelText: tr('Dispatch date *')),
         child: Row(children: [
           Icon(Icons.today_rounded, size: 17, color: Theme.of(context).colorScheme.primary),
           const SizedBox(width: 8),
@@ -348,7 +348,7 @@ class _DestinationField extends StatelessWidget {
     return Column(children: [
       DropdownButtonFormField<String>(
         initialValue: value,
-        decoration: const InputDecoration(labelText: 'Destination *'),
+        decoration: InputDecoration(labelText: tr('Destination *')),
         items: [
           for (final d in kDispatchDestinations)
             DropdownMenuItem(value: d, child: Text(d == 'Other' ? 'Other (type below)' : '${d[0]}${d.substring(1).toLowerCase()}')),
@@ -469,7 +469,7 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
         final wide = c.maxWidth > 900;
         final form = SectionCard(title: 'Dispatch Entry', child: Column(children: [
           Row(children: [
-            Expanded(child: TextField(controller: truck, textCapitalization: TextCapitalization.characters, decoration: const InputDecoration(labelText: 'Truck / Vehicle No. *', hintText: 'PB-08-AB-1234'), onChanged: (_) => setState(() {}))),
+            Expanded(child: TextField(controller: truck, textCapitalization: TextCapitalization.characters, decoration: InputDecoration(labelText: tr('Truck / Vehicle No. *'), hintText: 'PB-08-AB-1234'), onChanged: (_) => setState(() {}))),
             const SizedBox(width: 12),
             Expanded(child: _DateField(date: date, onPick: (d) => setState(() => date = d))),
           ]),
@@ -483,10 +483,10 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
               }
             }))),
             const SizedBox(width: 12),
-            Expanded(child: TextField(controller: remarks, decoration: const InputDecoration(labelText: 'Remarks'))),
+            Expanded(child: TextField(controller: remarks, decoration: InputDecoration(labelText: tr('Remarks')))),
           ]),
           const SizedBox(height: 20),
-          Align(alignment: Alignment.centerLeft, child: Text('Loading lines (cartons & trays)', style: TextStyle(fontWeight: FontWeight.w700, color: scheme.onSurface))),
+          Align(alignment: Alignment.centerLeft, child: Text(tr('Loading lines (cartons & trays)'), style: TextStyle(fontWeight: FontWeight.w700, color: scheme.onSurface))),
           const SizedBox(height: 10),
           products.isEmpty
               ? const SizedBox(height: 60, child: Center(child: CircularProgressIndicator()))

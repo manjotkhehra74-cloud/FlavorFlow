@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/company.dart';
 import '../../core/format.dart';
+import '../../core/i18n.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 
@@ -50,7 +51,7 @@ class _AdjustmentsPageState extends State<AdjustmentsPage> {
           Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
             for (final s in ['', 'PENDING', 'APPROVED', 'REJECTED'])
               ChoiceChip(
-                label: Text(s.isEmpty ? 'All' : s.toLowerCase()),
+                label: Text(s.isEmpty ? tr('All') : tr(s.toLowerCase())),
                 selected: _status == s,
                 onSelected: (_) => setState(() { _status = s; _future = _load(); }),
               ),
@@ -60,7 +61,7 @@ class _AdjustmentsPageState extends State<AdjustmentsPage> {
                 child: OutlinedButton.icon(
                   onPressed: () => context.go('/approvals'),
                   icon: const Icon(Icons.fact_check_outlined, size: 18),
-                  label: const Text('Approval queue'),
+                  label: Text(tr('Approval queue')),
                 ),
               ),
             if (auth.can('adjustments.create'))
@@ -70,7 +71,7 @@ class _AdjustmentsPageState extends State<AdjustmentsPage> {
                   if (saved == true) { _reload(); if (context.mounted) showOk(context, 'Adjustment request submitted for approval.'); }
                 },
                 icon: const Icon(Icons.add_rounded),
-                label: const Text('New Adjustment'),
+                label: Text(tr('New Adjustment')),
               ),
           ]),
           const SizedBox(height: 16),
