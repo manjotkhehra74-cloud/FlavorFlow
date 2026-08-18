@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api.dart';
@@ -99,6 +100,10 @@ class CompanyProfile {
 
   static CompanyProfile? _cached;
 
+  /// Bumped every time the profile is (re)loaded or saved — UI listens to
+  /// this to re-apply industry gating and unit labels immediately.
+  static final ValueNotifier<int> rev = ValueNotifier<int>(0);
+
   /// One-time first-run setup (language + industry) completed on this device?
   static Future<bool> setupDone() async {
     try {
@@ -152,6 +157,7 @@ class CompanyProfile {
       } catch (_) {/* server route optional */}
     }
     _cached = p;
+    rev.value++;
     return p;
   }
 
@@ -160,6 +166,7 @@ class CompanyProfile {
     final prefs = await SharedPreferences.getInstance();
     await _persist(prefs, p);
     _cached = p;
+    rev.value++;
     if (api != null) {
       try {
         await api.put('/settings/company', {

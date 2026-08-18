@@ -35,6 +35,12 @@ class _AppShellState extends State<AppShell> {
     _timer = Timer.periodic(const Duration(seconds: 20), (_) => _loadUnread());
     // Load the editable company identity used on every exported PDF.
     CompanyProfile.load(context.read<AuthController>().api);
+    // Rebuild when the company profile / industry changes (units + gating).
+    CompanyProfile.rev.addListener(_onCompanyChanged);
+  }
+
+  void _onCompanyChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadUnread() async {
@@ -52,6 +58,7 @@ class _AppShellState extends State<AppShell> {
   @override
   void dispose() {
     _timer?.cancel();
+    CompanyProfile.rev.removeListener(_onCompanyChanged);
     super.dispose();
   }
 

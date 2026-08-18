@@ -125,6 +125,17 @@ class _Header extends StatelessWidget {
   }
 }
 
+/// Replace default-industry unit words in server-sent labels with the active
+/// industry's unit names (e.g. "Stock on Hand (CB)" → "... (Bale)").
+String _unitize(String label) {
+  var out = label;
+  if (U.cb != 'CB') out = out.replaceAll('(CB)', '(${U.cb})').replaceAll(' CB', ' ${U.cb}');
+  if (U.carton != 'Cartons') out = out.replaceAll('Cartons', U.carton);
+  if (U.tray != 'Trays') out = out.replaceAll('Trays', U.tray).replaceAll('trays', U.trayLc);
+  if (U.piece != 'Bottles') out = out.replaceAll('Bottles', U.piece).replaceAll('bottles', U.piece.toLowerCase());
+  return out;
+}
+
 class _KpiGrid extends StatelessWidget {
   final List<Map<String, dynamic>> items;
   const _KpiGrid({required this.items});
@@ -143,7 +154,9 @@ class _KpiGrid extends StatelessWidget {
         children: [
           for (final it in items)
             KpiCard(
-              label: it['label'] as String,
+              // Server labels are written for the default industry (CB/Trays/
+              // Bottles) — swap in the active industry's unit names.
+              label: _unitize(it['label'] as String),
               value: (it['money'] == true) ? inr(it['value']) : qtyInt(it['value']),
               icon: iconFor(it['icon'] as String?),
               tint: hexColor(it['tint'] as String?),
@@ -376,7 +389,7 @@ class _Alerts extends StatelessWidget {
               child: Row(children: [
                 Icon(icon, size: 16, color: color),
                 const SizedBox(width: 11),
-                Expanded(child: Text(a['text'] as String, style: const TextStyle(fontSize: 12.8, fontWeight: FontWeight.w500))),
+                Expanded(child: Text(_unitize(a['text'] as String), style: const TextStyle(fontSize: 12.8, fontWeight: FontWeight.w500))),
                 Icon(Icons.chevron_right_rounded, color: Theme.of(context).colorScheme.outline, size: 18),
               ]),
             ),
