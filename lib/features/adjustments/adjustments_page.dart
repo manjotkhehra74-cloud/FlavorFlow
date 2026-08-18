@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -215,7 +213,12 @@ class _AdjustmentFormDialogState extends State<AdjustmentFormDialog> {
                       const SizedBox(width: 10),
                       ClipRRect(
                         borderRadius: BorderRadius.circular(6),
-                        child: Image.file(File(photo!.path), width: 42, height: 42, fit: BoxFit.cover),
+                        child: FutureBuilder(
+                          future: photo!.readAsBytes(),
+                          builder: (c, s) => s.hasData
+                              ? Image.memory(s.data!, width: 42, height: 42, fit: BoxFit.cover)
+                              : const SizedBox(width: 42, height: 42),
+                        ),
                       ),
                       IconButton(
                         icon: const Icon(Icons.close_rounded, size: 17),
