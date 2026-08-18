@@ -44,7 +44,7 @@ class StockPdf {
               style: ts(header ? 8.6 : 9, bold: bold || header, color: color ?? (header ? primary : null))),
         );
 
-    final headers = ['#', tr('Product'), '${tr(U.carton)} (${U.cb})', tr(U.tray), '${tr('Total')} ${U.piece}', tr('Gross kg'), 'Min (${U.cb})', tr('Status')];
+    final headers = ['#', tr('Product'), '${tr(U.carton)} (${U.cb})', tr(U.tray), '${tr('Total')} ${tr(U.piece)}', tr('Gross kg'), '${tr('Min')} (${U.cb})', tr('Status')];
     double sumCb = 0, sumTrays = 0, sumBottles = 0, sumGross = 0;
     final rows = <List<Object>>[];
     for (var i = 0; i < items.length; i++) {
@@ -96,7 +96,7 @@ class StockPdf {
             pw.Container(
               padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: pw.BoxDecoration(color: headerBg, borderRadius: pw.BorderRadius.circular(6)),
-              child: pw.Text('STOCK REPORT', style: ts(12, bold: true, color: primary)),
+              child: pw.Text(tr('Stock Report').toUpperCase(), style: ts(12, bold: true, color: primary)),
             ),
             pw.SizedBox(height: 4),
             pw.Text(DateFormat('EEEE, dd MMM yyyy · hh:mm a').format(now), style: ts(9.5, color: greyTxt)),
@@ -106,10 +106,10 @@ class StockPdf {
         pw.Divider(color: lineCol, thickness: 0.8),
         pw.SizedBox(height: 10),
         pw.Wrap(spacing: 8, runSpacing: 8, children: [
-          metaBox('Total cartons', '${n(summary['total_cb'])} CB'),
-          metaBox('Total trays', n(summary['total_trays'])),
-          metaBox('Total bottles', n(summary['total_bottles'])),
-          metaBox('Low stock items', '${summary['low_count']}'),
+          metaBox(tr('Total cartons'), '${n(summary['total_cb'])} CB'),
+          metaBox(tr('Total trays'), n(summary['total_trays'])),
+          metaBox(tr('Total bottles'), n(summary['total_bottles'])),
+          metaBox(tr('Low stock items'), '${summary['low_count']}'),
         ]),
         pw.SizedBox(height: 16),
         pw.Table(
@@ -133,7 +133,7 @@ class StockPdf {
             for (final r in rows)
               pw.TableRow(children: [
                 for (var i = 0; i < r.length; i++)
-                  cell('${r[i]}',
+                  cell(i == 7 ? tr('${r[i]}') : '${r[i]}',
                       right: i >= 2 && i <= 6,
                       bold: i == 7,
                       color: i == 7 ? (r[i] == 'LOW' ? lowRed : null) : null),
@@ -141,8 +141,8 @@ class StockPdf {
             pw.TableRow(
               decoration: const pw.BoxDecoration(color: headerBg),
               children: [
-                cell('TOTAL', bold: true, color: primary),
                 cell('', color: primary),
+                cell(tr('Total').toUpperCase(), bold: true, color: primary),
                 cell(n(sumCb), bold: true, right: true, color: primary),
                 cell(n(sumTrays), bold: true, right: true, color: primary),
                 cell(n(sumBottles), bold: true, right: true, color: primary),
@@ -154,7 +154,7 @@ class StockPdf {
           ],
         ),
         pw.SizedBox(height: 12),
-        pw.Text('Generated from live inventory — ${U.carton.toLowerCase()} (${U.cb}) and ${U.trayLc} tracked separately.',
+        pw.Text(tr('Generated from live inventory — cartons and trays tracked separately.'),
             style: ts(8, color: greyTxt)),
       ],
     ));

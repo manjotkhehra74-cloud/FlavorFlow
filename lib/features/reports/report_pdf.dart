@@ -71,7 +71,7 @@ class ReportPdf {
       footer: (context) => pw.Padding(
         padding: const pw.EdgeInsets.only(top: 8),
         child: pw.Row(children: [
-          pw.Text('Exported from FlavorFlow ERP — quantities and weights only.', style: ts(7.8, color: greyTxt)),
+          pw.Text(tr('Exported from FlavorFlow ERP — quantities and weights only.'), style: ts(7.8, color: greyTxt)),
           pw.Spacer(),
           pw.Text('Page ${context.pageNumber} of ${context.pagesCount}', style: ts(7.8, color: greyTxt)),
         ]),
@@ -100,7 +100,7 @@ class ReportPdf {
         pw.SizedBox(height: 8),
         pw.Divider(color: lineCol, thickness: 0.8),
         pw.SizedBox(height: 6),
-        pw.Text('${rows.length} record${rows.length == 1 ? '' : 's'}', style: ts(8.6, bold: true, color: greyTxt)),
+        pw.Text('${rows.length} ${tr('records')}', style: ts(8.6, bold: true, color: greyTxt)),
         pw.SizedBox(height: 8),
         pw.Table(
           border: pw.TableBorder.all(color: lineCol, width: 0.7),

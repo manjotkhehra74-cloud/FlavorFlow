@@ -5,6 +5,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'dart:typed_data';
 
 import '../../core/company.dart';
+import '../../core/i18n.dart';
 import '../../core/pdf_fonts.dart';
 
 /// PDF builder for dispatch challans & truck-loading estimates.
@@ -46,14 +47,14 @@ class DispatchPdf {
     ];
     final doc = pw.Document();
     doc.addPage(_page(
-      title: 'DISPATCH PACKING SLIP',
+      title: tr('Dispatch Packing Slip').toUpperCase(),
       subtitle: '', // dispatch number intentionally not printed on the slip
       headers: hasBatch ? _headersWithBatch : _headers,
       meta: [
-        ['Dispatch Date', _dateWithDay(d['dispatch_date'])],
-        ['Truck / Vehicle No.', '${d['truck_number']}'],
-        ['Destination', '${d['destination'] ?? '—'}'],
-        ['Prepared By', '${d['created_by_name'] ?? '—'}'],
+        [tr('Dispatch Date'), _dateWithDay(d['dispatch_date'])],
+        [tr('Truck / Vehicle No.'), '${d['truck_number']}'],
+        [tr('Destination'), '${d['destination'] ?? '—'}'],
+        [tr('Prepared By'), '${d['created_by_name'] ?? '—'}'],
       ],
       remarks: '${d['remarks'] ?? ''}',
       rows: rows,
@@ -61,7 +62,7 @@ class DispatchPdf {
         'TOTAL', '', if (hasBatch) '', '${d['total_cartons']}', '${d['total_trays'] ?? 0}', '${d['total_bottles']}',
         kg(d['carton_weight']), kg(d['tray_weight'] ?? 0), kg(d['gross_weight']),
       ],
-      footnote: 'Date & day are recorded automatically at dispatch time.',
+      footnote: tr('Date & day are recorded automatically at dispatch time.'),
       preparedBy: '${d['created_by_name'] ?? ''}',
     ));
     return doc.save();
@@ -91,25 +92,25 @@ class DispatchPdf {
     ];
     final doc = pw.Document();
     doc.addPage(_page(
-      title: 'TRUCK LOADING PLAN',
-      subtitle: 'Pre-dispatch weight estimate',
+      title: tr('Truck Loading Plan').toUpperCase(),
+      subtitle: tr('Pre-dispatch weight estimate'),
       meta: [
-        ['Truck / Vehicle No.', (truckNumber == null || truckNumber.isEmpty) ? '—' : truckNumber],
-        ['Dispatch Date', (dispatchDate == null || dispatchDate.isEmpty) ? '—' : _dateWithDay(dispatchDate)],
-        ['Destination', (destination == null || destination.isEmpty) ? '—' : destination],
+        [tr('Truck / Vehicle No.'), (truckNumber == null || truckNumber.isEmpty) ? '—' : truckNumber],
+        [tr('Dispatch Date'), (dispatchDate == null || dispatchDate.isEmpty) ? '—' : _dateWithDay(dispatchDate)],
+        [tr('Destination'), (destination == null || destination.isEmpty) ? '—' : destination],
       ],
       rows: rows,
       totals: [
         'TOTAL', '', '${totals['totalCartons']}', '${totals['totalTrays'] ?? 0}', '${totals['totalBottles']}',
         kg(totals['cartonWeight']), kg(totals['trayWeight'] ?? 0), kg(totals['grossWeight']),
       ],
-      footnote: 'Estimate only — actual challan is generated at dispatch.',
+      footnote: tr('Estimate only — actual challan is generated at dispatch.'),
     ));
     return doc.save();
   }
 
-  static List<String> get _headers => ['#', 'Product', U.carton, U.tray, U.piece, '${U.cb} Wt', '${U.tray} Wt', 'Gross Wt'];
-  static List<String> get _headersWithBatch => ['#', 'Product', 'Batch', U.carton, U.tray, U.piece, '${U.cb} Wt', '${U.tray} Wt', 'Gross Wt'];
+  static List<String> get _headers => ['#', tr('Product'), tr(U.carton), tr(U.tray), tr(U.piece), '${U.cb} ${tr('Wt')}', '${tr(U.tray)} ${tr('Wt')}', tr('Gross Wt')];
+  static List<String> get _headersWithBatch => ['#', tr('Product'), tr('Batch'), tr(U.carton), tr(U.tray), tr(U.piece), '${U.cb} ${tr('Wt')}', '${tr(U.tray)} ${tr('Wt')}', tr('Gross Wt')];
 
   static pw.Page _page({
     required String title,
@@ -211,7 +212,7 @@ class DispatchPdf {
               children: [
                 for (var i = 0; i < totals.length; i++)
                   i == 0
-                      ? pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 7, vertical: 6), child: pw.Text('TOTAL', style: ts(9, bold: true, color: primary)))
+                      ? pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 7, vertical: 6), child: pw.Text(tr('Total').toUpperCase(), style: ts(9, bold: true, color: primary)))
                       : cell(totals[i], bold: true, right: i >= (hasBatch ? 3 : 2), color: primary),
               ],
             ),
@@ -224,12 +225,12 @@ class DispatchPdf {
             width: double.infinity,
             padding: const pw.EdgeInsets.all(9),
             decoration: pw.BoxDecoration(border: pw.Border.all(color: lineCol, width: 0.7), borderRadius: pw.BorderRadius.circular(6)),
-            child: pw.Text('Remarks: $remarks', style: ts(9)),
+            child: pw.Text('${tr('Remarks')}: $remarks', style: ts(9)),
           ),
         pw.SizedBox(height: 8),
         pw.Text(footnote, style: ts(9.4, bold: true)),
         pw.SizedBox(height: 6),
-        pw.Text('Weights are computed from the Product Master (carton gross weight and tray weight).',
+        pw.Text(tr('Weights are computed from the Product Master (carton gross weight and tray weight).'),
             style: ts(8, color: greyTxt)),
         pw.Spacer(),
 
@@ -243,7 +244,7 @@ class DispatchPdf {
             ],
             pw.Container(width: 150, height: 1, color: const PdfColor.fromInt(0xFF94A3B8)),
             pw.SizedBox(height: 4),
-            pw.Text('PREPARED BY', style: ts(8, bold: true)),
+            pw.Text(tr('Prepared By').toUpperCase(), style: ts(8, bold: true)),
           ]),
         ]),
       ]),
