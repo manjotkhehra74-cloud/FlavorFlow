@@ -18,6 +18,12 @@ class AppPermissions {
         Permission.photos, // Android 13+: READ_MEDIA_IMAGES
         Permission.locationWhenInUse,
       ].request();
+      // Xiaomi/Oppo aggressive battery killers: ask to exempt the app so
+      // notification polling keeps working (system dialog, one time).
+      try {
+        final st = await Permission.ignoreBatteryOptimizations.status;
+        if (!st.isGranted) await Permission.ignoreBatteryOptimizations.request();
+      } catch (_) {}
       await prefs.setBool('perms_asked', true);
     } catch (_) {}
   }
