@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/company.dart';
 import '../../core/i18n.dart';
+import '../../core/permissions.dart';
 import '../../router.dart' show kNeedsFirstRunSetup;
 
 /// One-time first-run setup (fresh install only): pick the app language and
@@ -38,6 +39,8 @@ class _SetupPageState extends State<SetupPage> {
     ));
     await CompanyProfile.markSetupDone();
     kNeedsFirstRunSetup = false;
+    // Ask ALL app permissions in one flow right after setup (like big apps).
+    await AppPermissions.requestAllOnce();
     if (!mounted) return;
     context.go('/login');
   }

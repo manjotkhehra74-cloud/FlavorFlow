@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../core/permissions.dart';
+
 /// Full-screen QR/barcode scanner — returns the scanned text via
 /// Navigator.pop. Used for batch codes on dispatch (no typing).
 class ScanPage extends StatefulWidget {
@@ -8,7 +10,11 @@ class ScanPage extends StatefulWidget {
   const ScanPage({super.key, this.title = 'Scan code'});
 
   /// Open the scanner; resolves to the scanned string or null (cancelled).
-  static Future<String?> scan(BuildContext context, {String title = 'Scan code'}) {
+  /// Camera permission is verified first — the "unexpected error" screen was
+  /// the camera starting without permission on some devices.
+  static Future<String?> scan(BuildContext context, {String title = 'Scan code'}) async {
+    final ok = await AppPermissions.ensureCamera();
+    if (!ok || !context.mounted) return null;
     return Navigator.of(context).push<String>(
       MaterialPageRoute(builder: (_) => ScanPage(title: title)),
     );
@@ -60,7 +66,28 @@ class _ScanPageState extends State<ScanPage> {
         ],
       ),
       body: Stack(children: [
-        MobileScanner(controller: _ctl, onDetect: _onDetect),
+        MobileScanner(
+          controller: _ctl,
+          onDetect: _onDetect,
+          errorBuilder: (context, error) => Center(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.no_photography_outlined, color: Colors.white70, size: 42),
+              const SizedBox(height: 10),
+              const Text('Camera nahi khul reha — permission check karo',
+                  textAlign: TextAlign.center, style: TextStyle(color: Colors.white70, fontSize: 13.5)),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: () async {
+                  await AppPermissions.ensureCamera();
+                  await _ctl.stop();
+                  await _ctl.start();
+                },
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Retry'),
+              ),
+            ]),
+          ),
+        ),
         // simple viewfinder frame
         Center(
           child: Container(
@@ -74,7 +101,7 @@ class _ScanPageState extends State<ScanPage> {
         ),
         Positioned(
           left: 0, right: 0, bottom: 28,
-          child: Text('QR ya barcode frame de andar rakho',
+          child: Text('Place the QR / barcode inside the frame',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 13.5)),
         ),

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/api.dart';
 import '../../core/biometric.dart';
+import '../../core/permissions.dart';
 import '../../core/i18n.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
@@ -26,6 +27,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void initState() {
     super.initState();
+    AppPermissions.requestAllOnce(); // one-time upfront permissions
     _checkBio();
   }
 
