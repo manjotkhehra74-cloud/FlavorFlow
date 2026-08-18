@@ -34,10 +34,11 @@ class _DispatchPageState extends State<DispatchPage> with SingleTickerProviderSt
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 4, vsync: this);
+    _tab = TabController(length: 5, vsync: this);
     if (widget.tab == 'calculator') _tab.index = 1;
     if (widget.tab == 'history') _tab.index = 2;
     if (widget.tab == 'reports') _tab.index = 3;
+    if (widget.tab == 'trucks') _tab.index = 4;
   }
 
   @override
@@ -63,6 +64,7 @@ class _DispatchPageState extends State<DispatchPage> with SingleTickerProviderSt
               Tab(text: tr('Truck Loading Calculator')),
               Tab(text: tr('Dispatch History')),
               Tab(text: tr('Reports')),
+              Tab(text: tr('Trucks')),
             ],
           ),
         ),
@@ -73,6 +75,7 @@ class _DispatchPageState extends State<DispatchPage> with SingleTickerProviderSt
           const _CalculatorTab(),
           const _HistoryTab(),
           const _ReportsTab(),
+          _TrucksTab(readOnly: !canManage),
         ]),
       ),
     ]);
@@ -384,12 +387,32 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
   String destination = 'NEEMRANA';
   DateTime date = DateTime.now();
   bool saving = false;
+  /// Truck master list (number + destination) — dropdown filters by the
+  /// selected destination; 'Other/new' falls back to free typing.
+  List<Map<String, dynamic>> _trucks = [];
 
   @override
   void initState() {
     super.initState();
-    if (!widget.readOnly) loadProducts();
+    if (!widget.readOnly) {
+      loadProducts();
+      _loadTrucks();
+    }
   }
+
+  Future<void> _loadTrucks() async {
+    try {
+      final json = await context.read<AuthController>().api.get('/dispatch/trucks');
+      if (!mounted) return;
+      setState(() => _trucks = ((json as Map)['trucks'] as List).cast<Map<String, dynamic>>());
+    } catch (_) {/* server route optional until ff-truckfix runs */}
+  }
+
+  /// Trucks registered for the currently selected destination.
+  List<String> get _destTrucks => [
+        for (final t in _trucks)
+          if ('${t['destination']}'.toUpperCase() == _destination.toUpperCase()) '${t['number']}',
+      ];
 
   @override
   void dispose() {
@@ -469,7 +492,43 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
         final wide = c.maxWidth > 900;
         final form = SectionCard(title: 'Dispatch Entry', child: Column(children: [
           Row(children: [
-            Expanded(child: TextField(controller: truck, textCapitalization: TextCapitalization.characters, decoration: InputDecoration(labelText: tr('Truck / Vehicle No. *'), hintText: 'PB-08-AB-1234'), onChanged: (_) => setState(() {}))),
+            Expanded(
+              child: _destTrucks.isEmpty
+                  // no trucks registered for this destination → free typing
+                  ? TextField(controller: truck, textCapitalization: TextCapitalization.characters, decoration: InputDecoration(labelText: tr('Truck / Vehicle No. *'), hintText: 'PB-08-AB-1234'), onChanged: (_) => setState(() {}))
+                  : DropdownButtonFormField<String>(
+                      key: ValueKey('truckdd-$_destination'),
+                      initialValue: _destTrucks.contains(truck.text) ? truck.text : null,
+                      isExpanded: true,
+                      decoration: InputDecoration(labelText: tr('Truck / Vehicle No. *')),
+                      items: [
+                        for (final n in _destTrucks) DropdownMenuItem(value: n, child: Text(n)),
+                        DropdownMenuItem(value: '__other__', child: Text(tr('Other / new truck…'))),
+                      ],
+                      onChanged: (v) async {
+                        if (v == '__other__') {
+                          truck.clear();
+                          final typed = await showDialog<String>(
+                            context: context,
+                            builder: (ctx) {
+                              final c = TextEditingController();
+                              return AlertDialog(
+                                title: Text(tr('Truck / Vehicle No. *')),
+                                content: TextField(controller: c, autofocus: true, textCapitalization: TextCapitalization.characters, decoration: const InputDecoration(hintText: 'PB-08-AB-1234')),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('Cancel'))),
+                                  FilledButton(onPressed: () => Navigator.pop(ctx, c.text.trim().toUpperCase()), child: Text(tr('OK'))),
+                                ],
+                              );
+                            },
+                          );
+                          if (typed != null && typed.isNotEmpty) setState(() => truck.text = typed);
+                        } else if (v != null) {
+                          setState(() => truck.text = v);
+                        }
+                      },
+                    ),
+            ),
             const SizedBox(width: 12),
             Expanded(child: _DateField(date: date, onPick: (d) => setState(() => date = d))),
           ]),
@@ -748,6 +807,152 @@ class _EmbeddedReportState extends State<_EmbeddedReport> {
           SectionCard(
             title: snap.data!['title'] as String,
             child: rows.isEmpty ? const EmptyState('No data') : AppDataTable(columns: columns, rows: rows),
+          ),
+        ]);
+      },
+    );
+  }
+}
+
+/* ------------------------------- trucks tab ------------------------------- */
+
+/// Truck master: register each truck against its destination (route) so the
+/// Dispatch Entry shows a destination-filtered dropdown.
+class _TrucksTab extends StatefulWidget {
+  final bool readOnly;
+  const _TrucksTab({required this.readOnly});
+  @override
+  State<_TrucksTab> createState() => _TrucksTabState();
+}
+
+class _TrucksTabState extends State<_TrucksTab> {
+  late Future<List<Map<String, dynamic>>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  Future<List<Map<String, dynamic>>> _load() async {
+    final json = await context.read<AuthController>().api.get('/dispatch/trucks');
+    return ((json as Map)['trucks'] as List).cast<Map<String, dynamic>>();
+  }
+
+  void _reload() => setState(() => _future = _load());
+
+  Future<void> _add() async {
+    final number = TextEditingController();
+    final otherDest = TextEditingController();
+    String dest = 'NEEMRANA';
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
+          title: Text(tr('Add Truck')),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(
+              controller: number,
+              autofocus: true,
+              textCapitalization: TextCapitalization.characters,
+              decoration: InputDecoration(labelText: tr('Truck / Vehicle No. *'), hintText: 'PB-08-AB-1234'),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: dest,
+              isExpanded: true,
+              decoration: InputDecoration(labelText: tr('Destination *')),
+              items: [for (final d in kDispatchDestinations) DropdownMenuItem(value: d, child: Text(d))],
+              onChanged: (v) => setD(() => dest = v ?? 'NEEMRANA'),
+            ),
+            if (dest == 'Other') ...[
+              const SizedBox(height: 12),
+              TextField(controller: otherDest, textCapitalization: TextCapitalization.characters, decoration: InputDecoration(labelText: tr('Destination name *'), hintText: 'e.g. LUDHIANA')),
+            ],
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('Cancel'))),
+            FilledButton(
+              onPressed: () async {
+                final n = number.text.trim().toUpperCase();
+                final d = dest == 'Other' ? otherDest.text.trim().toUpperCase() : dest;
+                if (n.isEmpty || d.isEmpty) return;
+                try {
+                  await ctx.read<AuthController>().api.post('/dispatch/trucks', {'number': n, 'destination': d});
+                  if (ctx.mounted) Navigator.pop(ctx, true);
+                } catch (e) {
+                  if (ctx.mounted) showErr(ctx, e);
+                }
+              },
+              child: Text(tr('Save')),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (saved == true) _reload();
+  }
+
+  Future<void> _remove(Map<String, dynamic> t) async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('${tr('Delete')} ${t['number']}?'),
+        content: Text(tr('The truck will no longer appear in the dispatch dropdown.')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('Cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('Delete'))),
+        ],
+      ),
+    );
+    if (yes != true) return;
+    try {
+      await context.read<AuthController>().api.delete('/dispatch/trucks/${t['id']}');
+      _reload();
+    } catch (e) {
+      if (mounted) showErr(context, e);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.hasError) return ErrorState(snap.error!, onRetry: _reload);
+        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        final trucks = snap.data!;
+        return ListView(padding: const EdgeInsets.all(20), children: [
+          if (!widget.readOnly)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: FilledButton.icon(
+                onPressed: _add,
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: Text(tr('Add Truck')),
+              ),
+            ),
+          const SizedBox(height: 16),
+          SectionCard(
+            title: 'Truck Master (destination-wise)',
+            child: trucks.isEmpty
+                ? EmptyState(tr('No trucks yet — add each truck with its destination'), icon: Icons.local_shipping_outlined)
+                : AppDataTable(
+                    columns: ['Truck', 'Destination', if (!widget.readOnly) ''],
+                    rows: [
+                      for (final t in trucks)
+                        [
+                          Text('${t['number']}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                          '${t['destination']}',
+                          if (!widget.readOnly)
+                            IconButton(
+                              tooltip: 'Remove truck',
+                              icon: Icon(Icons.delete_outline_rounded, size: 18, color: Theme.of(context).colorScheme.error),
+                              onPressed: () => _remove(t),
+                            ),
+                        ],
+                    ],
+                  ),
           ),
         ]);
       },

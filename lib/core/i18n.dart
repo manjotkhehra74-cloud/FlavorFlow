@@ -48,6 +48,13 @@ class L10n extends ChangeNotifier {
 
   static const Map<String, Map<String, String>> _tr = {
     'pa': {
+      'Trucks': 'ਟਰੱਕ',
+      'Add Truck': 'ਟਰੱਕ ਜੋੜੋ',
+      'Other / new truck…': 'ਹੋਰ / ਨਵਾਂ ਟਰੱਕ…',
+      'Truck Master (destination-wise)': 'ਟਰੱਕ ਮਾਸਟਰ (ਮੰਜ਼ਿਲ ਮੁਤਾਬਕ)',
+      'No trucks yet — add each truck with its destination': 'ਹਾਲੇ ਕੋਈ ਟਰੱਕ ਨਹੀਂ — ਹਰ ਟਰੱਕ ਓਸਦੀ ਮੰਜ਼ਿਲ ਨਾਲ ਜੋੜੋ',
+      'The truck will no longer appear in the dispatch dropdown.': 'ਟਰੱਕ ਡਿਸਪੈਚ ਡ੍ਰੌਪਡਾਊਨ ਵਿੱਚ ਹੋਰ ਨਹੀਂ ਦਿਖੇਗਾ।',
+
       'Add material': 'ਸਮੱਗਰੀ ਜੋੜੋ',
       'Amounts are as per recipe — type in any box to give that material a specific consumption instead. 0 = skip.': 'ਮਾਤਰਾ ਰੈਸਿਪੀ ਮੁਤਾਬਕ ਹੈ — ਕਿਸੇ ਵੀ ਬਾਕਸ ਵਿੱਚ ਲਿਖ ਕੇ ਓਸ ਸਮੱਗਰੀ ਦੀ ਖਾਸ ਖਪਤ ਦਿਓ। 0 = ਛੱਡੋ।',
       'Water is not tracked — only listed raw materials are consumed.': 'ਪਾਣੀ ਨਹੀਂ ਗਿਣਿਆ ਜਾਂਦਾ — ਸਿਰਫ਼ ਸੂਚੀਬੱਧ ਕੱਚਾ ਮਾਲ ਖਪਤ ਹੁੰਦਾ ਹੈ।',
@@ -408,6 +415,13 @@ class L10n extends ChangeNotifier {
       'Ledger': 'ਖਾਤਾ',
     },
     'hi': {
+      'Trucks': 'ट्रक',
+      'Add Truck': 'ट्रक जोड़ें',
+      'Other / new truck…': 'अन्य / नया ट्रक…',
+      'Truck Master (destination-wise)': 'ट्रक मास्टर (मंज़िल अनुसार)',
+      'No trucks yet — add each truck with its destination': 'अभी कोई ट्रक नहीं — हर ट्रक उसकी मंज़िल के साथ जोड़ें',
+      'The truck will no longer appear in the dispatch dropdown.': 'ट्रक डिस्पैच ड्रॉपडाउन में और नहीं दिखेगा।',
+
       'Add material': 'सामग्री जोड़ें',
       'Amounts are as per recipe — type in any box to give that material a specific consumption instead. 0 = skip.': 'मात्रा रेसिपी अनुसार है — किसी भी बॉक्स में लिखकर उस सामग्री की खास खपत दें। 0 = छोड़ें।',
       'Water is not tracked — only listed raw materials are consumed.': 'पानी नहीं गिना जाता — केवल सूचीबद्ध कच्चा माल खपत होता है।',
@@ -768,6 +782,13 @@ class L10n extends ChangeNotifier {
       'Ledger': 'खाता',
     },
   'gu': {
+      'Trucks': 'ટ્રક',
+      'Add Truck': 'ટ્રક ઉમેરો',
+      'Other / new truck…': 'અન્ય / નવો ટ્રક…',
+      'Truck Master (destination-wise)': 'ટ્રક માસ્ટર (મંઝિલ મુજબ)',
+      'No trucks yet — add each truck with its destination': 'હજી કોઈ ટ્રક નથી — દરેક ટ્રક તેની મંઝિલ સાથે ઉમેરો',
+      'The truck will no longer appear in the dispatch dropdown.': 'ટ્રક ડિસ્પેચ ડ્રોપડાઉનમાં હવે નહીં દેખાય.',
+
       'Add material': 'સામગ્રી ઉમેરો',
       'Amounts are as per recipe — type in any box to give that material a specific consumption instead. 0 = skip.': 'જથ્થો રેસિપી પ્રમાણે છે — કોઈપણ બોક્સમાં લખી ખાસ વપરાશ આપો. 0 = છોડો.',
       'Water is not tracked — only listed raw materials are consumed.': 'પાણી ગણાતું નથી — માત્ર યાદીબદ્ધ કાચો માલ વપરાય છે.',
@@ -1114,6 +1135,13 @@ class L10n extends ChangeNotifier {
       'Refresh permissions': 'પરવાનગીઓ તાજી કરો',
     },
     'mr': {
+      'Trucks': 'ट्रक',
+      'Add Truck': 'ट्रक जोडा',
+      'Other / new truck…': 'इतर / नवीन ट्रक…',
+      'Truck Master (destination-wise)': 'ट्रक मास्टर (गंतव्यानुसार)',
+      'No trucks yet — add each truck with its destination': 'अजून ट्रक नाही — प्रत्येक ट्रक त्याच्या गंतव्यासह जोडा',
+      'The truck will no longer appear in the dispatch dropdown.': 'ट्रक डिस्पॅच ड्रॉपडाउनमध्ये आता दिसणार नाही.',
+
       'Add material': 'सामग्री जोडा',
       'Amounts are as per recipe — type in any box to give that material a specific consumption instead. 0 = skip.': 'प्रमाण रेसिपीनुसार आहे — कोणत्याही बॉक्समध्ये लिहून खास वापर द्या. 0 = वगळा.',
       'Water is not tracked — only listed raw materials are consumed.': 'पाणी मोजले जात नाही — फक्त सूचीबद्ध कच्चा माल वापरला जातो.',
@@ -1459,6 +1487,13 @@ class L10n extends ChangeNotifier {
       'Refresh permissions': 'परवानग्या ताज्या करा',
     },
     'bn': {
+      'Trucks': 'ট্রাক',
+      'Add Truck': 'ট্রাক যোগ করুন',
+      'Other / new truck…': 'অন্যান্য / নতুন ট্রাক…',
+      'Truck Master (destination-wise)': 'ট্রাক মাস্টার (গন্তব্য অনুযায়ী)',
+      'No trucks yet — add each truck with its destination': 'এখনো কোনো ট্রাক নেই — প্রতিটি ট্রাক গন্তব্যসহ যোগ করুন',
+      'The truck will no longer appear in the dispatch dropdown.': 'ট্রাকটি আর ডিসপ্যাচ ড্রপডাউনে দেখা যাবে না।',
+
       'Add material': 'উপাদান যোগ করুন',
       'Amounts are as per recipe — type in any box to give that material a specific consumption instead. 0 = skip.': 'পরিমাণ রেসিপি অনুযায়ী — যেকোনো বাক্সে লিখে নির্দিষ্ট ব্যবহার দিন। 0 = বাদ।',
       'Water is not tracked — only listed raw materials are consumed.': 'পানি গণনা হয় না — শুধু তালিকাভুক্ত কাঁচামাল ব্যবহৃত হয়।',
@@ -1804,6 +1839,13 @@ class L10n extends ChangeNotifier {
       'Refresh permissions': 'অনুমতি রিফ্রেশ',
     },
     'ta': {
+      'Trucks': 'டிரக்குகள்',
+      'Add Truck': 'டிரக் சேர்',
+      'Other / new truck…': 'மற்றவை / புதிய டிரக்…',
+      'Truck Master (destination-wise)': 'டிரக் மாஸ்டர் (இடம் வாரியாக)',
+      'No trucks yet — add each truck with its destination': 'இன்னும் டிரக் இல்லை — ஒவ்வொன்றையும் இடத்துடன் சேர்க்கவும்',
+      'The truck will no longer appear in the dispatch dropdown.': 'டிரக் இனி டிஸ்பாட்ச் பட்டியலில் தெரியாது.',
+
       'Add material': 'பொருள் சேர்',
       'Amounts are as per recipe — type in any box to give that material a specific consumption instead. 0 = skip.': 'அளவுகள் ரெசிபி படி — எந்த பெட்டியிலும் எழுதி குறிப்பிட்ட நுகர்வு தரவும். 0 = தவிர்.',
       'Water is not tracked — only listed raw materials are consumed.': 'நீர் கணக்கிடப்படாது — பட்டியலிட்ட மூலப்பொருட்கள் மட்டும்.',
@@ -2149,6 +2191,13 @@ class L10n extends ChangeNotifier {
       'Refresh permissions': 'அனுமதிகள் புதுப்பி',
     },
     'te': {
+      'Trucks': 'ట్రక్కులు',
+      'Add Truck': 'ట్రక్ జోడించండి',
+      'Other / new truck…': 'ఇతర / కొత్త ట్రక్…',
+      'Truck Master (destination-wise)': 'ట్రక్ మాస్టర్ (గమ్యం వారీగా)',
+      'No trucks yet — add each truck with its destination': 'ఇంకా ట్రక్కులు లేవు — ప్రతి ట్రక్ దాని గమ్యంతో జోడించండి',
+      'The truck will no longer appear in the dispatch dropdown.': 'ట్రక్ ఇక డిస్పాచ్ డ్రాప్‌డౌన్‌లో కనిపించదు.',
+
       'Add material': 'మెటీరియల్ జోడించండి',
       'Amounts are as per recipe — type in any box to give that material a specific consumption instead. 0 = skip.': 'పరిమాణాలు రెసిపీ ప్రకారం — ఏ బాక్స్‌లోనైనా రాసి ప్రత్యేక వినియోగం ఇవ్వండి. 0 = దాటవేయి.',
       'Water is not tracked — only listed raw materials are consumed.': 'నీరు లెక్కించబడదు — జాబితా చేసిన ముడి పదార్థాలే వాడబడతాయి.',
