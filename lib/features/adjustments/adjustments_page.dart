@@ -166,7 +166,7 @@ class _AdjustmentFormDialogState extends State<AdjustmentFormDialog> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return AlertDialog(
-      title: const Text('Request Stock Adjustment'),
+      title: Text(tr('Request Stock Adjustment')),
       content: SizedBox(
         width: 420,
         child: products.isEmpty
@@ -174,7 +174,7 @@ class _AdjustmentFormDialogState extends State<AdjustmentFormDialog> {
             : Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
                 DropdownButtonFormField<int>(
                   initialValue: productId,
-                  decoration: const InputDecoration(labelText: 'Product *'),
+                  decoration: InputDecoration(labelText: tr('Product *')),
                   items: [for (final p in products) DropdownMenuItem(value: p['id'] as int, child: Text(p['name'] as String))],
                   onChanged: (v) => setState(() => productId = v),
                 ),
@@ -187,29 +187,29 @@ class _AdjustmentFormDialogState extends State<AdjustmentFormDialog> {
                 const SizedBox(height: 14),
                 SegmentedButton<String>(
                   segments: const [
-                    ButtonSegment(value: 'IN', label: Text('Stock IN'), icon: Icon(Icons.south_west_rounded, size: 17)),
-                    ButtonSegment(value: 'OUT', label: Text('Stock OUT'), icon: Icon(Icons.north_east_rounded, size: 17)),
+                    ButtonSegment(value: 'IN', label: Text(tr('Stock IN')), icon: Icon(Icons.south_west_rounded, size: 17)),
+                    ButtonSegment(value: 'OUT', label: Text(tr('Stock OUT')), icon: Icon(Icons.north_east_rounded, size: 17)),
                   ],
                   selected: {type},
                   onSelectionChanged: (s) => setState(() => type = s.first),
                 ),
                 const SizedBox(height: 14),
-                TextField(controller: cb, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${U.carton} (${U.cb})')),
+                TextField(controller: cb, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('${U.carton} (${U.cb})'))),
                 const SizedBox(height: 12),
-                TextField(controller: reason, maxLines: 2, decoration: const InputDecoration(labelText: 'Reason *', hintText: 'e.g. Damaged cartons, QC sample, sales return…')),
+                TextField(controller: reason, maxLines: 2, decoration: InputDecoration(labelText: tr('Reason *'), hintText: 'e.g. Damaged cartons, QC sample, sales return…')),
                 if (!kIsWeb) ...[
                   const SizedBox(height: 12),
                   Row(children: [
                     OutlinedButton.icon(
                       onPressed: () => _pickPhoto(ImageSource.camera),
                       icon: const Icon(Icons.photo_camera_outlined, size: 18),
-                      label: const Text('Photo'),
+                      label: Text(tr('Photo')),
                     ),
                     const SizedBox(width: 8),
                     OutlinedButton.icon(
                       onPressed: () => _pickPhoto(ImageSource.gallery),
                       icon: const Icon(Icons.photo_library_outlined, size: 18),
-                      label: const Text('Gallery'),
+                      label: Text(tr('Gallery')),
                     ),
                     if (photo != null) ...[
                       const SizedBox(width: 10),

@@ -147,7 +147,7 @@ class _SettingsPageState extends State<SettingsPage> {
               final hour = await showDialog<int>(
                 context: context,
                 builder: (ctx) => SimpleDialog(
-                  title: const Text('Reminder time'),
+                  title: Text(tr('Reminder time')),
                   children: [
                     for (final h in [9, 12, 17, 18, 20])
                       SimpleDialogOption(
@@ -272,7 +272,7 @@ Future<String?> _askCode(BuildContext context, String message) async {
   final v = await showDialog<String>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('Authenticator code'),
+      title: Text(tr('Authenticator code')),
       content: Column(mainAxisSize: MainAxisSize.min, children: [
         Text(message, style: const TextStyle(fontSize: 13)),
         const SizedBox(height: 12),
@@ -325,7 +325,7 @@ class _TotpSetupDialogState extends State<_TotpSetupDialog> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return AlertDialog(
-      title: const Text('Set up 2FA'),
+      title: Text(tr('Set up 2FA')),
       content: SizedBox(
         width: 380,
         child: SingleChildScrollView(

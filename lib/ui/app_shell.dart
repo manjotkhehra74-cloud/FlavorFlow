@@ -162,7 +162,7 @@ class _TopBar extends StatelessWidget {
         onPressed: () => context.go('/notifications'),
         icon: Badge(
           isLabelVisible: unread > 0 && AppSettings.instance.showNotifBadge,
-          label: Text('$unread'),
+          label: Text(tr('$unread')),
           child: const Icon(Icons.notifications_outlined),
         ),
       );
@@ -480,7 +480,7 @@ class _CompanyProfileDialogState extends State<CompanyProfileDialog> {
   Widget build(BuildContext context) {
     final sub = Theme.of(context).colorScheme.onSurfaceVariant;
     return AlertDialog(
-      title: const Text('Company details'),
+      title: Text(tr('Company details')),
       content: SizedBox(
         width: 460,
         child: SingleChildScrollView(
@@ -488,11 +488,11 @@ class _CompanyProfileDialogState extends State<CompanyProfileDialog> {
             Text('Printed at the top of every exported PDF (packing slips, stock reports, registers).',
                 style: TextStyle(fontSize: 12.5, color: sub)),
             const SizedBox(height: 14),
-            TextField(controller: name, decoration: const InputDecoration(labelText: 'Company name *', hintText: 'e.g. G.D. Foods Mfg (I) Pvt. Ltd.')),
+            TextField(controller: name, decoration: InputDecoration(labelText: tr('Company name *'), hintText: 'e.g. G.D. Foods Mfg (I) Pvt. Ltd.')),
             const SizedBox(height: 12),
-            TextField(controller: address, decoration: const InputDecoration(labelText: 'Address', hintText: 'e.g. Khadoor Sahib, Punjab')),
+            TextField(controller: address, decoration: InputDecoration(labelText: tr('Address'), hintText: 'e.g. Khadoor Sahib, Punjab')),
             const SizedBox(height: 12),
-            TextField(controller: tax, decoration: const InputDecoration(labelText: 'GSTIN / tax & contact line', hintText: 'e.g. GSTIN 03XXXXX · info@company.in')),
+            TextField(controller: tax, decoration: InputDecoration(labelText: tr('GSTIN / tax & contact line'), hintText: 'e.g. GSTIN 03XXXXX · info@company.in')),
             const SizedBox(height: 18),
             Text('INDUSTRY & UNIT NAMES', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, letterSpacing: 1.1, color: sub)),
             const SizedBox(height: 4),
@@ -544,7 +544,7 @@ class LanguageDialog extends StatelessWidget {
       content: DropdownButtonFormField<String>(
         initialValue: l10n.code,
         isExpanded: true,
-        decoration: const InputDecoration(labelText: 'Language / ਭਾਸ਼ਾ / भाषा'),
+        decoration: InputDecoration(labelText: tr('Language / ਭਾਸ਼ਾ / भाषा')),
         items: [
           for (final lang in L10n.languages)
             DropdownMenuItem(value: lang[0], child: Text(lang[1])),

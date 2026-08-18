@@ -182,24 +182,24 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
       content: SizedBox(
         width: 460,
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          TextField(controller: name, decoration: const InputDecoration(labelText: 'Product name *')),
+          TextField(controller: name, decoration: InputDecoration(labelText: tr('Product name *'))),
           const SizedBox(height: 12),
           Row(children: [
-            Expanded(child: TextField(controller: wcb, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: 'Weight per ${U.cb} (kg) *'))),
+            Expanded(child: TextField(controller: wcb, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('Weight per ${U.cb} (kg) *')))),
             const SizedBox(width: 12),
-            Expanded(child: TextField(controller: wncb, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: 'Weight w/o ${U.cb} (kg) *'))),
+            Expanded(child: TextField(controller: wncb, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('Weight w/o ${U.cb} (kg) *')))),
           ]),
           const SizedBox(height: 12),
           Row(children: [
-            Expanded(child: TextField(controller: bpc, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${U.piece} per ${U.cb} *'))),
+            Expanded(child: TextField(controller: bpc, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('${U.piece} per ${U.cb} *')))),
             const SizedBox(width: 12),
-            Expanded(child: TextField(controller: minStock, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: 'Min stock (${U.cb})'))),
+            Expanded(child: TextField(controller: minStock, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('Min stock (${U.cb})')))),
           ]),
           const SizedBox(height: 12),
           Row(children: [
-            Expanded(child: TextField(controller: bpt, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${U.piece} per ${U.trayLc} (0 = no ${U.trayLc})'))),
+            Expanded(child: TextField(controller: bpt, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('${U.piece} per ${U.trayLc} (0 = no ${U.trayLc})')))),
             const SizedBox(width: 12),
-            Expanded(child: TextField(controller: trayWt, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${U.tray} weight (kg)'))),
+            Expanded(child: TextField(controller: trayWt, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('${U.tray} weight (kg)')))),
           ]),
           const SizedBox(height: 8),
           Text('Only Soya 740gm, Vinegar 610ml (white & brown), Soya 1.3kg and Vinegar 1.0 are tray-packed. Leave tray fields empty for others.',

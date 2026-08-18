@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/format.dart';
 import '../../core/theme.dart';
+import '../../core/i18n.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 
@@ -63,14 +64,14 @@ class _ProductionDetailPageState extends State<ProductionDetailPage> {
                   } catch (e) { if (context.mounted) showErr(context, e); }
                 },
                 icon: const Icon(Icons.play_arrow_rounded, size: 18),
-                label: const Text('Start Batch'),
+                label: Text(tr('Start Batch')),
               ),
             if (auth.can('production.execute') && b['status'] == 'IN_PROGRESS')
               FilledButton.icon(
                 style: FilledButton.styleFrom(backgroundColor: AppColors.green),
                 onPressed: _back,
                 icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
-                label: const Text('Complete from board'),
+                label: Text(tr('Complete from board')),
               ),
           ]),
           const SizedBox(height: 18),

@@ -103,7 +103,7 @@ class _InventoryPageState extends State<InventoryPage> {
           const SizedBox(height: 16),
           Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
             ChoiceChip(
-              label: const Text('All products'),
+              label: Text(tr('All products')),
               selected: !_lowOnly,
               onSelected: (_) => setState(() { _lowOnly = false; _future = _load(); }),
             ),
@@ -254,7 +254,7 @@ class _BatchStockSectionState extends State<_BatchStockSection> {
             OutlinedButton.icon(
               onPressed: _exporting ? null : () => _export(data, pdf: true),
               icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
-              label: const Text('PDF'),
+              label: Text(tr('PDF')),
               style: OutlinedButton.styleFrom(
                 foregroundColor: const Color(0xFFB91C1C),
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -264,7 +264,7 @@ class _BatchStockSectionState extends State<_BatchStockSection> {
             OutlinedButton.icon(
               onPressed: _exporting ? null : () => _export(data, pdf: false),
               icon: const Icon(Icons.table_view_outlined, size: 16),
-              label: const Text('Excel'),
+              label: Text(tr('Excel')),
               style: OutlinedButton.styleFrom(
                 foregroundColor: const Color(0xFF047857),
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -337,14 +337,14 @@ class _SetStockDialogState extends State<SetStockDialog> {
               style: TextStyle(fontSize: 12.5, color: Theme.of(context).colorScheme.onSurfaceVariant)),
           const SizedBox(height: 14),
           Row(children: [
-            Expanded(child: TextField(controller: cb, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${U.carton} (${U.cb}) *'))),
+            Expanded(child: TextField(controller: cb, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('${U.carton} (${U.cb}) *')))),
             if (_hasTray) ...[
               const SizedBox(width: 12),
               Expanded(child: TextField(controller: trays, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: U.tray))),
             ],
           ]),
           const SizedBox(height: 12),
-          TextField(controller: note, decoration: const InputDecoration(labelText: 'Note (optional)', hintText: 'e.g. Opening stock 04 Aug 2026')),
+          TextField(controller: note, decoration: InputDecoration(labelText: tr('Note (optional)'), hintText: 'e.g. Opening stock 04 Aug 2026')),
         ]),
       ),
       actions: [
@@ -408,7 +408,7 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Receive Stock'),
+      title: Text(tr('Receive Stock')),
       content: SizedBox(
         width: 400,
         child: loadError != null
@@ -418,13 +418,13 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                 : Column(mainAxisSize: MainAxisSize.min, children: [
                     DropdownButtonFormField<int>(
                       initialValue: productId,
-                      decoration: const InputDecoration(labelText: 'Product *'),
+                      decoration: InputDecoration(labelText: tr('Product *')),
                       items: [for (final p in products) DropdownMenuItem(value: p['id'] as int, child: Text(p['name'] as String))],
                       onChanged: (v) => setState(() => productId = v),
                     ),
                     const SizedBox(height: 12),
                     Row(children: [
-                      Expanded(child: TextField(controller: cb, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${U.carton} (${U.cb})'))),
+                      Expanded(child: TextField(controller: cb, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('${U.carton} (${U.cb})')))),
                       if (_hasTray) ...[
                         const SizedBox(width: 12),
                         Expanded(child: TextField(controller: trays, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: U.tray))),
@@ -440,7 +440,7 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                         ),
                       ),
                     const SizedBox(height: 12),
-                    TextField(controller: note, decoration: const InputDecoration(labelText: 'Note (optional)')),
+                    TextField(controller: note, decoration: InputDecoration(labelText: tr('Note (optional)'))),
                   ]),
       ),
       actions: [

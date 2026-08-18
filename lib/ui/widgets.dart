@@ -289,7 +289,7 @@ class ErrorState extends StatelessWidget {
             child: Text('$error', textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant)),
           ),
           const SizedBox(height: 14),
-          OutlinedButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh_rounded, size: 18), label: const Text('Retry')),
+          OutlinedButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh_rounded, size: 18), label: Text(tr('Retry'))),
         ]),
       ),
     );

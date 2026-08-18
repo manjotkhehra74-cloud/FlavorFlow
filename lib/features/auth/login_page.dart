@@ -66,7 +66,7 @@ class _LoginPageState extends State<LoginPage> {
             context: context,
             barrierDismissible: false,
             builder: (ctx) => AlertDialog(
-              title: const Text('Register biometric login?'),
+              title: Text(tr('Register biometric login?')),
               content: const Text(
                   'Sign in next time with just your fingerprint / face / device PIN — no password typing.\n\nStored only in this phone\'s encrypted keystore.'),
               actions: [
@@ -74,7 +74,7 @@ class _LoginPageState extends State<LoginPage> {
                 FilledButton.icon(
                   onPressed: () => Navigator.pop(ctx, true),
                   icon: const Icon(Icons.fingerprint_rounded, size: 19),
-                  label: const Text('Register'),
+                  label: Text(tr('Register')),
                 ),
               ],
             ),
@@ -124,7 +124,7 @@ class _LoginPageState extends State<LoginPage> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        title: const Text('Two-factor code'),
+        title: Text(tr('Two-factor code')),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           const Text('Enter the 6-digit code from your authenticator app (Google/Microsoft Authenticator).', style: TextStyle(fontSize: 13)),
           const SizedBox(height: 12),
@@ -338,7 +338,7 @@ class _LoginPageState extends State<LoginPage> {
                   onPressed: busy ? null : _bioLogin,
                   style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 13)),
                   icon: const Icon(Icons.fingerprint_rounded, size: 22),
-                  label: const Text('Login with biometrics'),
+                  label: Text(tr('Login with biometrics')),
                 ),
               ] else if (_bioAvailable) ...[
                 const SizedBox(height: 12),
@@ -346,7 +346,7 @@ class _LoginPageState extends State<LoginPage> {
                 TextButton.icon(
                   onPressed: busy ? null : _registerBiometrics,
                   icon: const Icon(Icons.fingerprint_rounded, size: 20),
-                  label: const Text('Register biometric login'),
+                  label: Text(tr('Register biometric login')),
                 ),
               ],
               const SizedBox(height: 26),
@@ -454,7 +454,7 @@ class _ServerDialogState extends State<_ServerDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('ERP Server Address'),
+      title: Text(tr('ERP Server Address')),
       content: SizedBox(
         width: 420,
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [

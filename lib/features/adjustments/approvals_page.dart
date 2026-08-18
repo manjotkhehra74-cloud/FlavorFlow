@@ -174,14 +174,14 @@ class _PendingList extends StatelessWidget {
                       style: OutlinedButton.styleFrom(foregroundColor: AppColors.red, side: const BorderSide(color: AppColors.red)),
                       onPressed: () => _reject(context, a, onDecided),
                       icon: const Icon(Icons.close_rounded, size: 18),
-                      label: const Text('Reject'),
+                      label: Text(tr('Reject')),
                     ),
                     const SizedBox(width: 10),
                     FilledButton.icon(
                       style: FilledButton.styleFrom(backgroundColor: AppColors.green),
                       onPressed: () => _approve(context, a, onDecided),
                       icon: const Icon(Icons.check_rounded, size: 18),
-                      label: const Text('Approve'),
+                      label: Text(tr('Approve')),
                     ),
                   ]),
                 ]),
@@ -203,7 +203,7 @@ Future<void> _approve(BuildContext context, Map<String, dynamic> a, VoidCallback
       content: SizedBox(width: 380, child: Column(mainAxisSize: MainAxisSize.min, children: [
         Text('${a['product_name']} — ${a['adj_type']} ${qtyInt(a['qty_cb'])} CB. Stock will be updated immediately.'),
         const SizedBox(height: 14),
-        TextField(controller: remarks, maxLines: 2, decoration: const InputDecoration(labelText: 'Remarks (optional)')),
+        TextField(controller: remarks, maxLines: 2, decoration: InputDecoration(labelText: tr('Remarks (optional)'))),
       ])),
       actions: [
         TextButton(onPressed: () => Navigator.pop(dialogCtx, false), child: const Text('Cancel')),
@@ -218,7 +218,7 @@ Future<void> _approve(BuildContext context, Map<String, dynamic> a, VoidCallback
             }
           },
           icon: const Icon(Icons.check_rounded, size: 18),
-          label: const Text('Approve'),
+          label: Text(tr('Approve')),
         ),
       ],
     ),
@@ -236,9 +236,9 @@ Future<void> _reject(BuildContext context, Map<String, dynamic> a, VoidCallback 
       content: SizedBox(width: 380, child: Column(mainAxisSize: MainAxisSize.min, children: [
         Text('${a['product_name']} — ${a['adj_type']} ${qtyInt(a['qty_cb'])} CB. The stock will NOT change and the requester will be notified.'),
         const SizedBox(height: 14),
-        TextField(controller: reason, maxLines: 2, decoration: const InputDecoration(labelText: 'Reason for rejection *')),
+        TextField(controller: reason, maxLines: 2, decoration: InputDecoration(labelText: tr('Reason for rejection *'))),
         const SizedBox(height: 12),
-        TextField(controller: remarks, maxLines: 2, decoration: const InputDecoration(labelText: 'Remarks (optional)')),
+        TextField(controller: remarks, maxLines: 2, decoration: InputDecoration(labelText: tr('Remarks (optional)'))),
       ])),
       actions: [
         TextButton(onPressed: () => Navigator.pop(dialogCtx, false), child: const Text('Cancel')),
@@ -258,7 +258,7 @@ Future<void> _reject(BuildContext context, Map<String, dynamic> a, VoidCallback 
             }
           },
           icon: const Icon(Icons.close_rounded, size: 18),
-          label: const Text('Reject'),
+          label: Text(tr('Reject')),
         ),
       ],
     ),

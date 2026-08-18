@@ -119,7 +119,7 @@ class _LinesEditor extends StatelessWidget {
                 child: DropdownButtonFormField<int>(
                   initialValue: lines[i].productId,
                   isExpanded: true,
-                  decoration: InputDecoration(labelText: 'Product ${i + 1} *'),
+                  decoration: InputDecoration(labelText: tr('Product ${i + 1} *')),
                   items: [for (final p in products) DropdownMenuItem(value: p['id'] as int, child: Text(p['name'] as String, overflow: TextOverflow.ellipsis))],
                   onChanged: (v) { lines[i].productId = v; onChanged(); },
                 ),
@@ -360,7 +360,7 @@ class _DestinationField extends StatelessWidget {
         TextField(
           controller: otherCtl,
           textCapitalization: TextCapitalization.characters,
-          decoration: const InputDecoration(labelText: 'Destination name *', hintText: 'e.g. LUDHIANA'),
+          decoration: InputDecoration(labelText: tr('Destination name *'), hintText: 'e.g. LUDHIANA'),
           onChanged: onChanged,
         ),
       ],
@@ -580,7 +580,7 @@ class _CalculatorTabState extends State<_CalculatorTab> with _CalcMixin {
         final wide = c.maxWidth > 900;
         final form = SectionCard(title: 'Truck Loading Calculator', child: Column(children: [
           Row(children: [
-            Expanded(child: TextField(controller: truck, textCapitalization: TextCapitalization.characters, decoration: const InputDecoration(labelText: 'Truck number', hintText: 'PB-08-AB-1234'))),
+            Expanded(child: TextField(controller: truck, textCapitalization: TextCapitalization.characters, decoration: InputDecoration(labelText: tr('Truck number'), hintText: 'PB-08-AB-1234'))),
             const SizedBox(width: 12),
             Expanded(child: _DateField(date: date, onPick: (d) => setState(() => date = d))),
           ]),

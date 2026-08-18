@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/download.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
+import '../../core/i18n.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 import '../reports/report_pdf.dart';
@@ -52,7 +53,7 @@ class _LossPageState extends State<LossPage> {
           controller: ctl,
           autofocus: true,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(labelText: 'Value'),
+          decoration: InputDecoration(labelText: tr('Value')),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
@@ -172,13 +173,13 @@ class _LossPageState extends State<LossPage> {
             OutlinedButton.icon(
               onPressed: _busy ? null : () => _export(data, pdf: true),
               icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
-              label: const Text('Export PDF'),
+              label: Text(tr('Export PDF')),
             ),
             if (canEdit)
               FilledButton.icon(
                 onPressed: _busy ? null : () => _closeMonth(data),
                 icon: const Icon(Icons.lock_clock_rounded, size: 17),
-                label: const Text('Close month'),
+                label: Text(tr('Close month')),
               ),
           ]),
           const SizedBox(height: 12),

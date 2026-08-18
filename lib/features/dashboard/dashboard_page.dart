@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
+import '../../core/i18n.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 
@@ -78,7 +79,7 @@ class _DashboardPageState extends State<DashboardPage> {
               : TextButton.icon(
                   onPressed: () => context.go(route),
                   icon: const Icon(Icons.open_in_new_rounded, size: 16),
-                  label: const Text('Open'),
+                  label: Text(tr('Open')),
                 ),
           child: _ServerTable(w),
         );

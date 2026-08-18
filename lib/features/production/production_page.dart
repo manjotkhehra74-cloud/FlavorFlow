@@ -113,13 +113,13 @@ class _ProductionPageState extends State<ProductionPage> {
                               TextButton.icon(
                                 onPressed: () => _start(context, b),
                                 icon: const Icon(Icons.play_arrow_rounded, size: 18),
-                                label: const Text('Start'),
+                                label: Text(tr('Start')),
                               ),
                             if (canExecute && b['status'] == 'IN_PROGRESS')
                               TextButton.icon(
                                 onPressed: () => _complete(context, b),
                                 icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
-                                label: const Text('Complete'),
+                                label: Text(tr('Complete')),
                               ),
                           ]),
                         ],
@@ -187,10 +187,10 @@ class _ProductionPageState extends State<ProductionPage> {
             Text('${b['product_name']} · planned ${qtyInt(b['planned_cb'])} ${U.cb}'),
             const SizedBox(height: 12),
             Row(children: [
-              Expanded(child: TextField(controller: qtyCtl, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: 'Produced ${U.carton.toLowerCase()} (${U.cb})'))),
+              Expanded(child: TextField(controller: qtyCtl, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('Produced ${U.carton.toLowerCase()} (${U.cb})')))),
               if (hasTray) ...[
                 const SizedBox(width: 12),
-                Expanded(child: TextField(controller: trayCtl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Produced trays'))),
+                Expanded(child: TextField(controller: trayCtl, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('Produced trays')))),
               ],
             ]),
             const SizedBox(height: 8),
@@ -310,13 +310,13 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
                 const SizedBox(height: 12),
                 if (completed)
                   InputDecorator(
-                    decoration: const InputDecoration(labelText: 'Product'),
+                    decoration: InputDecoration(labelText: tr('Product')),
                     child: Text('${widget.batch!['product_name']}', style: const TextStyle(fontWeight: FontWeight.w600)),
                   )
                 else
                   DropdownButtonFormField<int>(
                     initialValue: productId,
-                    decoration: const InputDecoration(labelText: 'Product *'),
+                    decoration: InputDecoration(labelText: tr('Product *')),
                     items: [for (final p in products) DropdownMenuItem(value: p['id'] as int, child: Text(p['name'] as String))],
                     onChanged: (v) => setState(() => productId = v),
                   ),
@@ -331,7 +331,7 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
                   ),
                   if (completed && hasTray) ...[
                     const SizedBox(width: 12),
-                    Expanded(child: TextField(controller: trays, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Produced trays'))),
+                    Expanded(child: TextField(controller: trays, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('Produced trays')))),
                   ],
                 ]),
                 if (completed)
@@ -353,14 +353,14 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
                         if (d != null) setState(() => planned = d);
                       },
                       child: InputDecorator(
-                        decoration: const InputDecoration(labelText: 'Planned date *'),
+                        decoration: InputDecoration(labelText: tr('Planned date *')),
                         child: Text(fmtDateWithDay(_plannedYmd)),
                       ),
                     ),
                   ),
                 ]),
                 const SizedBox(height: 12),
-                TextField(controller: remarks, decoration: const InputDecoration(labelText: 'Remarks (optional)')),
+                TextField(controller: remarks, decoration: InputDecoration(labelText: tr('Remarks (optional)'))),
               ]),
       ),
       actions: [

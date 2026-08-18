@@ -72,7 +72,7 @@ class _UsersPageState extends State<UsersPage> {
       ok = await showDialog<bool>(
             context: context,
             builder: (ctx) => AlertDialog(
-              title: const Text('Delete user permanently?'),
+              title: Text(tr('Delete user permanently?')),
               content: Text('$name ($email) will be permanently deleted.\n\nReports and audit entries will be kept with name shown as "[deleted]".'),
               actions: [
                 TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
@@ -281,13 +281,13 @@ class _UserFormDialogState extends State<UserFormDialog> {
         child: SizedBox(
           width: 420,
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: name, decoration: const InputDecoration(labelText: 'Full name *')),
+          TextField(controller: name, decoration: InputDecoration(labelText: tr('Full name *'))),
           const SizedBox(height: 12),
-          TextField(controller: email, enabled: !editing, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email *')),
+          TextField(controller: email, enabled: !editing, keyboardType: TextInputType.emailAddress, decoration: InputDecoration(labelText: tr('Email *'))),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             initialValue: role,
-            decoration: const InputDecoration(labelText: 'Role *'),
+            decoration: InputDecoration(labelText: tr('Role *')),
             items: [
               for (final r in widget.roles)
                 DropdownMenuItem(value: r['id'] as String, child: Text(r['label'] as String)),
@@ -376,8 +376,8 @@ class _UserFormDialogState extends State<UserFormDialog> {
             const SizedBox(height: 8),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Account active'),
-              subtitle: const Text('Deactivated users lose access immediately'),
+              title: Text(tr('Account active')),
+              subtitle: Text(tr('Deactivated users lose access immediately')),
               value: active,
               onChanged: (v) => setState(() => active = v),
             ),

@@ -84,7 +84,7 @@ class _SetupPageState extends State<SetupPage> {
                 DropdownButtonFormField<String>(
                   initialValue: language,
                   isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Language / ਭਾਸ਼ਾ / भाषा *'),
+                  decoration: InputDecoration(labelText: tr('Language / ਭਾਸ਼ਾ / भाषा *')),
                   items: [
                     for (final lang in L10n.languages)
                       DropdownMenuItem(value: lang[0], child: Text(lang[1])),
@@ -111,7 +111,7 @@ class _SetupPageState extends State<SetupPage> {
                 DropdownButtonFormField<String>(
                   initialValue: industry,
                   isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Industry *'),
+                  decoration: InputDecoration(labelText: tr('Industry *')),
                   hint: const Text('Select your industry'),
                   items: [
                     for (final r in CompanyProfile.industries)

@@ -264,12 +264,12 @@ class _StockTabState extends State<_StockTab> {
                 OutlinedButton.icon(
                   onPressed: _exporting ? null : () => _exportRaw(all, pdf: true),
                   icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
-                  label: const Text('Export PDF'),
+                  label: Text(tr('Export PDF')),
                 ),
                 OutlinedButton.icon(
                   onPressed: _exporting ? null : () => _exportRaw(all, pdf: false),
                   icon: const Icon(Icons.table_view_outlined, size: 18),
-                  label: const Text('Export Excel'),
+                  label: Text(tr('Export Excel')),
                 ),
               ],
               OutlinedButton.icon(
@@ -552,7 +552,7 @@ class _TxnDialogState extends State<_TxnDialog> {
                     DropdownButtonFormField<int>(
                       initialValue: materialId,
                       isExpanded: true,
-                      decoration: const InputDecoration(labelText: 'Material *'),
+                      decoration: InputDecoration(labelText: tr('Material *')),
                       // Raw screen: category suffix skipped so the full name fits.
                       items: [for (final m in materials) DropdownMenuItem(value: m['id'] as int, child: Text(widget.rawOnly ? '${m['name']}' : '${m['name']} (${m['category']})', overflow: TextOverflow.ellipsis))],
                       onChanged: (v) => setState(() => materialId = v),
@@ -562,7 +562,7 @@ class _TxnDialogState extends State<_TxnDialog> {
                       DropdownButtonFormField<int>(
                         initialValue: productId,
                         isExpanded: true,
-                        decoration: const InputDecoration(labelText: 'For product * (Loss% sheet)'),
+                        decoration: InputDecoration(labelText: tr('For product * (Loss% sheet)')),
                         items: [for (final p in products) DropdownMenuItem(value: p['id'] as int, child: Text(p['name'] as String, overflow: TextOverflow.ellipsis))],
                         onChanged: (v) => setState(() => productId = v),
                       ),
@@ -574,14 +574,14 @@ class _TxnDialogState extends State<_TxnDialog> {
                             style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12.5)),
                       ),
                     const SizedBox(height: 12),
-                    TextField(controller: qty, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: 'Quantity (${_material?['unit'] ?? 'pcs'}) *')),
+                    TextField(controller: qty, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('Quantity (${_material?[')unit'] ?? 'pcs'}) *')),
                     const SizedBox(height: 12),
                     if (isReceive)
-                      TextField(controller: reference, decoration: const InputDecoration(labelText: 'Reference (PO no. / supplier)', hintText: 'e.g. PO-1187 / Kapoor Plastics'))
+                      TextField(controller: reference, decoration: InputDecoration(labelText: tr('Reference (PO no. / supplier)'), hintText: 'e.g. PO-1187 / Kapoor Plastics'))
                     else
-                      TextField(controller: reference, decoration: const InputDecoration(labelText: 'Reference (batch / purpose)', hintText: 'e.g. B-2603 / QC samples')),
+                      TextField(controller: reference, decoration: InputDecoration(labelText: tr('Reference (batch / purpose)'), hintText: 'e.g. B-2603 / QC samples')),
                     const SizedBox(height: 12),
-                    TextField(controller: remark, decoration: const InputDecoration(labelText: 'Remark (optional)')),
+                    TextField(controller: remark, decoration: InputDecoration(labelText: tr('Remark (optional)'))),
                   ]),
       ),
       actions: [
@@ -645,19 +645,19 @@ class _MaterialFormDialogState extends State<_MaterialFormDialog> {
               child: Text('Stock entered here replaces the current count (use for opening stock / corrections).',
                   style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
             ),
-          TextField(controller: name, decoration: const InputDecoration(labelText: 'Material name *', hintText: 'e.g. Cap Green 500ml')),
+          TextField(controller: name, decoration: InputDecoration(labelText: tr('Material name *'), hintText: 'e.g. Cap Green 500ml')),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             initialValue: category,
-            decoration: const InputDecoration(labelText: 'Category'),
+            decoration: InputDecoration(labelText: tr('Category')),
             items: [for (final c in categories) DropdownMenuItem(value: c, child: Text(c))],
             onChanged: (v) => setState(() => category = v ?? 'Other'),
           ),
           const SizedBox(height: 12),
           Row(children: [
-            Expanded(child: TextField(controller: stock, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Opening stock (pcs)'))),
+            Expanded(child: TextField(controller: stock, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('Opening stock (pcs)')))),
             const SizedBox(width: 12),
-            Expanded(child: TextField(controller: minStock, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Minimum stock'))),
+            Expanded(child: TextField(controller: minStock, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('Minimum stock')))),
           ]),
         ]),
       ),
@@ -763,7 +763,7 @@ class _RecipeConsumeDialogState extends State<_RecipeConsumeDialog> {
     final r = _recipe;
     final batches = _batches;
     return AlertDialog(
-      title: const Text('Recipe Consumption (Raw Material)'),
+      title: Text(tr('Recipe Consumption (Raw Material)')),
       content: SizedBox(
         width: 480,
         child: recipes.isEmpty
@@ -773,7 +773,7 @@ class _RecipeConsumeDialogState extends State<_RecipeConsumeDialog> {
                   DropdownButtonFormField<int>(
                     initialValue: recipeId,
                     isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Recipe *'),
+                    decoration: InputDecoration(labelText: tr('Recipe *')),
                     items: [
                       for (final rec in recipes)
                         DropdownMenuItem(value: rec['id'] as int, child: Text(rec['name'] as String, overflow: TextOverflow.ellipsis)),
@@ -795,7 +795,7 @@ class _RecipeConsumeDialogState extends State<_RecipeConsumeDialog> {
                     onChanged: (_) => setState(() {}),
                   ),
                   const SizedBox(height: 12),
-                  TextField(controller: remark, decoration: const InputDecoration(labelText: 'Remark', hintText: 'optional')),
+                  TextField(controller: remark, decoration: InputDecoration(labelText: tr('Remark'), hintText: 'optional')),
                   if (r != null && batches > 0) ...[
                     const SizedBox(height: 14),
                     Text('WILL CONSUME:', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, letterSpacing: 1.1, color: scheme.onSurfaceVariant)),
@@ -945,7 +945,7 @@ class _RecipeEditDialogState extends State<_RecipeEditDialog> {
     final scheme = Theme.of(context).colorScheme;
     final r = _recipe;
     return AlertDialog(
-      title: const Text('Edit Recipes'),
+      title: Text(tr('Edit Recipes')),
       content: SizedBox(
         width: 480,
         child: recipes.isEmpty
@@ -955,7 +955,7 @@ class _RecipeEditDialogState extends State<_RecipeEditDialog> {
                   DropdownButtonFormField<int>(
                     initialValue: recipeId,
                     isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Recipe *'),
+                    decoration: InputDecoration(labelText: tr('Recipe *')),
                     items: [
                       for (final rec in recipes)
                         DropdownMenuItem(value: rec['id'] as int, child: Text(rec['name'] as String, overflow: TextOverflow.ellipsis)),
@@ -966,7 +966,7 @@ class _RecipeEditDialogState extends State<_RecipeEditDialog> {
                   TextField(
                     controller: batchSize,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: InputDecoration(labelText: 'Batch size (${r?['batch_unit'] ?? 'kg'}) *'),
+                    decoration: InputDecoration(labelText: tr('Batch size (${r?[')batch_unit'] ?? 'kg'}) *'),
                   ),
                   if (r != null) ...[
                     const SizedBox(height: 14),
