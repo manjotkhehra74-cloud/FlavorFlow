@@ -28,8 +28,17 @@ class _ScanPageState extends State<ScanPage> {
   final MobileScannerController _ctl = MobileScannerController(
     detectionSpeed: DetectionSpeed.normal,
     facing: CameraFacing.back,
+    autoStart: false,
   );
   bool _done = false; // pop only once
+
+  @override
+  void initState() {
+    super.initState();
+    // mobile_scanner 6.x: a self-created controller must be started manually —
+    // without this the camera never initialises ("unexpected error").
+    _ctl.start();
+  }
 
   @override
   void dispose() {
@@ -73,8 +82,8 @@ class _ScanPageState extends State<ScanPage> {
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               const Icon(Icons.no_photography_outlined, color: Colors.white70, size: 42),
               const SizedBox(height: 10),
-              const Text('Camera nahi khul reha — permission check karo',
-                  textAlign: TextAlign.center, style: TextStyle(color: Colors.white70, fontSize: 13.5)),
+              Text('Camera not starting — ${error.errorCode.name}',
+                  textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontSize: 13.5)),
               const SizedBox(height: 12),
               FilledButton.icon(
                 onPressed: () async {
