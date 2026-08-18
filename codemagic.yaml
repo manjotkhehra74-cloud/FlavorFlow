@@ -1,4 +1,22 @@
 workflows:
+  web-build:
+    name: Website build (Flutter web)
+    max_build_duration: 30
+    environment:
+      flutter: stable
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Build web release
+        script: flutter build web --release --no-tree-shake-icons
+      - name: Zip website
+        script: cd build/web && zip -r ../../flavorflow-web.zip . && cd ../.. && ls -la flavorflow-web.zip
+    artifacts:
+      - flavorflow-web.zip
+    publishing:
+      email:
+        recipients: [manjotkhehra74@gmail.com]
+
   android-apk-any-network:
     name: Android APK (debug, quick staff test)
     max_build_duration: 30
