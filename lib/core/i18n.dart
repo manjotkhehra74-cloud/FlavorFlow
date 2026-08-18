@@ -48,6 +48,12 @@ class L10n extends ChangeNotifier {
 
   static const Map<String, Map<String, String>> _tr = {
     'pa': {
+      'Add material': 'ਸਮੱਗਰੀ ਜੋੜੋ',
+      'Amounts are as per recipe — type in any box to give that material a specific consumption instead. 0 = skip.': 'ਮਾਤਰਾ ਰੈਸਿਪੀ ਮੁਤਾਬਕ ਹੈ — ਕਿਸੇ ਵੀ ਬਾਕਸ ਵਿੱਚ ਲਿਖ ਕੇ ਓਸ ਸਮੱਗਰੀ ਦੀ ਖਾਸ ਖਪਤ ਦਿਓ। 0 = ਛੱਡੋ।',
+      'Water is not tracked — only listed raw materials are consumed.': 'ਪਾਣੀ ਨਹੀਂ ਗਿਣਿਆ ਜਾਂਦਾ — ਸਿਰਫ਼ ਸੂਚੀਬੱਧ ਕੱਚਾ ਮਾਲ ਖਪਤ ਹੁੰਦਾ ਹੈ।',
+      'Raw Material Ledger': 'ਕੱਚਾ ਮਾਲ ਖਾਤਾ',
+      'Every raw material receipt and consumption (recipe + manual).': 'ਹਰ ਕੱਚੇ ਮਾਲ ਦੀ ਪ੍ਰਾਪਤੀ ਤੇ ਖਪਤ (ਰੈਸਿਪੀ + ਹੱਥੀਂ)।',
+
       'Min': 'ਘੱਟੋ-ਘੱਟ',
       'Stock Report': 'ਸਟਾਕ ਰਿਪੋਰਟ',
       'Total cartons': 'ਕੁੱਲ ਕਾਰਟਨ',
@@ -402,6 +408,12 @@ class L10n extends ChangeNotifier {
       'Ledger': 'ਖਾਤਾ',
     },
     'hi': {
+      'Add material': 'सामग्री जोड़ें',
+      'Amounts are as per recipe — type in any box to give that material a specific consumption instead. 0 = skip.': 'मात्रा रेसिपी अनुसार है — किसी भी बॉक्स में लिखकर उस सामग्री की खास खपत दें। 0 = छोड़ें।',
+      'Water is not tracked — only listed raw materials are consumed.': 'पानी नहीं गिना जाता — केवल सूचीबद्ध कच्चा माल खपत होता है।',
+      'Raw Material Ledger': 'कच्चा माल खाता',
+      'Every raw material receipt and consumption (recipe + manual).': 'हर कच्चे माल की प्राप्ति और खपत (रेसिपी + मैनुअल)।',
+
       'Min': 'न्यूनतम',
       'Stock Report': 'स्टॉक रिपोर्ट',
       'Total cartons': 'कुल कार्टन',
@@ -756,6 +768,12 @@ class L10n extends ChangeNotifier {
       'Ledger': 'खाता',
     },
   'gu': {
+      'Add material': 'સામગ્રી ઉમેરો',
+      'Amounts are as per recipe — type in any box to give that material a specific consumption instead. 0 = skip.': 'જથ્થો રેસિપી પ્રમાણે છે — કોઈપણ બોક્સમાં લખી ખાસ વપરાશ આપો. 0 = છોડો.',
+      'Water is not tracked — only listed raw materials are consumed.': 'પાણી ગણાતું નથી — માત્ર યાદીબદ્ધ કાચો માલ વપરાય છે.',
+      'Raw Material Ledger': 'કાચો માલ ખાતું',
+      'Every raw material receipt and consumption (recipe + manual).': 'દરેક કાચા માલની આવક અને વપરાશ (રેસિપી + મેન્યુઅલ).',
+
       'Min': 'લઘુત્તમ',
       'Stock Report': 'સ્ટોક રિપોર્ટ',
       'Total cartons': 'કુલ કાર્ટન',
@@ -1096,6 +1114,12 @@ class L10n extends ChangeNotifier {
       'Refresh permissions': 'પરવાનગીઓ તાજી કરો',
     },
     'mr': {
+      'Add material': 'सामग्री जोडा',
+      'Amounts are as per recipe — type in any box to give that material a specific consumption instead. 0 = skip.': 'प्रमाण रेसिपीनुसार आहे — कोणत्याही बॉक्समध्ये लिहून खास वापर द्या. 0 = वगळा.',
+      'Water is not tracked — only listed raw materials are consumed.': 'पाणी मोजले जात नाही — फक्त सूचीबद्ध कच्चा माल वापरला जातो.',
+      'Raw Material Ledger': 'कच्चा माल खाते',
+      'Every raw material receipt and consumption (recipe + manual).': 'प्रत्येक कच्च्या मालाची आवक व वापर (रेसिपी + मॅन्युअल).',
+
       'Min': 'किमान',
       'Stock Report': 'स्टॉक रिपोर्ट',
       'Total cartons': 'एकूण कार्टन',
@@ -1435,6 +1459,12 @@ class L10n extends ChangeNotifier {
       'Refresh permissions': 'परवानग्या ताज्या करा',
     },
     'bn': {
+      'Add material': 'উপাদান যোগ করুন',
+      'Amounts are as per recipe — type in any box to give that material a specific consumption instead. 0 = skip.': 'পরিমাণ রেসিপি অনুযায়ী — যেকোনো বাক্সে লিখে নির্দিষ্ট ব্যবহার দিন। 0 = বাদ।',
+      'Water is not tracked — only listed raw materials are consumed.': 'পানি গণনা হয় না — শুধু তালিকাভুক্ত কাঁচামাল ব্যবহৃত হয়।',
+      'Raw Material Ledger': 'কাঁচামাল খাতা',
+      'Every raw material receipt and consumption (recipe + manual).': 'প্রতিটি কাঁচামালের প্রাপ্তি ও ব্যবহার (রেসিপি + ম্যানুয়াল)।',
+
       'Min': 'ন্যূনতম',
       'Stock Report': 'স্টক রিপোর্ট',
       'Total cartons': 'মোট কার্টন',
@@ -1774,6 +1804,12 @@ class L10n extends ChangeNotifier {
       'Refresh permissions': 'অনুমতি রিফ্রেশ',
     },
     'ta': {
+      'Add material': 'பொருள் சேர்',
+      'Amounts are as per recipe — type in any box to give that material a specific consumption instead. 0 = skip.': 'அளவுகள் ரெசிபி படி — எந்த பெட்டியிலும் எழுதி குறிப்பிட்ட நுகர்வு தரவும். 0 = தவிர்.',
+      'Water is not tracked — only listed raw materials are consumed.': 'நீர் கணக்கிடப்படாது — பட்டியலிட்ட மூலப்பொருட்கள் மட்டும்.',
+      'Raw Material Ledger': 'மூலப்பொருள் லெட்ஜர்',
+      'Every raw material receipt and consumption (recipe + manual).': 'ஒவ்வொரு மூலப்பொருள் வரவு & நுகர்வு (ரெசிபி + கைமுறை).',
+
       'Min': 'குறைந்தபட்சம்',
       'Stock Report': 'இருப்பு அறிக்கை',
       'Total cartons': 'மொத்த கார்டன்',
@@ -2113,6 +2149,12 @@ class L10n extends ChangeNotifier {
       'Refresh permissions': 'அனுமதிகள் புதுப்பி',
     },
     'te': {
+      'Add material': 'మెటీరియల్ జోడించండి',
+      'Amounts are as per recipe — type in any box to give that material a specific consumption instead. 0 = skip.': 'పరిమాణాలు రెసిపీ ప్రకారం — ఏ బాక్స్‌లోనైనా రాసి ప్రత్యేక వినియోగం ఇవ్వండి. 0 = దాటవేయి.',
+      'Water is not tracked — only listed raw materials are consumed.': 'నీరు లెక్కించబడదు — జాబితా చేసిన ముడి పదార్థాలే వాడబడతాయి.',
+      'Raw Material Ledger': 'ముడి పదార్థాల లెడ్జర్',
+      'Every raw material receipt and consumption (recipe + manual).': 'ప్రతి ముడి పదార్థం రసీదు & వినియోగం (రెసిపీ + మాన్యువల్).',
+
       'Min': 'కనీసం',
       'Stock Report': 'స్టాక్ రిపోర్ట్',
       'Total cartons': 'మొత్తం కార్టన్లు',

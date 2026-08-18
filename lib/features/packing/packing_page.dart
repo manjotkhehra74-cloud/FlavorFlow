@@ -67,11 +67,53 @@ class _PackingPageState extends State<PackingPage> with SingleTickerProviderStat
 
 /// Raw Material — its own section in the menu. Same stock engine as packing
 /// (receive / consume / recipes) but shows ONLY the "Raw Material" category.
-class RawMaterialPage extends StatelessWidget {
+/// Tabs: Stock (with recipe tools) + Ledger (raw-only receipts/consumption).
+class RawMaterialPage extends StatefulWidget {
   const RawMaterialPage({super.key});
   @override
+  State<RawMaterialPage> createState() => _RawMaterialPageState();
+}
+
+class _RawMaterialPageState extends State<RawMaterialPage> with SingleTickerProviderStateMixin {
+  late final TabController _tab;
+
+  @override
+  void initState() {
+    super.initState();
+    _tab = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tab.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return const _StockTab(rawOnly: true);
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: TabBar(
+            controller: _tab,
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            tabs: [
+              Tab(text: tr('Raw Material Stock')),
+              Tab(text: tr('Ledger')),
+            ],
+          ),
+        ),
+      ),
+      Expanded(
+        child: TabBarView(controller: _tab, children: const [
+          _StockTab(rawOnly: true),
+          _LedgerTab(rawOnly: true),
+        ]),
+      ),
+    ]);
   }
 }
 
@@ -401,7 +443,8 @@ class _BomTabState extends State<_BomTab> {
 /* ------------------------------- ledger tab ------------------------------ */
 
 class _LedgerTab extends StatefulWidget {
-  const _LedgerTab();
+  final bool rawOnly;
+  const _LedgerTab({this.rawOnly = false});
   @override
   State<_LedgerTab> createState() => _LedgerTabState();
 }
@@ -417,8 +460,19 @@ class _LedgerTabState extends State<_LedgerTab> {
   }
 
   Future<List<Map<String, dynamic>>> _load() async {
-    final json = await context.read<AuthController>().api.get('/packing/ledger${_type.isEmpty ? '' : '?type=$_type'}');
-    return ((json as Map)['txns'] as List).cast<Map<String, dynamic>>();
+    final api = context.read<AuthController>().api;
+    final json = await api.get('/packing/ledger${_type.isEmpty ? '' : '?type=$_type'}');
+    var rows = ((json as Map)['txns'] as List).cast<Map<String, dynamic>>();
+    // Raw section: only raw-material entries; packing section: everything else.
+    final mats = await api.get('/packing/materials');
+    final rawNames = <String>{
+      for (final m in ((mats as Map)['materials'] as List).cast<Map<String, dynamic>>())
+        if (m['category'] == 'Raw Material') m['name'] as String,
+    };
+    rows = widget.rawOnly
+        ? rows.where((t) => rawNames.contains(t['material_name'])).toList()
+        : rows.where((t) => !rawNames.contains(t['material_name'])).toList();
+    return rows;
   }
 
   @override
@@ -681,17 +735,21 @@ class _RecipeConsumeDialog extends StatefulWidget {
 
 class _RecipeConsumeDialogState extends State<_RecipeConsumeDialog> {
   List<Map<String, dynamic>> recipes = [];
+  List<Map<String, dynamic>> rawMaterials = []; // for "add material" picker
   int? recipeId;
   final qty = TextEditingController();
   final remark = TextEditingController();
   /// materialId → custom TOTAL consumption typed by the user (override).
   final Map<int, TextEditingController> overrides = {};
+  /// Extra raw materials added manually (not part of the selected recipe).
+  final List<int> extraIds = [];
   bool busy = false;
 
   @override
   void initState() {
     super.initState();
-    context.read<AuthController>().api.get('/packing/recipes').then((json) {
+    final api = context.read<AuthController>().api;
+    api.get('/packing/recipes').then((json) {
       if (!mounted) return;
       setState(() {
         recipes = ((json as Map)['recipes'] as List).cast<Map<String, dynamic>>();
@@ -700,6 +758,15 @@ class _RecipeConsumeDialogState extends State<_RecipeConsumeDialog> {
     }).catchError((e) {
       if (mounted) showErr(context, e);
     });
+    api.get('/packing/materials').then((json) {
+      if (!mounted) return;
+      setState(() {
+        rawMaterials = ((json as Map)['materials'] as List)
+            .cast<Map<String, dynamic>>()
+            .where((m) => m['category'] == 'Raw Material')
+            .toList();
+      });
+    }).catchError((_) {});
   }
 
   @override
@@ -731,10 +798,11 @@ class _RecipeConsumeDialogState extends State<_RecipeConsumeDialog> {
       return;
     }
     // collect non-empty overrides: materialId → custom total qty
+    // (0 is allowed = skip that material entirely)
     final ov = <String, num>{};
     overrides.forEach((mid, ctl) {
       final v = double.tryParse(ctl.text.trim());
-      if (v != null && v > 0) ov['$mid'] = v;
+      if (v != null && v >= 0) ov['$mid'] = v;
     });
     setState(() => busy = true);
     try {
@@ -832,10 +900,74 @@ class _RecipeConsumeDialogState extends State<_RecipeConsumeDialog> {
                               ),
                             ]),
                           ),
+                        // extra raw materials added by the user (not in the recipe)
+                        for (final mid in extraIds)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 3),
+                            child: Row(children: [
+                              Expanded(
+                                child: Text(
+                                  '${rawMaterials.where((m) => m['id'] == mid).firstOrNull?['name'] ?? '?'} +',
+                                  style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                                ),
+                              ),
+                              SizedBox(
+                                width: 108,
+                                child: TextField(
+                                  controller: _ovCtl(mid),
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  textAlign: TextAlign.right,
+                                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                                  decoration: InputDecoration(
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                    hintText: '0',
+                                    suffixText: '${rawMaterials.where((m) => m['id'] == mid).firstOrNull?['unit'] ?? ''}',
+                                    suffixStyle: const TextStyle(fontSize: 10.5),
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                visualDensity: VisualDensity.compact,
+                                icon: const Icon(Icons.close_rounded, size: 16),
+                                onPressed: () => setState(() {
+                                  extraIds.remove(mid);
+                                  overrides[mid]?.clear();
+                                }),
+                              ),
+                            ]),
+                          ),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton.icon(
+                            style: TextButton.styleFrom(visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: 6)),
+                            onPressed: () async {
+                              final lineIds = {for (final l in (r['lines'] as List).cast<Map<String, dynamic>>()) l['material_id'] as int};
+                              final options = rawMaterials.where((m) => !lineIds.contains(m['id']) && !extraIds.contains(m['id'])).toList();
+                              if (options.isEmpty) return;
+                              final picked = await showDialog<int>(
+                                context: context,
+                                builder: (ctx) => SimpleDialog(
+                                  title: Text(tr('Material *')),
+                                  children: [
+                                    for (final m in options)
+                                      SimpleDialogOption(
+                                        onPressed: () => Navigator.pop(ctx, m['id'] as int),
+                                        child: Text('${m['name']} (${qtyInt(m['stock'])} ${m['unit']})'),
+                                      ),
+                                  ],
+                                ),
+                              );
+                              if (picked != null) setState(() => extraIds.add(picked));
+                            },
+                            icon: const Icon(Icons.add_rounded, size: 16),
+                            label: Text(tr('Add material')),
+                          ),
+                        ),
                         const SizedBox(height: 4),
-                        Text('Amounts are as per recipe — type in any box to give that material a specific consumption instead.',
+                        Text(tr('Amounts are as per recipe — type in any box to give that material a specific consumption instead. 0 = skip.'),
                             style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant)),
-                        Text('Water is not tracked — only listed raw materials are consumed.',
+                        Text(tr('Water is not tracked — only listed raw materials are consumed.'),
                             style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant)),
                       ]),
                     ),
