@@ -5,13 +5,14 @@ import '../core/permissions.dart';
 
 /// Full-screen QR/barcode scanner — returns the scanned text via
 /// Navigator.pop. Used for batch codes on dispatch (no typing).
+///
+/// Uses the plugin's DEFAULT-MANAGED camera lifecycle (no self-created
+/// controller): manual start()/stop() threw genericError on Xiaomi/Redmi.
 class ScanPage extends StatefulWidget {
   final String title;
   const ScanPage({super.key, this.title = 'Scan code'});
 
   /// Open the scanner; resolves to the scanned string or null (cancelled).
-  /// Camera permission is verified first — the "unexpected error" screen was
-  /// the camera starting without permission on some devices.
   static Future<String?> scan(BuildContext context, {String title = 'Scan code'}) async {
     final ok = await AppPermissions.ensureCamera();
     if (!ok || !context.mounted) return null;
@@ -25,41 +26,8 @@ class ScanPage extends StatefulWidget {
 }
 
 class _ScanPageState extends State<ScanPage> {
-  final MobileScannerController _ctl = MobileScannerController(
-    detectionSpeed: DetectionSpeed.normal,
-    facing: CameraFacing.back,
-    autoStart: false,
-  );
   bool _done = false; // pop only once
-
-  @override
-  void initState() {
-    super.initState();
-    // mobile_scanner 6.x: a self-created controller must be started manually.
-    // Start AFTER the first frame + a short delay — starting while the view
-    // is still building throws genericError on Xiaomi/Redmi devices.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _startCamera());
-  }
-
-  Future<void> _startCamera() async {
-    try {
-      await Future.delayed(const Duration(milliseconds: 250));
-      if (!mounted) return;
-      await _ctl.start();
-    } catch (_) {
-      // one silent retry — Xiaomi occasionally fails the first attempt
-      await Future.delayed(const Duration(milliseconds: 600));
-      if (mounted) {
-        try { await _ctl.start(); } catch (_) {}
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _ctl.dispose();
-    super.dispose();
-  }
+  int _attempt = 0; // bump to fully recreate the scanner on Retry
 
   void _onDetect(BarcodeCapture capture) {
     if (_done) return;
@@ -81,17 +49,10 @@ class _ScanPageState extends State<ScanPage> {
         title: Text(widget.title),
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            tooltip: 'Torch',
-            icon: const Icon(Icons.flashlight_on_outlined),
-            onPressed: () => _ctl.toggleTorch(),
-          ),
-        ],
       ),
       body: Stack(children: [
         MobileScanner(
-          controller: _ctl,
+          key: ValueKey('scanner-$_attempt'), // Retry = brand-new camera session
           onDetect: _onDetect,
           errorBuilder: (context, error, child) => Center(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -103,9 +64,7 @@ class _ScanPageState extends State<ScanPage> {
               FilledButton.icon(
                 onPressed: () async {
                   await AppPermissions.ensureCamera();
-                  try { await _ctl.stop(); } catch (_) {}
-                  await Future.delayed(const Duration(milliseconds: 400));
-                  try { await _ctl.start(); } catch (_) {}
+                  if (mounted) setState(() => _attempt++); // recreate widget
                 },
                 icon: const Icon(Icons.refresh_rounded, size: 18),
                 label: const Text('Retry'),
@@ -114,21 +73,25 @@ class _ScanPageState extends State<ScanPage> {
           ),
         ),
         // simple viewfinder frame
-        Center(
-          child: Container(
-            width: 240,
-            height: 240,
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.white70, width: 2),
-              borderRadius: BorderRadius.circular(16),
+        IgnorePointer(
+          child: Center(
+            child: Container(
+              width: 240,
+              height: 240,
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.white70, width: 2),
+                borderRadius: BorderRadius.circular(16),
+              ),
             ),
           ),
         ),
         Positioned(
           left: 0, right: 0, bottom: 28,
-          child: Text('Place the QR / barcode inside the frame',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 13.5)),
+          child: IgnorePointer(
+            child: Text('Place the QR / barcode inside the frame',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 13.5)),
+          ),
         ),
       ]),
     );
