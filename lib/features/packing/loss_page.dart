@@ -191,7 +191,7 @@ class _LossPageState extends State<LossPage> {
                 for (final t in top)
                   [
                     t['name'] == 'Total'
-                        ? const Text('Total', style: TextStyle(fontWeight: FontWeight.w800))
+                        ? Text(tr('Total'), style: const TextStyle(fontWeight: FontWeight.w800))
                         : Text('${t['name']}', style: const TextStyle(fontWeight: FontWeight.w600)),
                     t['name'] == 'Total' ? qtyInt(t['projection']) : edit('proj:${t['productId']}', (t['projection'] as num?) ?? 0, '${t['name']} — Projection'),
                     t['name'] == 'Total' ? qtyInt(t['opening']) : edit('open:${t['productId']}', (t['opening'] as num?) ?? 0, '${t['name']} — Opening (last month closing + Neemrana/Matiala stock)'),

@@ -223,7 +223,7 @@ class _StockTabState extends State<_StockTab> {
             ),
             if (!widget.rawOnly)
               for (final cat in categories)
-                ChoiceChip(label: Text(cat), selected: !_lowOnly && _category == cat, onSelected: (_) => setState(() { _category = cat; _lowOnly = false; _future = _load(); })),
+                ChoiceChip(label: Text(tr(cat)), selected: !_lowOnly && _category == cat, onSelected: (_) => setState(() { _category = cat; _lowOnly = false; _future = _load(); })),
             if (canManage) ...[
               Padding(
                 padding: const EdgeInsets.only(left: 8),
@@ -295,7 +295,7 @@ class _StockTabState extends State<_StockTab> {
                       for (final m in rows)
                         [
                           Text(m['name'] as String, style: const TextStyle(fontWeight: FontWeight.w600)),
-                          m['category'],
+                          tr('${m['category']}'),
                           Text(qtyInt(m['stock']), style: TextStyle(fontWeight: FontWeight.w700, color: (m['low'] as int) == 1 ? AppColors.red : null)),
                           m['unit'],
                           qtyInt(m['min_stock']),
@@ -381,7 +381,7 @@ class _BomTabState extends State<_BomTab> {
                         for (final i in (entry['items'] as List).cast<Map<String, dynamic>>())
                           [
                             Text(i['material'] as String, style: const TextStyle(fontWeight: FontWeight.w600)),
-                            i['category'],
+                            tr('${i['category']}'),
                             (i['perCb'] as num) > 0 ? qty(i['perCb']) : '—',
                             (i['perTray'] as num) > 0 ? qty(i['perTray']) : '—',
                             i['unit'],

@@ -5,15 +5,21 @@ import 'package:pdf/widgets.dart' as pw;
 import 'dart:typed_data';
 
 import '../../core/company.dart';
+import '../../core/i18n.dart';
+import '../../core/pdf_fonts.dart';
 
 /// Generic report PDF — renders any report (title + table) in the company style.
 class ReportPdf {
   static pw.Font? _regular;
   static pw.Font? _bold;
+  static List<pw.Font> _regFallback = const [];
+  static List<pw.Font> _boldFallback = const [];
 
   static Future<void> _loadFonts() async {
     _regular ??= pw.Font.ttf(await rootBundle.load('assets/fonts/roboto-regular.ttf'));
     _bold ??= pw.Font.ttf(await rootBundle.load('assets/fonts/roboto-bold.ttf'));
+    _regFallback = await PdfFonts.regularFallback();
+    _boldFallback = await PdfFonts.boldFallback();
   }
 
   static final _num = NumberFormat('#,##,##0.##', 'en_IN');
@@ -30,14 +36,17 @@ class ReportPdf {
     required List<String> columns,
     required List<List<dynamic>> rows,
   }) async {
+    title = tr(title);
+    desc = tr(desc);
+    columns = [for (final c in columns) tr(c)];
     await _loadFonts();
     const primary = PdfColor.fromInt(0xFF0A6ED1);
     const headerBg = PdfColor.fromInt(0xFFEFF5FC);
     const greyTxt = PdfColor.fromInt(0xFF64748B);
     const lineCol = PdfColor.fromInt(0xFFD5DBE8);
 
-    pw.TextStyle ts(double size, {bool bold = false, PdfColor? color}) =>
-        pw.TextStyle(font: bold ? _bold : _regular, fontSize: size, color: color);
+    pw.TextStyle ts(double size, {bool bold = false, PdfColor? color}) => pw.TextStyle(
+        font: bold ? _bold : _regular, fontFallback: bold ? _boldFallback : _regFallback, fontSize: size, color: color);
 
     final landscape = columns.length > 6;
     final numericCols = <int>{};

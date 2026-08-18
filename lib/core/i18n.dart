@@ -48,6 +48,15 @@ class L10n extends ChangeNotifier {
 
   static const Map<String, Map<String, String>> _tr = {
     'pa': {
+      'Projection·CB': 'ਪ੍ਰੋਜੈਕਸ਼ਨ·CB',
+      'Opening·Extra': 'ਸ਼ੁਰੂਆਤੀ·ਵਾਧੂ',
+      'Actual·Total': 'ਅਸਲ·ਕੁੱਲ',
+      'Op+Act·Loss%': 'ਸ਼ੁ+ਅਸਲ·ਨੁਕਸਾਨ%',
+      '%Adh': '%ਪਾਲਣਾ',
+
+      'Total': 'ਕੁੱਲ',
+      'Other': 'ਹੋਰ',
+
       'PREFERENCES': 'ਪਸੰਦਾਂ',
       'SECURITY': 'ਸੁਰੱਖਿਆ',
       'COMPANY (SUPER ADMIN)': 'ਕੰਪਨੀ (ਸੁਪਰ ਐਡਮਿਨ)',
@@ -372,6 +381,15 @@ class L10n extends ChangeNotifier {
       'Ledger': 'ਖਾਤਾ',
     },
     'hi': {
+      'Projection·CB': 'प्रोजेक्शन·CB',
+      'Opening·Extra': 'ओपनिंग·अतिरिक्त',
+      'Actual·Total': 'वास्तविक·कुल',
+      'Op+Act·Loss%': 'ओप+वास्त·हानि%',
+      '%Adh': '%पालन',
+
+      'Total': 'कुल',
+      'Other': 'अन्य',
+
       'PREFERENCES': 'प्राथमिकताएँ',
       'SECURITY': 'सुरक्षा',
       'COMPANY (SUPER ADMIN)': 'कंपनी (सुपर एडमिन)',
@@ -696,6 +714,15 @@ class L10n extends ChangeNotifier {
       'Ledger': 'खाता',
     },
   'gu': {
+      'Projection·CB': 'પ્રોજેક્શન·CB',
+      'Opening·Extra': 'ઓપનિંગ·વધારાનું',
+      'Actual·Total': 'વાસ્તવિક·કુલ',
+      'Op+Act·Loss%': 'ઓપ+વાસ્ત·નુકસાન%',
+      '%Adh': '%પાલન',
+
+      'Total': 'કુલ',
+      'Other': 'અન્ય',
+
       'PREFERENCES': 'પસંદગીઓ',
       'SECURITY': 'સુરક્ષા',
       'COMPANY (SUPER ADMIN)': 'કંપની (સુપર એડમિન)',
@@ -1006,6 +1033,15 @@ class L10n extends ChangeNotifier {
       'Refresh permissions': 'પરવાનગીઓ તાજી કરો',
     },
     'mr': {
+      'Projection·CB': 'प्रोजेक्शन·CB',
+      'Opening·Extra': 'ओपनिंग·जादा',
+      'Actual·Total': 'प्रत्यक्ष·एकूण',
+      'Op+Act·Loss%': 'ओप+प्रत्य·तोटा%',
+      '%Adh': '%पालन',
+
+      'Total': 'एकूण',
+      'Other': 'इतर',
+
       'PREFERENCES': 'प्राधान्ये',
       'SECURITY': 'सुरक्षा',
       'COMPANY (SUPER ADMIN)': 'कंपनी (सुपर अ‍ॅडमिन)',
@@ -1315,6 +1351,15 @@ class L10n extends ChangeNotifier {
       'Refresh permissions': 'परवानग्या ताज्या करा',
     },
     'bn': {
+      'Projection·CB': 'প্রজেকশন·CB',
+      'Opening·Extra': 'ওপেনিং·অতিরিক্ত',
+      'Actual·Total': 'প্রকৃত·মোট',
+      'Op+Act·Loss%': 'ওপ+প্রকৃত·ক্ষতি%',
+      '%Adh': '%মেনে',
+
+      'Total': 'মোট',
+      'Other': 'অন্যান্য',
+
       'PREFERENCES': 'পছন্দসমূহ',
       'SECURITY': 'নিরাপত্তা',
       'COMPANY (SUPER ADMIN)': 'কোম্পানি (সুপার অ্যাডমিন)',
@@ -1624,6 +1669,15 @@ class L10n extends ChangeNotifier {
       'Refresh permissions': 'অনুমতি রিফ্রেশ',
     },
     'ta': {
+      'Projection·CB': 'திட்டம்·CB',
+      'Opening·Extra': 'தொடக்கம்·கூடுதல்',
+      'Actual·Total': 'உண்மை·மொத்தம்',
+      'Op+Act·Loss%': 'தொ+உண்மை·இழப்பு%',
+      '%Adh': '%பின்பற்றல்',
+
+      'Total': 'மொத்தம்',
+      'Other': 'மற்றவை',
+
       'PREFERENCES': 'விருப்பங்கள்',
       'SECURITY': 'பாதுகாப்பு',
       'COMPANY (SUPER ADMIN)': 'நிறுவனம் (சூப்பர் அட்மின்)',
@@ -1933,6 +1987,15 @@ class L10n extends ChangeNotifier {
       'Refresh permissions': 'அனுமதிகள் புதுப்பி',
     },
     'te': {
+      'Projection·CB': 'ప్రొజెక్షన్·CB',
+      'Opening·Extra': 'ఓపెనింగ్·అదనపు',
+      'Actual·Total': 'వాస్తవ·మొత్తం',
+      'Op+Act·Loss%': 'ఓప్+వాస్తవ·నష్టం%',
+      '%Adh': '%పాటింపు',
+
+      'Total': 'మొత్తం',
+      'Other': 'ఇతర',
+
       'PREFERENCES': 'ప్రాధాన్యతలు',
       'SECURITY': 'భద్రత',
       'COMPANY (SUPER ADMIN)': 'కంపెనీ (సూపర్ అడ్మిన్)',

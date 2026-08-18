@@ -5,16 +5,21 @@ import 'package:pdf/widgets.dart' as pw;
 import 'dart:typed_data';
 
 import '../../core/company.dart';
+import '../../core/pdf_fonts.dart';
 
 /// PDF builder for dispatch challans & truck-loading estimates.
 /// Roboto is embedded so all glyphs render correctly.
 class DispatchPdf {
   static pw.Font? _regular;
   static pw.Font? _bold;
+  static List<pw.Font> _regFallback = const [];
+  static List<pw.Font> _boldFallback = const [];
 
   static Future<void> _loadFonts() async {
     _regular ??= pw.Font.ttf(await rootBundle.load('assets/fonts/roboto-regular.ttf'));
     _bold ??= pw.Font.ttf(await rootBundle.load('assets/fonts/roboto-bold.ttf'));
+    _regFallback = await PdfFonts.regularFallback();
+    _boldFallback = await PdfFonts.boldFallback();
   }
 
   static final _num = NumberFormat('#,##,##0.##', 'en_IN');
@@ -126,7 +131,8 @@ class DispatchPdf {
     final border = pw.TableBorder.all(color: lineCol, width: 0.7);
 
     pw.TextStyle ts(double size, {bool bold = false, PdfColor? color}) =>
-        pw.TextStyle(font: bold ? _bold : _regular, fontSize: size, color: color);
+        pw.TextStyle(
+        font: bold ? _bold : _regular, fontFallback: bold ? _boldFallback : _regFallback, fontSize: size, color: color);
 
     pw.Widget cell(String text, {bool bold = false, bool right = false, bool header = false, PdfColor? color}) =>
         pw.Padding(

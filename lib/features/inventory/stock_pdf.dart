@@ -5,15 +5,21 @@ import 'package:pdf/widgets.dart' as pw;
 import 'dart:typed_data';
 
 import '../../core/company.dart';
+import '../../core/i18n.dart';
+import '../../core/pdf_fonts.dart';
 
 /// Stock Report PDF — all finished goods (cartons, trays, bottles, weights).
 class StockPdf {
   static pw.Font? _regular;
   static pw.Font? _bold;
+  static List<pw.Font> _regFallback = const [];
+  static List<pw.Font> _boldFallback = const [];
 
   static Future<void> _loadFonts() async {
     _regular ??= pw.Font.ttf(await rootBundle.load('assets/fonts/roboto-regular.ttf'));
     _bold ??= pw.Font.ttf(await rootBundle.load('assets/fonts/roboto-bold.ttf'));
+    _regFallback = await PdfFonts.regularFallback();
+    _boldFallback = await PdfFonts.boldFallback();
   }
 
   static final _num = NumberFormat('#,##,##0.##', 'en_IN');
@@ -28,7 +34,8 @@ class StockPdf {
     const lowRed = PdfColor.fromInt(0xFFDC2626);
 
     pw.TextStyle ts(double size, {bool bold = false, PdfColor? color}) =>
-        pw.TextStyle(font: bold ? _bold : _regular, fontSize: size, color: color);
+        pw.TextStyle(
+        font: bold ? _bold : _regular, fontFallback: bold ? _boldFallback : _regFallback, fontSize: size, color: color);
 
     pw.Widget cell(String text, {bool bold = false, bool right = false, bool header = false, PdfColor? color}) => pw.Padding(
           padding: const pw.EdgeInsets.symmetric(horizontal: 7, vertical: 5.5),
@@ -37,7 +44,7 @@ class StockPdf {
               style: ts(header ? 8.6 : 9, bold: bold || header, color: color ?? (header ? primary : null))),
         );
 
-    final headers = ['#', 'Product', '${U.carton} (${U.cb})', U.tray, 'Total ${U.piece}', 'Gross kg', 'Min (${U.cb})', 'Status'];
+    final headers = ['#', tr('Product'), '${tr(U.carton)} (${U.cb})', tr(U.tray), '${tr('Total')} ${U.piece}', tr('Gross kg'), 'Min (${U.cb})', tr('Status')];
     double sumCb = 0, sumTrays = 0, sumBottles = 0, sumGross = 0;
     final rows = <List<Object>>[];
     for (var i = 0; i < items.length; i++) {
