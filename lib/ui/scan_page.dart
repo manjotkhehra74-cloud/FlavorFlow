@@ -35,9 +35,24 @@ class _ScanPageState extends State<ScanPage> {
   @override
   void initState() {
     super.initState();
-    // mobile_scanner 6.x: a self-created controller must be started manually —
-    // without this the camera never initialises ("unexpected error").
-    _ctl.start();
+    // mobile_scanner 6.x: a self-created controller must be started manually.
+    // Start AFTER the first frame + a short delay — starting while the view
+    // is still building throws genericError on Xiaomi/Redmi devices.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startCamera());
+  }
+
+  Future<void> _startCamera() async {
+    try {
+      await Future.delayed(const Duration(milliseconds: 250));
+      if (!mounted) return;
+      await _ctl.start();
+    } catch (_) {
+      // one silent retry — Xiaomi occasionally fails the first attempt
+      await Future.delayed(const Duration(milliseconds: 600));
+      if (mounted) {
+        try { await _ctl.start(); } catch (_) {}
+      }
+    }
   }
 
   @override
@@ -88,8 +103,9 @@ class _ScanPageState extends State<ScanPage> {
               FilledButton.icon(
                 onPressed: () async {
                   await AppPermissions.ensureCamera();
-                  await _ctl.stop();
-                  await _ctl.start();
+                  try { await _ctl.stop(); } catch (_) {}
+                  await Future.delayed(const Duration(milliseconds: 400));
+                  try { await _ctl.start(); } catch (_) {}
                 },
                 icon: const Icon(Icons.refresh_rounded, size: 18),
                 label: const Text('Retry'),
