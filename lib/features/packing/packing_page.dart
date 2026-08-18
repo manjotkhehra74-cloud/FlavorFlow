@@ -286,7 +286,7 @@ class _StockTabState extends State<_StockTab> {
                 icon: const Icon(Icons.north_east_rounded, size: 18),
                 label: Text(tr('Record Consumption')),
               ),
-              if (widget.rawOnly) ...[
+              if (widget.rawOnly && CompanyProfile.usesRecipes) ...[
                 OutlinedButton.icon(
                   onPressed: () async {
                     final saved = await showDialog<bool>(context: context, builder: (_) => const _RecipeConsumeDialog());
@@ -303,6 +303,8 @@ class _StockTabState extends State<_StockTab> {
                   icon: const Icon(Icons.edit_note_rounded, size: 18),
                   label: Text(tr('Edit Recipes')),
                 ),
+              ],
+              if (widget.rawOnly) ...[
                 OutlinedButton.icon(
                   onPressed: _exporting ? null : () => _exportRaw(all, pdf: true),
                   icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),

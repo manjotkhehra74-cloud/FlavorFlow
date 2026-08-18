@@ -90,10 +90,13 @@ class _AppShellState extends State<AppShell> {
       nav.insert(at, {'path': '/raw', 'label': 'Raw Material', 'icon': 'science', 'group': pi != -1 ? nav[pi]['group'] : 'Operations'});
     }
     final ri = nav.indexWhere((e) => e['path'] == '/raw');
-    if (!nav.any((e) => e['path'] == '/loss') && auth.canOr('loss.view', 'packing.view')) {
+    if (!nav.any((e) => e['path'] == '/loss') && auth.canOr('loss.view', 'packing.view') && CompanyProfile.usesLossPct) {
       final at = ri != -1 ? ri + 1 : nav.length;
       nav.insert(at, {'path': '/loss', 'label': 'Packing Loss %', 'icon': 'percent', 'group': ri != -1 ? nav[ri]['group'] : 'Operations'});
     }
+    // Industry gating: server nav may carry /loss for everyone — drop it
+    // where the industry doesn't track a packing Loss % sheet.
+    if (!CompanyProfile.usesLossPct) nav.removeWhere((e) => e['path'] == '/loss');
     // Settings entry at the end of the menu for every user.
     if (!nav.any((e) => e['path'] == '/settings')) {
       nav.add({'path': '/settings', 'label': 'Settings', 'icon': 'settings', 'group': nav.isNotEmpty ? (nav.last['group'] ?? 'System') : 'System'});

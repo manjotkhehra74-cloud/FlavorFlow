@@ -62,6 +62,7 @@ Color notifColor(String type) {
     case 'production_completed': return AppColors.teal;
     case 'dispatch_alert': return AppColors.orange;
     case 'packing_low': return AppColors.violet;
+    case 'activity': return AppColors.blue;
     default: return AppColors.slate;
   }
 }

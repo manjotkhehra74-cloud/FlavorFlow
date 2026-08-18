@@ -53,8 +53,48 @@ class CompanyProfile {
     ['general', 'General Manufacturing', 'Cartons', 'CB', 'Trays', 'Pieces'],
   ];
 
-  static const _dName = 'FlavorFlow Foods Pvt. Ltd.';
-  static const _dAddress = 'Industrial Area, Jalandhar, Punjab 144004';
+  /// Per-industry FEATURE PROFILES (researched from how real ERPs are built
+  /// for each industry — BatchMaster/Datatex/eresource/ACG/Focus etc.):
+  ///   recipes  → process/formula industries (recipe-based raw consumption:
+  ///              food, dairy, oil, bakery, beverages, soap, cosmetics, paint,
+  ///              agro-chem, pharma). Discrete industries (textile, footwear,
+  ///              plastic moulding, hardware, mills) mostly consume per-unit
+  ///              BOM, not per-batch recipes.
+  ///   lossPct  → monthly packing-material Loss % sheet (bottling/packing
+  ///              lines where labels/caps/sleeves wastage matters).
+  ///   trays    → whether the secondary "tray/roll/strip" unit is meaningful.
+  /// Sections NOT listed here (Products, Inventory, Packing, Raw Material,
+  /// Production, Dispatch, Adjustments, Reports, Users, Audit) are the
+  /// universal backbone — every industry keeps them.
+  static const Map<String, Map<String, bool>> industryFeatures = {
+    'food':      {'recipes': true,  'lossPct': true,  'trays': true},
+    'dairy':     {'recipes': true,  'lossPct': true,  'trays': true},
+    'oil':       {'recipes': true,  'lossPct': true,  'trays': true},
+    'bakery':    {'recipes': true,  'lossPct': true,  'trays': true},
+    'water':     {'recipes': true,  'lossPct': true,  'trays': true},
+    'soap':      {'recipes': true,  'lossPct': true,  'trays': true},
+    'cosmetics': {'recipes': true,  'lossPct': true,  'trays': true},
+    'paint':     {'recipes': true,  'lossPct': true,  'trays': true},
+    'agro':      {'recipes': true,  'lossPct': true,  'trays': true},
+    'pharma':    {'recipes': true,  'lossPct': true,  'trays': true},
+    'textile':   {'recipes': false, 'lossPct': false, 'trays': true},
+    'mill':      {'recipes': false, 'lossPct': false, 'trays': false},
+    'footwear':  {'recipes': false, 'lossPct': false, 'trays': true},
+    'plastic':   {'recipes': false, 'lossPct': true,  'trays': true},
+    'hardware':  {'recipes': false, 'lossPct': false, 'trays': true},
+    'general':   {'recipes': true,  'lossPct': true,  'trays': true},
+  };
+
+  /// Does the active industry use recipe-based raw material consumption?
+  static bool get usesRecipes => industryFeatures[current.industry]?['recipes'] ?? true;
+
+  /// Does the active industry track the monthly Packing Loss % sheet?
+  static bool get usesLossPct => industryFeatures[current.industry]?['lossPct'] ?? true;
+
+  /// Does the active industry use the secondary tray/roll/strip unit?
+  static bool get usesTrays => industryFeatures[current.industry]?['trays'] ?? true;
+
+  static const _dName = 'FlavorFlow Foods Pvt. Ltd.';  static const _dAddress = 'Industrial Area, Jalandhar, Punjab 144004';
   static const _dTax = 'GSTIN 03AAAAA0000A1Z5 · dispatch@flavorflow.in';
 
   static CompanyProfile? _cached;
