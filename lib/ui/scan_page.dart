@@ -69,7 +69,7 @@ class _ScanPageState extends State<ScanPage> {
         MobileScanner(
           controller: _ctl,
           onDetect: _onDetect,
-          errorBuilder: (context, error) => Center(
+          errorBuilder: (context, error, child) => Center(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               const Icon(Icons.no_photography_outlined, color: Colors.white70, size: 42),
               const SizedBox(height: 10),
