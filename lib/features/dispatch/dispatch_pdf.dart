@@ -138,7 +138,7 @@ class DispatchPdf {
     pw.Widget cell(String text, {bool bold = false, bool right = false, bool header = false, PdfColor? color}) =>
         pw.Padding(
           padding: const pw.EdgeInsets.symmetric(horizontal: 7, vertical: 6),
-          child: pw.Text(text,
+          child: pw.Text(PdfFonts.shape(text),
               textAlign: right ? pw.TextAlign.right : pw.TextAlign.left,
               style: ts(header ? 8.6 : 9, bold: bold || header, color: color ?? (header ? primary : null))),
         );
@@ -158,21 +158,21 @@ class DispatchPdf {
         // brand row
         pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
           pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-            pw.Text(company.name, style: ts(15, bold: true)),
+            pw.Text(PdfFonts.shape(company.name), style: ts(15, bold: true)),
             pw.SizedBox(height: 2),
-            if (company.address.isNotEmpty) pw.Text(company.address, style: ts(9, color: greyTxt)),
-            if (company.taxLine.isNotEmpty) pw.Text(company.taxLine, style: ts(9, color: greyTxt)),
+            if (company.address.isNotEmpty) pw.Text(PdfFonts.shape(company.address), style: ts(9, color: greyTxt)),
+            if (company.taxLine.isNotEmpty) pw.Text(PdfFonts.shape(company.taxLine), style: ts(9, color: greyTxt)),
           ]),
           pw.Spacer(),
           pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
             pw.Container(
               padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: pw.BoxDecoration(color: headerBg, borderRadius: pw.BorderRadius.circular(6)),
-              child: pw.Text(title, style: ts(12, bold: true, color: primary)),
+              child: pw.Text(PdfFonts.shape(title), style: ts(12, bold: true, color: primary)),
             ),
             if (subtitle.isNotEmpty) ...[
               pw.SizedBox(height: 4),
-              pw.Text(subtitle, style: ts(11, bold: true)),
+              pw.Text(PdfFonts.shape(subtitle), style: ts(11, bold: true)),
             ],
           ]),
         ]),
@@ -188,9 +188,9 @@ class DispatchPdf {
               padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 7),
               decoration: pw.BoxDecoration(border: pw.Border.all(color: lineCol, width: 0.7), borderRadius: pw.BorderRadius.circular(6)),
               child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-                pw.Text(m[0].toUpperCase(), style: ts(7.2, bold: true, color: greyTxt)),
+                pw.Text(PdfFonts.shape(m[0].toUpperCase()), style: ts(7.2, bold: true, color: greyTxt)),
                 pw.SizedBox(height: 2.5),
-                pw.Text(m[1], style: ts(9.6, bold: true)),
+                pw.Text(PdfFonts.shape(m[1]), style: ts(9.6, bold: true)),
               ]),
             ),
         ]),
@@ -212,7 +212,7 @@ class DispatchPdf {
               children: [
                 for (var i = 0; i < totals.length; i++)
                   i == 0
-                      ? pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 7, vertical: 6), child: pw.Text(tr('Total').toUpperCase(), style: ts(9, bold: true, color: primary)))
+                      ? pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 7, vertical: 6), child: pw.Text(PdfFonts.shape(tr('Total').toUpperCase()), style: ts(9, bold: true, color: primary)))
                       : cell(totals[i], bold: true, right: i >= (hasBatch ? 3 : 2), color: primary),
               ],
             ),
@@ -225,12 +225,12 @@ class DispatchPdf {
             width: double.infinity,
             padding: const pw.EdgeInsets.all(9),
             decoration: pw.BoxDecoration(border: pw.Border.all(color: lineCol, width: 0.7), borderRadius: pw.BorderRadius.circular(6)),
-            child: pw.Text('${tr('Remarks')}: $remarks', style: ts(9)),
+            child: pw.Text(PdfFonts.shape('${tr('Remarks')}: $remarks'), style: ts(9)),
           ),
         pw.SizedBox(height: 8),
-        pw.Text(footnote, style: ts(9.4, bold: true)),
+        pw.Text(PdfFonts.shape(footnote), style: ts(9.4, bold: true)),
         pw.SizedBox(height: 6),
-        pw.Text(tr('Weights are computed from the Product Master (carton gross weight and tray weight).'),
+        pw.Text(PdfFonts.shape(tr('Weights are computed from the Product Master (carton gross weight and tray weight).')),
             style: ts(8, color: greyTxt)),
         pw.Spacer(),
 
@@ -239,12 +239,12 @@ class DispatchPdf {
         pw.Row(mainAxisAlignment: pw.MainAxisAlignment.end, children: [
           pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.center, children: [
             if (preparedBy.isNotEmpty) ...[
-              pw.Text(preparedBy, style: ts(9.5, bold: true)),
+              pw.Text(PdfFonts.shape(preparedBy), style: ts(9.5, bold: true)),
               pw.SizedBox(height: 2),
             ],
             pw.Container(width: 150, height: 1, color: const PdfColor.fromInt(0xFF94A3B8)),
             pw.SizedBox(height: 4),
-            pw.Text(tr('Prepared By').toUpperCase(), style: ts(8, bold: true)),
+            pw.Text(PdfFonts.shape(tr('Prepared By').toUpperCase()), style: ts(8, bold: true)),
           ]),
         ]),
       ]),

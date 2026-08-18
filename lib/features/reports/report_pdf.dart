@@ -56,7 +56,7 @@ class ReportPdf {
 
     pw.Widget cell(String text, {bool bold = false, bool right = false, bool header = false}) => pw.Padding(
           padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 5),
-          child: pw.Text(text,
+          child: pw.Text(PdfFonts.shape(text),
               textAlign: right ? pw.TextAlign.right : pw.TextAlign.left,
               style: ts(header ? 8.4 : 8.8, bold: bold || header, color: header ? primary : null)),
         );
@@ -71,36 +71,36 @@ class ReportPdf {
       footer: (context) => pw.Padding(
         padding: const pw.EdgeInsets.only(top: 8),
         child: pw.Row(children: [
-          pw.Text(tr('Exported from FlavorFlow ERP — quantities and weights only.'), style: ts(7.8, color: greyTxt)),
+          pw.Text(PdfFonts.shape(tr('Exported from FlavorFlow ERP — quantities and weights only.')), style: ts(7.8, color: greyTxt)),
           pw.Spacer(),
-          pw.Text('Page ${context.pageNumber} of ${context.pagesCount}', style: ts(7.8, color: greyTxt)),
+          pw.Text(PdfFonts.shape('Page ${context.pageNumber} of ${context.pagesCount}'), style: ts(7.8, color: greyTxt)),
         ]),
       ),
       build: (context) => [
         pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
           pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-            pw.Text(CompanyProfile.current.name, style: ts(14, bold: true)),
+            pw.Text(PdfFonts.shape(CompanyProfile.current.name), style: ts(14, bold: true)),
             pw.SizedBox(height: 2),
-            if (CompanyProfile.current.address.isNotEmpty) pw.Text(CompanyProfile.current.address, style: ts(8.6, color: greyTxt)),
-            if (CompanyProfile.current.taxLine.isNotEmpty) pw.Text(CompanyProfile.current.taxLine, style: ts(8.6, color: greyTxt)),
+            if (CompanyProfile.current.address.isNotEmpty) pw.Text(PdfFonts.shape(CompanyProfile.current.address), style: ts(8.6, color: greyTxt)),
+            if (CompanyProfile.current.taxLine.isNotEmpty) pw.Text(PdfFonts.shape(CompanyProfile.current.taxLine), style: ts(8.6, color: greyTxt)),
           ]),
           pw.Spacer(),
           pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
             pw.Container(
               padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: pw.BoxDecoration(color: headerBg, borderRadius: pw.BorderRadius.circular(5)),
-              child: pw.Text(title.toUpperCase(), style: ts(11, bold: true, color: primary)),
+              child: pw.Text(PdfFonts.shape(title.toUpperCase()), style: ts(11, bold: true, color: primary)),
             ),
             pw.SizedBox(height: 4),
-            pw.Text(DateFormat('EEEE, dd MMM yyyy · hh:mm a').format(now), style: ts(8.8, color: greyTxt)),
+            pw.Text(PdfFonts.shape(DateFormat('EEEE, dd MMM yyyy · hh:mm a').format(now)), style: ts(8.8, color: greyTxt)),
           ]),
         ]),
         pw.SizedBox(height: 6),
-        pw.Text(desc, style: ts(9, color: greyTxt)),
+        pw.Text(PdfFonts.shape(desc), style: ts(9, color: greyTxt)),
         pw.SizedBox(height: 8),
         pw.Divider(color: lineCol, thickness: 0.8),
         pw.SizedBox(height: 6),
-        pw.Text('${rows.length} ${tr('records')}', style: ts(8.6, bold: true, color: greyTxt)),
+        pw.Text(PdfFonts.shape('${rows.length} ${tr('records')}'), style: ts(8.6, bold: true, color: greyTxt)),
         pw.SizedBox(height: 8),
         pw.Table(
           border: pw.TableBorder.all(color: lineCol, width: 0.7),

@@ -39,7 +39,7 @@ class StockPdf {
 
     pw.Widget cell(String text, {bool bold = false, bool right = false, bool header = false, PdfColor? color}) => pw.Padding(
           padding: const pw.EdgeInsets.symmetric(horizontal: 7, vertical: 5.5),
-          child: pw.Text(text,
+          child: pw.Text(PdfFonts.shape(text),
               textAlign: right ? pw.TextAlign.right : pw.TextAlign.left,
               style: ts(header ? 8.6 : 9, bold: bold || header, color: color ?? (header ? primary : null))),
         );
@@ -70,9 +70,9 @@ class StockPdf {
           padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 7),
           decoration: pw.BoxDecoration(border: pw.Border.all(color: lineCol, width: 0.7), borderRadius: pw.BorderRadius.circular(6)),
           child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-            pw.Text(label.toUpperCase(), style: ts(7.2, bold: true, color: greyTxt)),
+            pw.Text(PdfFonts.shape(label.toUpperCase()), style: ts(7.2, bold: true, color: greyTxt)),
             pw.SizedBox(height: 2.5),
-            pw.Text(value, style: ts(9.6, bold: true)),
+            pw.Text(PdfFonts.shape(value), style: ts(9.6, bold: true)),
           ]),
         );
 
@@ -86,20 +86,20 @@ class StockPdf {
       build: (context) => [
         pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
           pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-            pw.Text(CompanyProfile.current.name, style: ts(15, bold: true)),
+            pw.Text(PdfFonts.shape(CompanyProfile.current.name), style: ts(15, bold: true)),
             pw.SizedBox(height: 2),
-            if (CompanyProfile.current.address.isNotEmpty) pw.Text(CompanyProfile.current.address, style: ts(9, color: greyTxt)),
-            if (CompanyProfile.current.taxLine.isNotEmpty) pw.Text(CompanyProfile.current.taxLine, style: ts(9, color: greyTxt)),
+            if (CompanyProfile.current.address.isNotEmpty) pw.Text(PdfFonts.shape(CompanyProfile.current.address), style: ts(9, color: greyTxt)),
+            if (CompanyProfile.current.taxLine.isNotEmpty) pw.Text(PdfFonts.shape(CompanyProfile.current.taxLine), style: ts(9, color: greyTxt)),
           ]),
           pw.Spacer(),
           pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
             pw.Container(
               padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: pw.BoxDecoration(color: headerBg, borderRadius: pw.BorderRadius.circular(6)),
-              child: pw.Text(tr('Stock Report').toUpperCase(), style: ts(12, bold: true, color: primary)),
+              child: pw.Text(PdfFonts.shape(tr('Stock Report').toUpperCase()), style: ts(12, bold: true, color: primary)),
             ),
             pw.SizedBox(height: 4),
-            pw.Text(DateFormat('EEEE, dd MMM yyyy · hh:mm a').format(now), style: ts(9.5, color: greyTxt)),
+            pw.Text(PdfFonts.shape(DateFormat('EEEE, dd MMM yyyy · hh:mm a').format(now)), style: ts(9.5, color: greyTxt)),
           ]),
         ]),
         pw.SizedBox(height: 14),
@@ -154,7 +154,7 @@ class StockPdf {
           ],
         ),
         pw.SizedBox(height: 12),
-        pw.Text(tr('Generated from live inventory — cartons and trays tracked separately.'),
+        pw.Text(PdfFonts.shape(tr('Generated from live inventory — cartons and trays tracked separately.')),
             style: ts(8, color: greyTxt)),
       ],
     ));
