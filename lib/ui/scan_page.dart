@@ -1,99 +1,47 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart';
+import 'package:image_picker/image_picker.dart';
 
-import '../core/permissions.dart';
-
-/// Full-screen QR/barcode scanner — returns the scanned text via
-/// Navigator.pop. Used for batch codes on dispatch (no typing).
-///
-/// Uses the plugin's DEFAULT-MANAGED camera lifecycle (no self-created
-/// controller): manual start()/stop() threw genericError on Xiaomi/Redmi.
-class ScanPage extends StatefulWidget {
-  final String title;
-  const ScanPage({super.key, this.title = 'Scan code'});
-
-  /// Open the scanner; resolves to the scanned string or null (cancelled).
+/// QR/barcode scan that works on EVERY phone (incl. Xiaomi/MIUI where live
+/// camera-preview scanners fail with genericError):
+/// the system camera app takes the photo, Google ML Kit reads the code from
+/// it on-device. No preview surface, no camera lifecycle bugs.
+class ScanPage {
+  /// Opens the phone's camera; resolves to the scanned code or null.
   static Future<String?> scan(BuildContext context, {String title = 'Scan code'}) async {
-    final ok = await AppPermissions.ensureCamera();
-    if (!ok || !context.mounted) return null;
-    return Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => ScanPage(title: title)),
-    );
-  }
+    try {
+      final shot = await ImagePicker().pickImage(
+        source: ImageSource.camera,
+        maxWidth: 2000,
+        imageQuality: 90,
+        preferredCameraDevice: CameraDevice.rear,
+      );
+      if (shot == null) return null; // user cancelled
 
-  @override
-  State<ScanPage> createState() => _ScanPageState();
-}
-
-class _ScanPageState extends State<ScanPage> {
-  bool _done = false; // pop only once
-  int _attempt = 0; // bump to fully recreate the scanner on Retry
-
-  void _onDetect(BarcodeCapture capture) {
-    if (_done) return;
-    for (final b in capture.barcodes) {
-      final v = b.rawValue?.trim();
-      if (v != null && v.isNotEmpty) {
-        _done = true;
-        Navigator.of(context).pop(v);
-        return;
+      final scanner = BarcodeScanner(formats: [BarcodeFormat.all]);
+      try {
+        final barcodes = await scanner.processImage(InputImage.fromFile(File(shot.path)));
+        for (final b in barcodes) {
+          final v = (b.rawValue ?? '').trim();
+          if (v.isNotEmpty) return v;
+        }
+      } finally {
+        await scanner.close();
       }
-    }
-  }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        title: Text(widget.title),
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-      ),
-      body: Stack(children: [
-        MobileScanner(
-          key: ValueKey('scanner-$_attempt'), // Retry = brand-new camera session
-          onDetect: _onDetect,
-          errorBuilder: (context, error, child) => Center(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(Icons.no_photography_outlined, color: Colors.white70, size: 42),
-              const SizedBox(height: 10),
-              Text('Camera not starting — ${error.errorCode.name}',
-                  textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontSize: 13.5)),
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: () async {
-                  await AppPermissions.ensureCamera();
-                  if (mounted) setState(() => _attempt++); // recreate widget
-                },
-                icon: const Icon(Icons.refresh_rounded, size: 18),
-                label: const Text('Retry'),
-              ),
-            ]),
-          ),
-        ),
-        // simple viewfinder frame
-        IgnorePointer(
-          child: Center(
-            child: Container(
-              width: 240,
-              height: 240,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.white70, width: 2),
-                borderRadius: BorderRadius.circular(16),
-              ),
-            ),
-          ),
-        ),
-        Positioned(
-          left: 0, right: 0, bottom: 28,
-          child: IgnorePointer(
-            child: Text('Place the QR / barcode inside the frame',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 13.5)),
-          ),
-        ),
-      ]),
-    );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Code nahi mileya — photo saaf te nede ton khicho (code frame ch poora hove).'),
+        ));
+      }
+      return null;
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Scan failed: $e')));
+      }
+      return null;
+    }
   }
 }
