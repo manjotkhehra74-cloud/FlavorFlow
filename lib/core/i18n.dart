@@ -48,6 +48,8 @@ class L10n extends ChangeNotifier {
 
   static const Map<String, Map<String, String>> _tr = {
     'pa': {
+      'Quantity': 'ਮਾਤਰਾ',
+      'Batch size': 'ਬੈਚ ਸਾਈਜ਼',
       'Account active': 'ਖਾਤਾ ਸਰਗਰਮ',
       'Address': 'ਪਤਾ',
       'Approve': 'ਮਨਜ਼ੂਰ ਕਰੋ',
@@ -306,6 +308,8 @@ class L10n extends ChangeNotifier {
       'Ledger': 'ਖਾਤਾ',
     },
     'hi': {
+      'Quantity': 'मात्रा',
+      'Batch size': 'बैच साइज़',
       'Account active': 'खाता सक्रिय',
       'Address': 'पता',
       'Approve': 'मंज़ूर करें',
@@ -564,6 +568,8 @@ class L10n extends ChangeNotifier {
       'Ledger': 'खाता',
     },
   'gu': {
+      'Quantity': 'જથ્થો',
+      'Batch size': 'બેચ સાઇઝ',
       'APPROVED': 'મંજૂર',
       'Add product line': 'પ્રોડક્ટ લાઇન ઉમેરો',
       'Adjustment Requests': 'સુધારા વિનંતીઓ',
@@ -808,6 +814,8 @@ class L10n extends ChangeNotifier {
       'Refresh permissions': 'પરવાનગીઓ તાજી કરો',
     },
     'mr': {
+      'Quantity': 'प्रमाण',
+      'Batch size': 'बॅच साइज',
       'APPROVED': 'मंजूर',
       'Add product line': 'प्रॉडक्ट लाइन जोडा',
       'Adjustment Requests': 'सुधारणा विनंत्या',
@@ -1051,6 +1059,8 @@ class L10n extends ChangeNotifier {
       'Refresh permissions': 'परवानग्या ताज्या करा',
     },
     'bn': {
+      'Quantity': 'পরিমাণ',
+      'Batch size': 'ব্যাচ সাইজ',
       'APPROVED': 'অনুমোদিত',
       'Add product line': 'প্রোডাক্ট লাইন যোগ',
       'Adjustment Requests': 'সংশোধন অনুরোধ',
@@ -1294,6 +1304,8 @@ class L10n extends ChangeNotifier {
       'Refresh permissions': 'অনুমতি রিফ্রেশ',
     },
     'ta': {
+      'Quantity': 'அளவு',
+      'Batch size': 'தொகுதி அளவு',
       'APPROVED': 'ஒப்புதல்',
       'Add product line': 'தயாரிப்பு வரி சேர்',
       'Adjustment Requests': 'திருத்த கோரிக்கைகள்',
@@ -1537,6 +1549,8 @@ class L10n extends ChangeNotifier {
       'Refresh permissions': 'அனுமதிகள் புதுப்பி',
     },
     'te': {
+      'Quantity': 'పరిమాణం',
+      'Batch size': 'బ్యాచ్ సైజు',
       'APPROVED': 'ఆమోదితం',
       'Add product line': 'ప్రొడక్ట్ లైన్ జోడించు',
       'Adjustment Requests': 'సవరణ అభ్యర్థనలు',

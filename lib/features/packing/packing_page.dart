@@ -574,7 +574,7 @@ class _TxnDialogState extends State<_TxnDialog> {
                             style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12.5)),
                       ),
                     const SizedBox(height: 12),
-                    TextField(controller: qty, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('Quantity (${_material?[')unit'] ?? 'pcs'}) *')),
+                    TextField(controller: qty, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${tr('Quantity')} (${_material?['unit'] ?? 'pcs'}) *')),
                     const SizedBox(height: 12),
                     if (isReceive)
                       TextField(controller: reference, decoration: InputDecoration(labelText: tr('Reference (PO no. / supplier)'), hintText: 'e.g. PO-1187 / Kapoor Plastics'))
@@ -966,7 +966,7 @@ class _RecipeEditDialogState extends State<_RecipeEditDialog> {
                   TextField(
                     controller: batchSize,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: InputDecoration(labelText: tr('Batch size (${r?[')batch_unit'] ?? 'kg'}) *'),
+                    decoration: InputDecoration(labelText: '${tr('Batch size')} (${r?['batch_unit'] ?? 'kg'}) *'),
                   ),
                   if (r != null) ...[
                     const SizedBox(height: 14),
