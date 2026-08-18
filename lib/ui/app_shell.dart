@@ -80,15 +80,19 @@ class _AppShellState extends State<AppShell> {
     final session = auth.session;
     if (session == null) return const Scaffold();
     final nav = [...session.nav.map((e) => Map<String, dynamic>.from(e as Map))];
-    // Raw Material gets its own menu entry right below Packing Material
-    // (client-side: the server nav doesn't know this module yet).
+    // Raw Material gets its own menu entry right below Packing Material.
+    // Once the server knows raw.view/loss.view (ff-permfix) it sends these
+    // entries itself and gates them per user; until then we inject them
+    // client-side for anyone with packing access.
     final pi = nav.indexWhere((e) => e['path'] == '/packing');
-    if (pi != -1 && !nav.any((e) => e['path'] == '/raw')) {
-      nav.insert(pi + 1, {'path': '/raw', 'label': 'Raw Material', 'icon': 'science', 'group': nav[pi]['group']});
+    if (!nav.any((e) => e['path'] == '/raw') && auth.canOr('raw.view', 'packing.view')) {
+      final at = pi != -1 ? pi + 1 : nav.length;
+      nav.insert(at, {'path': '/raw', 'label': 'Raw Material', 'icon': 'science', 'group': pi != -1 ? nav[pi]['group'] : 'Operations'});
     }
     final ri = nav.indexWhere((e) => e['path'] == '/raw');
-    if (ri != -1 && !nav.any((e) => e['path'] == '/loss')) {
-      nav.insert(ri + 1, {'path': '/loss', 'label': 'Packing Loss %', 'icon': 'percent', 'group': nav[ri]['group']});
+    if (!nav.any((e) => e['path'] == '/loss') && auth.canOr('loss.view', 'packing.view')) {
+      final at = ri != -1 ? ri + 1 : nav.length;
+      nav.insert(at, {'path': '/loss', 'label': 'Packing Loss %', 'icon': 'percent', 'group': ri != -1 ? nav[ri]['group'] : 'Operations'});
     }
     // Settings entry at the end of the menu for every user.
     if (!nav.any((e) => e['path'] == '/settings')) {

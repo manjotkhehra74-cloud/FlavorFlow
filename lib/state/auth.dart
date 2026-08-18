@@ -38,6 +38,15 @@ class AuthController extends ChangeNotifier {
   bool get isLoggedIn => session != null;
   bool can(String perm) => session?.can(perm) ?? false;
 
+  /// True once the server knows the split raw./loss. permissions
+  /// (ff-permfix applied) — the session then carries at least one of them.
+  bool get hasSplitPerms =>
+      session?.permissions.any((p) => p.startsWith('raw.') || p.startsWith('loss.')) ?? false;
+
+  /// Permission check with a legacy fallback: before ff-permfix runs on the
+  /// server, the old umbrella permission (packing.*) keeps everything working.
+  bool canOr(String perm, String legacy) => can(perm) || (!hasSplitPerms && can(legacy));
+
   /// Resolved API base (may be null on native until the user sets it).
   String? get serverBase => api.baseUrl;
 

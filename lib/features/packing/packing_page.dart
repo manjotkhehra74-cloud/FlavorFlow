@@ -171,7 +171,7 @@ class _StockTabState extends State<_StockTab> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthController>();
-    final canManage = auth.can('packing.manage');
+    final canManage = widget.rawOnly ? auth.canOr('raw.manage', 'packing.manage') : auth.can('packing.manage');
     return FutureBuilder<Map<String, dynamic>>(
       future: _future,
       builder: (context, snap) {

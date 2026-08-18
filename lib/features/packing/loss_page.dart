@@ -132,7 +132,7 @@ class _LossPageState extends State<LossPage> {
 
   @override
   Widget build(BuildContext context) {
-    final canManage = context.watch<AuthController>().can('packing.manage');
+    final canManage = context.watch<AuthController>().canOr('loss.manage', 'packing.manage');
     return FutureBuilder<Map<String, dynamic>>(
       future: _future,
       builder: (context, snap) {
