@@ -186,9 +186,9 @@ class _AdjustmentFormDialogState extends State<AdjustmentFormDialog> {
                   ),
                 const SizedBox(height: 14),
                 SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'IN', label: Text(tr('Stock IN')), icon: Icon(Icons.south_west_rounded, size: 17)),
-                    ButtonSegment(value: 'OUT', label: Text(tr('Stock OUT')), icon: Icon(Icons.north_east_rounded, size: 17)),
+                  segments: [
+                    ButtonSegment(value: 'IN', label: Text(tr('Stock IN')), icon: const Icon(Icons.south_west_rounded, size: 17)),
+                    ButtonSegment(value: 'OUT', label: Text(tr('Stock OUT')), icon: const Icon(Icons.north_east_rounded, size: 17)),
                   ],
                   selected: {type},
                   onSelectionChanged: (s) => setState(() => type = s.first),

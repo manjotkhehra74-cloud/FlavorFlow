@@ -58,7 +58,7 @@ class _ApprovalsPageState extends State<ApprovalsPage> with SingleTickerProvider
           Expanded(
             child: TabBar(
               controller: _tab,
-              tabs: const [Tab(text: tr('Pending Approval')), Tab(text: tr('Approval History'))],
+              tabs: [Tab(text: tr('Pending Approval')), Tab(text: tr('Approval History'))],
             ),
           ),
           const SizedBox(width: 16),
