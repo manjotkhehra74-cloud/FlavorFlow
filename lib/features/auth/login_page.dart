@@ -209,11 +209,12 @@ class _LoginPageState extends State<LoginPage> {
                   Container(
                     width: 42, height: 42,
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(colors: [Color(0xFF0A6ED1), Color(0xFF0891B2)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                      color: Colors.white,
                       borderRadius: BorderRadius.circular(9),
                     ),
+                    clipBehavior: Clip.antiAlias,
                     alignment: Alignment.center,
-                    child: const Text('FF', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 17, letterSpacing: 0.4)),
+                    child: Image.asset('assets/icon/app_icon.png', fit: BoxFit.cover),
                   ),
                   const SizedBox(width: 12),
                   const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -266,9 +267,10 @@ class _LoginPageState extends State<LoginPage> {
                 Row(children: [
                   Container(
                     width: 38, height: 38,
-                    decoration: BoxDecoration(color: scheme.primary, borderRadius: BorderRadius.circular(8)),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: scheme.outlineVariant)),
+                    clipBehavior: Clip.antiAlias,
                     alignment: Alignment.center,
-                    child: const Text('FF', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15)),
+                    child: Image.asset('assets/icon/app_icon.png', fit: BoxFit.cover),
                   ),
                   const SizedBox(width: 10),
                   Text('FlavorFlow ERP', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: scheme.onSurface)),

@@ -60,11 +60,13 @@ class _SetupPageState extends State<SetupPage> {
                 Container(
                   width: 46, height: 46,
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(colors: [Color(0xFF0A6ED1), Color(0xFF0891B2)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                    color: Colors.white,
                     borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: scheme.outlineVariant),
                   ),
+                  clipBehavior: Clip.antiAlias,
                   alignment: Alignment.center,
-                  child: const Text('FF', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18)),
+                  child: Image.asset('assets/icon/app_icon.png', fit: BoxFit.cover),
                 ),
                 const SizedBox(width: 12),
                 Text('FlavorFlow ERP', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: scheme.onSurface, letterSpacing: -0.3)),

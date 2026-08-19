@@ -269,11 +269,12 @@ class _Sidebar extends StatelessWidget {
             Container(
               width: 32, height: 32,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(colors: [Color(0xFF0A6ED1), Color(0xFF0891B2)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(7),
               ),
+              clipBehavior: Clip.antiAlias,
               alignment: Alignment.center,
-              child: const Text('FF', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13, letterSpacing: 0.4)),
+              child: Image.asset('assets/icon/app_icon.png', fit: BoxFit.cover),
             ),
             const SizedBox(width: 10),
             const Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
