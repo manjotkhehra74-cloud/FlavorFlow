@@ -218,12 +218,24 @@ class _TopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
-      height: 54,
-      color: Theme.of(context).colorScheme.surface,
-      padding: const EdgeInsets.only(left: 20),
+      height: 64,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        boxShadow: [
+          BoxShadow(color: theme.shadowColor.withValues(alpha: 0.35), blurRadius: 12, offset: const Offset(0, 2)),
+        ],
+      ),
+      padding: const EdgeInsets.only(left: 24),
       child: Row(children: [
-        Text(title, style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w700, letterSpacing: -0.2, color: Theme.of(context).colorScheme.onSurface)),
+        Container(
+          width: 4,
+          height: 22,
+          decoration: BoxDecoration(gradient: AppBrand.gradient, borderRadius: BorderRadius.circular(8)),
+        ),
+        const SizedBox(width: 11),
+        Text(title, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, letterSpacing: -0.3, color: theme.colorScheme.onSurface)),
         const Spacer(),
         Icon(Icons.calendar_today_outlined, size: 13, color: Theme.of(context).colorScheme.onSurfaceVariant),
         const SizedBox(width: 6),
@@ -257,26 +269,28 @@ class _Sidebar extends StatelessWidget {
     }
 
     return Container(
-      width: 238,
-      color: Shell.bg,
+      width: 252,
+      decoration: const BoxDecoration(gradient: Shell.gradient),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         // brand
         Container(
-          height: 54,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
+          height: 64,
+          padding: const EdgeInsets.symmetric(horizontal: 15),
           decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Shell.border))),
           child: Row(children: [
             Container(
-              width: 32, height: 32,
+              width: 38, height: 38,
+              padding: const EdgeInsets.all(2),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(7),
+                borderRadius: BorderRadius.circular(11),
+                boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 10, offset: Offset(0, 3))],
               ),
               clipBehavior: Clip.antiAlias,
               alignment: Alignment.center,
               child: Image.asset('assets/icon/app_icon.png', fit: BoxFit.cover),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 11),
             const Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
               Text('FlavorFlow ERP', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: Colors.white, height: 1.15, letterSpacing: -0.1)),
               Text('MANUFACTURING SUITE', style: TextStyle(fontSize: 8.5, color: Shell.groupLabel, letterSpacing: 1.6, fontWeight: FontWeight.w600, height: 1.4)),
@@ -350,25 +364,30 @@ class _NavTileState extends State<_NavTile> {
   Widget build(BuildContext context) {
     final active = widget.selected;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0.5),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 1.5),
       child: MouseRegion(
         onEnter: (_) => setState(() => _hover = true),
         onExit: (_) => setState(() => _hover = false),
         child: InkWell(
           onTap: widget.onTap,
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(10),
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 90),
-            height: 37,
+            duration: const Duration(milliseconds: 160),
+            height: 40,
             decoration: BoxDecoration(
-              color: active ? Shell.itemSelected : (_hover ? Shell.itemHover : Colors.transparent),
-              borderRadius: BorderRadius.circular(6),
-              border: active ? const Border(left: BorderSide(color: Shell.itemSelectedBar, width: 3)) : null,
+              color: active ? null : (_hover ? Shell.itemHover : Colors.transparent),
+              gradient: active
+                  ? const LinearGradient(colors: [Color(0xFF1B5DA0), Color(0xFF137A70)])
+                  : null,
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: active
+                  ? const [BoxShadow(color: Color(0x2816B878), blurRadius: 12, offset: Offset(0, 3))]
+                  : null,
             ),
-            padding: EdgeInsets.only(left: active ? 9 : 12, right: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(children: [
-              Icon(widget.icon, size: 18, color: active ? Colors.white : Shell.item),
-              const SizedBox(width: 11),
+              Icon(widget.icon, size: 19, color: active ? Colors.white : Shell.item),
+              const SizedBox(width: 12),
               Expanded(
                 child: Text(widget.label,
                     overflow: TextOverflow.ellipsis,

@@ -48,7 +48,7 @@ class _DashboardPageState extends State<DashboardPage> {
           onRefresh: () async => _reload(),
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(20),
+            padding: EdgeInsets.all(MediaQuery.sizeOf(context).width < 600 ? 14 : 24),
             children: [
               _Header(greeting: data['greeting'] as String, name: data['name'] as String, session: session),
               const SizedBox(height: 18),
@@ -97,31 +97,52 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Row(children: [
-      Expanded(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('$greeting, ${name.split(' ').first}',
-              style: TextStyle(fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -0.4, color: scheme.onSurface)),
-          const SizedBox(height: 3),
-          // Wrap keeps each chunk intact: the date never splits across lines —
-          // on narrow phones it moves to its own line as one piece.
-          Wrap(spacing: 6, runSpacing: 2, children: [
-            Text('${session.roleLabel} workspace', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5)),
-            Text('·  ${fmtDateWithDay(todayYmd())}', softWrap: false, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5)),
-          ]),
-        ]),
-      ),
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: hexColor(session.roleColor).withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(5),
-          border: Border.all(color: hexColor(session.roleColor).withValues(alpha: 0.30)),
+    final roleColor = hexColor(session.roleColor);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [scheme.primaryContainer.withValues(alpha: 0.78), scheme.secondaryContainer.withValues(alpha: 0.68)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        child: Text(session.roleLabel.toUpperCase(),
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 10.5, letterSpacing: 0.9, color: hexColor(session.roleColor))),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.primary.withValues(alpha: 0.12)),
       ),
-    ]);
+      child: Row(children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(gradient: AppBrand.gradient, borderRadius: BorderRadius.circular(13)),
+          child: const Icon(Icons.waving_hand_rounded, color: Colors.white, size: 22),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('$greeting, ${name.split(' ').first}',
+                style: TextStyle(fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -0.45, color: scheme.onSurface)),
+            const SizedBox(height: 4),
+            Wrap(spacing: 6, runSpacing: 2, children: [
+              Text('${session.roleLabel} workspace', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5)),
+              Text('·  ${fmtDateWithDay(todayYmd())}', softWrap: false, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5)),
+            ]),
+          ]),
+        ),
+        if (MediaQuery.sizeOf(context).width >= 520) ...[
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+            decoration: BoxDecoration(
+              color: roleColor.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(color: roleColor.withValues(alpha: 0.28)),
+            ),
+            child: Text(session.roleLabel.toUpperCase(),
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 10.5, letterSpacing: 0.8, color: roleColor)),
+          ),
+        ],
+      ]),
+    );
   }
 }
 
@@ -144,7 +165,7 @@ class _KpiGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, c) {
       final cols = c.maxWidth > 1300 ? 4 : c.maxWidth > 900 ? 3 : c.maxWidth > 560 ? 2 : 1;
-      final ratio = ((c.maxWidth - (cols - 1) * 12) / cols / 84).clamp(1.6, 5.0);
+      final ratio = ((c.maxWidth - (cols - 1) * 12) / cols / 100).clamp(1.45, 4.5);
       return GridView.count(
         crossAxisCount: cols,
         shrinkWrap: true,

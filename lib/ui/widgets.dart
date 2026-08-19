@@ -150,9 +150,15 @@ class SectionCard extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
         if (title != null) ...[
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 12, 11),
+            padding: const EdgeInsets.fromLTRB(17, 14, 13, 13),
             child: Row(children: [
-              Expanded(child: Text(tr(title!), style: const TextStyle(fontSize: 13.6, fontWeight: FontWeight.w700, letterSpacing: -0.1))),
+              Container(
+                width: 4,
+                height: 18,
+                decoration: BoxDecoration(gradient: AppBrand.gradient, borderRadius: BorderRadius.circular(8)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(child: Text(tr(title!), style: const TextStyle(fontSize: 13.8, fontWeight: FontWeight.w700, letterSpacing: -0.15))),
               if (trailing != null) trailing!,
             ]),
           ),
@@ -175,29 +181,43 @@ class KpiCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(15, 13, 15, 12),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
-          Row(children: [
-            Expanded(
-              child: Text(tr(label).toUpperCase(),
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.9, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+      child: Stack(children: [
+        Positioned(
+          left: 0,
+          top: 15,
+          bottom: 15,
+          child: Container(width: 3, decoration: BoxDecoration(color: tint, borderRadius: const BorderRadius.horizontal(right: Radius.circular(6)))),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(17, 14, 14, 13),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+            Row(children: [
+              Expanded(
+                child: Text(tr(label).toUpperCase(),
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.85, color: scheme.onSurfaceVariant)),
+              ),
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(color: tint.withValues(alpha: 0.11), borderRadius: BorderRadius.circular(10)),
+                child: Icon(icon, size: 17, color: tint),
+              ),
+            ]),
+            const SizedBox(height: 5),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(value,
+                  style: TextStyle(
+                      fontSize: 24, fontWeight: FontWeight.w700, letterSpacing: -0.6, color: scheme.onSurface,
+                      fontFeatures: const [FontFeature.tabularFigures()])),
             ),
-            Icon(icon, size: 16, color: tint),
           ]),
-          const SizedBox(height: 7),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(value,
-                style: TextStyle(
-                    fontSize: 23, fontWeight: FontWeight.w700, letterSpacing: -0.5, color: Theme.of(context).colorScheme.onSurface,
-                    fontFeatures: const [FontFeature.tabularFigures()])),
-          ),
-        ]),
-      ),
+        ),
+      ]),
     );
   }
 }

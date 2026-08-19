@@ -83,9 +83,16 @@ class _Splash extends StatelessWidget {
       body: Center(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Container(
-            width: 76, height: 76,
-            decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(20)),
-            child: Icon(Icons.factory_rounded, color: scheme.onPrimaryContainer, size: 40),
+            width: 82,
+            height: 82,
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [BoxShadow(color: scheme.primary.withValues(alpha: 0.18), blurRadius: 24, offset: const Offset(0, 8))],
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Image.asset('assets/icon/app_icon.png', fit: BoxFit.cover),
           ),
           const SizedBox(height: 18),
           Text('FlavorFlow ERP', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: scheme.onSurface, letterSpacing: -0.3)),
