@@ -108,24 +108,26 @@ class _AppShellState extends State<AppShell> {
     if (!nav.any((e) => e['path'] == '/settings')) {
       nav.add({'path': '/settings', 'label': 'Settings', 'icon': 'settings', 'group': nav.isNotEmpty ? (nav.last['group'] ?? 'System') : 'System'});
     }
-    final wide = MediaQuery.of(context).size.width >= 1060;
+    final width = MediaQuery.sizeOf(context).width;
+    final wide = width >= 1060;
+    final phone = width < 700;
     final selected = _selectedIndex(context, nav);
     final title = tr(nav[selected]['label'] as String);
+
+    void goTo(int i) {
+      context.go(nav[i]['path'] as String);
+      if (!wide) {
+        Future.delayed(const Duration(milliseconds: 160), () {
+          _scaffoldKey.currentState?.closeDrawer();
+        });
+      }
+    }
 
     final sidebar = _Sidebar(
       nav: nav,
       selected: selected,
       session: session,
-      onTap: (i) {
-        context.go(nav[i]['path'] as String);
-        if (!wide) {
-          // Auto-hide the drawer on mobile after a short delay so the tap
-          // ripple is visible before the drawer slides away.
-          Future.delayed(const Duration(milliseconds: 200), () {
-            _scaffoldKey.currentState?.closeDrawer();
-          });
-        }
-      },
+      onTap: goTo,
       onLogout: _logout,
     );
 
@@ -146,22 +148,243 @@ class _AppShellState extends State<AppShell> {
       );
     }
 
+    final path = GoRouterState.of(context).uri.path;
     return Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
-        // FittedBox scales long section names down instead of cutting them off;
-        // the compact user menu (avatar only) leaves the title maximum room.
         title: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text(title)),
         titleSpacing: 0,
         actions: [topBar.actionsPadding(child: topBar.bellAction(context)), topBar.userAction(context, compact: true)],
       ),
-      drawer: Drawer(backgroundColor: Shell.bg, child: SafeArea(child: sidebar)),
+      drawer: phone
+          ? _MobileModulesDrawer(nav: nav, selected: selected, session: session, onTap: goTo, onLogout: _logout)
+          : Drawer(backgroundColor: Shell.bg, child: SafeArea(child: sidebar)),
       body: widget.child,
+      bottomNavigationBar: phone
+          ? _MobileBottomBar(
+              currentPath: path,
+              hasReports: nav.any((e) => e['path'] == '/reports'),
+              onModules: () => _scaffoldKey.currentState?.openDrawer(),
+            )
+          : null,
     );
   }
 }
 
-/// Slim 54px white top bar: page title • date • notifications • user menu.
+/// Play Store phone navigation: persistent shortcuts around a prominent
+/// module-grid button. Routes and permission checks remain unchanged.
+class _MobileBottomBar extends StatelessWidget {
+  final String currentPath;
+  final bool hasReports;
+  final VoidCallback onModules;
+  const _MobileBottomBar({required this.currentPath, required this.hasReports, required this.onModules});
+
+  bool _at(String path) => currentPath == path || currentPath.startsWith('$path/');
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border(top: BorderSide(color: scheme.outlineVariant)),
+        boxShadow: [BoxShadow(color: Theme.of(context).shadowColor.withValues(alpha: 0.38), blurRadius: 16, offset: const Offset(0, -4))],
+      ),
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 66,
+          child: Row(children: [
+            _MobileNavItem(
+              icon: Icons.home_rounded,
+              label: tr('Dashboard'),
+              active: _at('/dashboard'),
+              onTap: () => context.go('/dashboard'),
+            ),
+            _MobileNavItem(
+              icon: Icons.notifications_outlined,
+              label: tr('Notifications'),
+              active: _at('/notifications'),
+              onTap: () => context.go('/notifications'),
+            ),
+            SizedBox(
+              width: 66,
+              child: Center(
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: onModules,
+                    customBorder: const CircleBorder(),
+                    child: Ink(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        gradient: AppBrand.gradient,
+                        shape: BoxShape.circle,
+                        boxShadow: [BoxShadow(color: AppBrand.blue.withValues(alpha: 0.30), blurRadius: 12, offset: const Offset(0, 5))],
+                      ),
+                      child: const Icon(Icons.grid_view_rounded, color: Colors.white, size: 22),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            if (hasReports)
+              _MobileNavItem(
+                icon: Icons.insert_chart_outlined_rounded,
+                label: tr('Reports'),
+                active: _at('/reports'),
+                onTap: () => context.go('/reports'),
+              )
+            else
+              const Spacer(),
+            _MobileNavItem(
+              icon: Icons.person_outline_rounded,
+              label: tr('Settings'),
+              active: _at('/settings'),
+              onTap: () => context.go('/settings'),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _MobileNavItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  const _MobileNavItem({required this.icon, required this.label, required this.active, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final color = active ? scheme.primary : scheme.onSurfaceVariant;
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(icon, size: 21, color: color),
+          const SizedBox(height: 3),
+          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 9.5, height: 1.1, fontWeight: active ? FontWeight.w700 : FontWeight.w500, color: color)),
+        ]),
+      ),
+    );
+  }
+}
+
+/// Phone drawer presented as the colourful module grid in the design reference.
+/// It renders the same server-provided navigation list and invokes the same routes.
+class _MobileModulesDrawer extends StatelessWidget {
+  final List nav;
+  final int selected;
+  final UserSession session;
+  final void Function(int) onTap;
+  final Future<void> Function() onLogout;
+  const _MobileModulesDrawer({required this.nav, required this.selected, required this.session, required this.onTap, required this.onLogout});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final available = MediaQuery.sizeOf(context).width * 0.90;
+    final drawerWidth = available > 390 ? 390.0 : available;
+    return Drawer(
+      width: drawerWidth,
+      backgroundColor: scheme.surface,
+      surfaceTintColor: Colors.transparent,
+      child: SafeArea(
+        child: Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 12, 10, 12),
+            child: Row(children: [
+              Container(
+                width: 42,
+                height: 42,
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(13), border: Border.all(color: scheme.outlineVariant)),
+                clipBehavior: Clip.antiAlias,
+                child: Image.asset('assets/icon/app_icon.png', fit: BoxFit.cover),
+              ),
+              const SizedBox(width: 11),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('FlavorFlow ERP', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: scheme.onSurface, letterSpacing: -0.2)),
+                Text(session.roleLabel, style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
+              ])),
+              IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded)),
+            ]),
+          ),
+          Divider(color: scheme.outlineVariant),
+          Expanded(
+            child: GridView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
+                childAspectRatio: 0.92,
+              ),
+              itemCount: nav.length,
+              itemBuilder: (context, i) {
+                final color = AppColors.chart[i % AppColors.chart.length];
+                final active = i == selected;
+                return Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => onTap(i),
+                    borderRadius: BorderRadius.circular(14),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 160),
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 11),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: active ? 0.16 : 0.075),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: color.withValues(alpha: active ? 0.48 : 0.12), width: active ? 1.4 : 1),
+                      ),
+                      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(11)),
+                          child: Icon(iconFor(nav[i]['icon'] as String?), color: color, size: 21),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          tr(nav[i]['label'] as String),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 10.5, height: 1.15, fontWeight: active ? FontWeight.w700 : FontWeight.w600, color: scheme.onSurface),
+                        ),
+                      ]),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+            decoration: BoxDecoration(color: scheme.surfaceContainerLow, border: Border(top: BorderSide(color: scheme.outlineVariant))),
+            child: Row(children: [
+              _Avatar(session: session, radius: 18),
+              const SizedBox(width: 10),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(session.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                Text(session.email, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant)),
+              ])),
+              IconButton(tooltip: tr('Sign out'), onPressed: onLogout, icon: Icon(Icons.logout_rounded, color: scheme.error, size: 20)),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+/// Slim white top bar: page title • date • notifications • user menu.
 class _TopBar extends StatelessWidget {
   final String title;
   final int unread;

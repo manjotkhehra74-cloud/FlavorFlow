@@ -96,35 +96,34 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final roleColor = hexColor(session.roleColor);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [scheme.primaryContainer.withValues(alpha: 0.78), scheme.secondaryContainer.withValues(alpha: 0.68)],
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1459D9), Color(0xFF247FE7), Color(0xFF13A879)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
+          stops: [0, 0.62, 1],
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: scheme.primary.withValues(alpha: 0.12)),
+        boxShadow: [BoxShadow(color: AppBrand.blue.withValues(alpha: 0.22), blurRadius: 18, offset: const Offset(0, 7))],
       ),
       child: Row(children: [
         Container(
           width: 44,
           height: 44,
-          decoration: BoxDecoration(gradient: AppBrand.gradient, borderRadius: BorderRadius.circular(13)),
-          child: const Icon(Icons.waving_hand_rounded, color: Colors.white, size: 22),
+          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(13)),
+          child: const Icon(Icons.insights_rounded, color: Colors.white, size: 23),
         ),
         const SizedBox(width: 14),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('$greeting, ${name.split(' ').first}',
-                style: TextStyle(fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -0.45, color: scheme.onSurface)),
+                style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -0.45, color: Colors.white)),
             const SizedBox(height: 4),
             Wrap(spacing: 6, runSpacing: 2, children: [
-              Text('${session.roleLabel} workspace', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5)),
-              Text('·  ${fmtDateWithDay(todayYmd())}', softWrap: false, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5)),
+              Text('${session.roleLabel} workspace', style: TextStyle(color: Colors.white.withValues(alpha: 0.78), fontSize: 12.5)),
+              Text('·  ${fmtDateWithDay(todayYmd())}', softWrap: false, style: TextStyle(color: Colors.white.withValues(alpha: 0.78), fontSize: 12.5)),
             ]),
           ]),
         ),
@@ -133,12 +132,12 @@ class _Header extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
             decoration: BoxDecoration(
-              color: roleColor.withValues(alpha: 0.10),
+              color: Colors.white.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(9),
-              border: Border.all(color: roleColor.withValues(alpha: 0.28)),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.26)),
             ),
             child: Text(session.roleLabel.toUpperCase(),
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 10.5, letterSpacing: 0.8, color: roleColor)),
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 10.5, letterSpacing: 0.8, color: Colors.white)),
           ),
         ],
       ]),
@@ -164,8 +163,10 @@ class _KpiGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, c) {
-      final cols = c.maxWidth > 1300 ? 4 : c.maxWidth > 900 ? 3 : c.maxWidth > 560 ? 2 : 1;
-      final ratio = ((c.maxWidth - (cols - 1) * 12) / cols / 100).clamp(1.45, 4.5);
+      // The Play Store mobile layout uses compact 2-column metric tiles,
+      // matching the module-card rhythm while retaining 3/4 columns on web.
+      final cols = c.maxWidth > 1300 ? 4 : c.maxWidth > 900 ? 3 : c.maxWidth < 340 ? 1 : 2;
+      final ratio = ((c.maxWidth - (cols - 1) * 12) / cols / 100).clamp(1.38, 4.5);
       return GridView.count(
         crossAxisCount: cols,
         shrinkWrap: true,

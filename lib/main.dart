@@ -78,27 +78,33 @@ class _Splash extends StatelessWidget {
   const _Splash();
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      body: Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(
-            width: 82,
-            height: 82,
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [BoxShadow(color: scheme.primary.withValues(alpha: 0.18), blurRadius: 24, offset: const Offset(0, 8))],
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(colors: [Color(0xFF071A3B), Color(0xFF082A54), Color(0xFF07182F)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+        ),
+        child: Center(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Container(
+              width: 112,
+              height: 112,
+              padding: const EdgeInsets.all(5),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [BoxShadow(color: AppBrand.blue.withValues(alpha: 0.38), blurRadius: 32, offset: const Offset(0, 10))],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Image.asset('assets/icon/app_icon.png', fit: BoxFit.cover),
             ),
-            clipBehavior: Clip.antiAlias,
-            child: Image.asset('assets/icon/app_icon.png', fit: BoxFit.cover),
-          ),
-          const SizedBox(height: 18),
-          Text('FlavorFlow ERP', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: scheme.onSurface, letterSpacing: -0.3)),
-          const SizedBox(height: 14),
-          const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.4)),
-        ]),
+            const SizedBox(height: 24),
+            const Text('FlavorFlow', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: -0.5)),
+            const SizedBox(height: 3),
+            const Text('ERP', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppBrand.green, letterSpacing: 4)),
+            const SizedBox(height: 24),
+            const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.4, color: AppBrand.green)),
+          ]),
+        ),
       ),
     );
   }
