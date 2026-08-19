@@ -174,7 +174,8 @@ class _ReportsPageState extends State<ReportsPage> {
     if (_selected == null) return const SizedBox.shrink();
     return SectionCard(
       title: _selected!['title'] as String,
-      trailing: Wrap(spacing: 8, children: [
+      stackTrailingOnNarrow: true,
+      trailing: Wrap(spacing: 8, runSpacing: 8, children: [
         OutlinedButton.icon(
           onPressed: (_data == null || _exporting) ? null : _exportPdf,
           icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),

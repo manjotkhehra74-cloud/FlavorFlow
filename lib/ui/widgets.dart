@@ -141,7 +141,15 @@ class SectionCard extends StatelessWidget {
   final Widget child;
   final Widget? trailing;
   final EdgeInsets padding;
-  const SectionCard({super.key, this.title, required this.child, this.trailing, this.padding = const EdgeInsets.all(16)});
+  final bool stackTrailingOnNarrow;
+  const SectionCard({
+    super.key,
+    this.title,
+    required this.child,
+    this.trailing,
+    this.padding = const EdgeInsets.all(16),
+    this.stackTrailingOnNarrow = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -151,16 +159,38 @@ class SectionCard extends StatelessWidget {
         if (title != null) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(17, 14, 13, 13),
-            child: Row(children: [
-              Container(
-                width: 4,
-                height: 18,
-                decoration: BoxDecoration(gradient: AppBrand.gradient, borderRadius: BorderRadius.circular(8)),
-              ),
-              const SizedBox(width: 10),
-              Expanded(child: Text(tr(title!), style: const TextStyle(fontSize: 13.8, fontWeight: FontWeight.w700, letterSpacing: -0.15))),
-              if (trailing != null) trailing!,
-            ]),
+            child: LayoutBuilder(builder: (context, constraints) {
+              Widget titleLine() => Row(children: [
+                    Container(
+                      width: 4,
+                      height: 20,
+                      decoration: BoxDecoration(gradient: AppBrand.gradient, borderRadius: BorderRadius.circular(8)),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        tr(title!),
+                        style: const TextStyle(fontSize: 13.8, fontWeight: FontWeight.w700, letterSpacing: -0.15),
+                      ),
+                    ),
+                  ]);
+
+              if (stackTrailingOnNarrow && trailing != null && constraints.maxWidth < 560) {
+                return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  titleLine(),
+                  const SizedBox(height: 11),
+                  Align(alignment: Alignment.centerRight, child: trailing!),
+                ]);
+              }
+
+              return Row(children: [
+                Expanded(child: titleLine()),
+                if (trailing != null) ...[
+                  const SizedBox(width: 10),
+                  trailing!,
+                ],
+              ]);
+            }),
           ),
           Divider(height: 1, color: scheme.outlineVariant),
         ],
