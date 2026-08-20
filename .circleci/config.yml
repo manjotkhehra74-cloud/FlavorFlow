@@ -69,13 +69,12 @@ jobs:
               exit 1
             fi
 
-            cat > android/key.properties <<EOF
-            storeFile=$KEYSTORE_FILE
-            storePassword=$ANDROID_KEYSTORE_PASSWORD
-            keyAlias=$ANDROID_KEY_ALIAS
-            keyPassword=$ANDROID_KEY_PASSWORD
-            storeType=$STORE_TYPE
-            EOF
+            printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\nstoreType=%s\n' \
+              "$KEYSTORE_FILE" \
+              "$ANDROID_KEYSTORE_PASSWORD" \
+              "$ANDROID_KEY_ALIAS" \
+              "$ANDROID_KEY_PASSWORD" \
+              "$STORE_TYPE" > android/key.properties
             echo "Signing identity validated ($STORE_TYPE)"
 
       - run:
