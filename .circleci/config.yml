@@ -1,0 +1,131 @@
+version: 2.1
+
+# FlavorFlow Android release builds on CircleCI.
+# The approval gate means pushes do not consume build credits by themselves.
+# In CircleCI, open the latest pipeline and approve "approve-release" only
+# when an AAB/APK is actually needed.
+
+executors:
+  flutter_android:
+    docker:
+      - image: ghcr.io/cirruslabs/flutter:stable
+    resource_class: medium
+    environment:
+      ERP_SERVER_API: "https://flavorflow.duckdns.org/api"
+      GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx2048m -Dkotlin.daemon.jvm.options=-Xmx1024m"
+
+jobs:
+  build-play-store-release:
+    executor: flutter_android
+    steps:
+      - checkout
+
+      - run:
+          name: Verify Flutter and Java
+          command: |
+            flutter --version
+            java -version
+
+      - restore_cache:
+          keys:
+            - flavorflow-v2-{{ checksum "pubspec.lock" }}
+            - flavorflow-v2-
+
+      - run:
+          name: Get Flutter packages
+          command: flutter pub get
+
+      - save_cache:
+          key: flavorflow-v2-{{ checksum "pubspec.lock" }}
+          paths:
+            - ~/.pub-cache
+            - ~/.gradle/caches
+            - ~/.gradle/wrapper
+
+      - run:
+          name: Generate launcher icons
+          command: dart run flutter_launcher_icons
+
+      - run:
+          name: Configure Play Store signing
+          command: |
+            set -euo pipefail
+            : "${ANDROID_KEYSTORE_BASE64:?Add ANDROID_KEYSTORE_BASE64 in CircleCI Project Settings > Environment Variables}"
+            : "${ANDROID_KEYSTORE_PASSWORD:?Add ANDROID_KEYSTORE_PASSWORD in CircleCI}"
+            : "${ANDROID_KEY_ALIAS:?Add ANDROID_KEY_ALIAS in CircleCI}"
+            : "${ANDROID_KEY_PASSWORD:?Add ANDROID_KEY_PASSWORD in CircleCI}"
+
+            KEYSTORE_FILE="$HOME/flavorflow-upload-key"
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '\r\n ' | base64 --decode > "$KEYSTORE_FILE"
+            chmod 600 "$KEYSTORE_FILE"
+
+            # Detect JKS versus PKCS12 without exposing any key information.
+            if keytool -list -keystore "$KEYSTORE_FILE" -storepass "$ANDROID_KEYSTORE_PASSWORD" -storetype JKS >/dev/null 2>&1; then
+              STORE_TYPE=jks
+            elif keytool -list -keystore "$KEYSTORE_FILE" -storepass "$ANDROID_KEYSTORE_PASSWORD" -storetype PKCS12 >/dev/null 2>&1; then
+              STORE_TYPE=pkcs12
+            else
+              echo "Keystore/password invalid or unsupported" >&2
+              exit 1
+            fi
+
+            cat > android/key.properties <<EOF
+            storeFile=$KEYSTORE_FILE
+            storePassword=$ANDROID_KEYSTORE_PASSWORD
+            keyAlias=$ANDROID_KEY_ALIAS
+            keyPassword=$ANDROID_KEY_PASSWORD
+            storeType=$STORE_TYPE
+            EOF
+            echo "Signing identity validated ($STORE_TYPE)"
+
+      - run:
+          name: Build signed Play Store AAB
+          no_output_timeout: 30m
+          command: flutter build appbundle --release --dart-define=API_BASE="$ERP_SERVER_API"
+
+      - run:
+          name: Build signed release APK
+          no_output_timeout: 30m
+          command: flutter build apk --release --dart-define=API_BASE="$ERP_SERVER_API"
+
+      - run:
+          name: Verify and collect artifacts
+          command: |
+            set -euo pipefail
+            AAB=build/app/outputs/bundle/release/app-release.aab
+            APK=build/app/outputs/flutter-apk/app-release.apk
+            test -s "$AAB"
+            test -s "$APK"
+            jarsigner -verify "$AAB" >/dev/null
+            mkdir -p circleci-artifacts
+            cp "$AAB" circleci-artifacts/FlavorFlow-release.aab
+            cp "$APK" circleci-artifacts/FlavorFlow-release.apk
+            if [ -f build/app/outputs/mapping/release/mapping.txt ]; then
+              cp build/app/outputs/mapping/release/mapping.txt circleci-artifacts/mapping.txt
+            fi
+            ls -lh circleci-artifacts
+
+      - store_artifacts:
+          path: circleci-artifacts
+          destination: FlavorFlow-Android
+
+      - run:
+          name: Remove signing files
+          when: always
+          command: |
+            rm -f android/key.properties "$HOME/flavorflow-upload-key"
+
+workflows:
+  play-store-release:
+    jobs:
+      - approve-release:
+          type: approval
+          filters:
+            branches:
+              only: arena/01a01af5-flavorflow
+      - build-play-store-release:
+          requires:
+            - approve-release
+          filters:
+            branches:
+              only: arena/01a01af5-flavorflow
