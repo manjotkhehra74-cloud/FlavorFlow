@@ -24,6 +24,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _bioAvailable = false;
   bool _bioEnabled = false;
   bool? _totpEnabled; // null = unknown/server not patched
+  bool _totpBusy = false; // blocks duplicate setup/disable requests per account
 
   @override
   void initState() {
@@ -61,6 +62,8 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _setup2fa() async {
+    if (_totpBusy) return;
+    setState(() => _totpBusy = true);
     final api = context.read<AuthController>().api;
     try {
       final j = await api.post('/auth/totp/setup');
@@ -74,18 +77,24 @@ class _SettingsPageState extends State<SettingsPage> {
       if (done == true && mounted) showOk(context, 'Two-factor authentication is ON.');
     } catch (e) {
       if (mounted) showErr(context, e);
+    } finally {
+      if (mounted) setState(() => _totpBusy = false);
     }
     _refresh();
   }
 
   Future<void> _disable2fa() async {
-    final code = await _askCode(context, 'Enter the 6-digit code from your authenticator app to turn 2FA off.');
-    if (code == null || !mounted) return;
+    if (_totpBusy) return;
+    setState(() => _totpBusy = true);
     try {
+      final code = await _askCode(context, 'Enter the 6-digit code from your authenticator app to turn 2FA off.');
+      if (code == null || !mounted) return;
       await context.read<AuthController>().api.post('/auth/totp/disable', {'code': code});
       if (mounted) showOk(context, 'Two-factor authentication turned off.');
     } catch (e) {
       if (mounted) showErr(context, e);
+    } finally {
+      if (mounted) setState(() => _totpBusy = false);
     }
     _refresh();
   }
@@ -196,10 +205,12 @@ class _SettingsPageState extends State<SettingsPage> {
             : _totpEnabled == true
                 ? 'ON — authenticator code needed at every login'
                 : 'OFF — protect your account with Google/Microsoft Authenticator',
-        trailing: _totpEnabled == null
-            ? null
-            : Switch(value: _totpEnabled!, onChanged: (_) => _totpEnabled! ? _disable2fa() : _setup2fa()),
-        onTap: _totpEnabled == null ? null : (_totpEnabled! ? _disable2fa : _setup2fa),
+        trailing: _totpBusy
+            ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.2))
+            : _totpEnabled == null
+                ? null
+                : Switch(value: _totpEnabled!, onChanged: (_) => _totpEnabled! ? _disable2fa() : _setup2fa()),
+        onTap: (_totpEnabled == null || _totpBusy) ? null : (_totpEnabled! ? _disable2fa : _setup2fa),
       ),
       _tile(
         icon: Icons.logout_rounded,

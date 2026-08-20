@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/format.dart';
 import '../../core/i18n.dart';
+import '../../core/notifier.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 
@@ -26,16 +27,23 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
   Future<List<Map<String, dynamic>>> _load() async {
     final json = await context.read<AuthController>().api.get('/notifications');
-    return ((json as Map)['notifications'] as List).cast<Map<String, dynamic>>();
+    final items = ((json as Map)['notifications'] as List).cast<Map<String, dynamic>>();
+    NotificationBadge.setFromLoadedList(items.where((n) => n['is_read'] == 0).length);
+    return items;
   }
 
   void _reload() => setState(() => _future = _load());
 
   Future<void> _open(Map<String, dynamic> n) async {
     final api = context.read<AuthController>().api;
+    final wasUnread = n['is_read'] == 0;
     try {
       await api.post('/notifications/${n['id']}/read');
-    } catch (_) {/* non-blocking */}
+      if (wasUnread) {
+        n['is_read'] = 1;
+        NotificationBadge.markOneRead();
+      }
+    } catch (_) {/* non-blocking: server count will remain authoritative */}
     final route = n['route'] as String? ?? '/notifications';
     if (!mounted) return;
     context.go(route);
@@ -59,6 +67,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
         return;
       }
     }
+    NotificationBadge.markAllRead();
     if (mounted) {
       _reload();
       showOk(context, 'All notifications marked as read.');

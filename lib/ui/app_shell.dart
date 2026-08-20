@@ -30,6 +30,9 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
+    NotificationBadge.resetForAccount();
+    _unread = NotificationBadge.count.value;
+    NotificationBadge.count.addListener(_onBadgeChanged);
     PhoneNotifier.init(); // status-bar notifications (Android permission ask)
     _loadUnread();
     _timer = Timer.periodic(const Duration(seconds: 20), (_) => _loadUnread());
@@ -43,13 +46,18 @@ class _AppShellState extends State<AppShell> {
     if (mounted) setState(() {});
   }
 
+  void _onBadgeChanged() {
+    if (mounted) setState(() => _unread = NotificationBadge.count.value);
+  }
+
   Future<void> _loadUnread() async {
+    final syncRevision = NotificationBadge.beginSync();
     try {
       final auth = context.read<AuthController>();
       final json = await auth.api.get('/notifications');
       final items = ((json as Map)['notifications'] as List).cast<Map<String, dynamic>>();
       final unread = items.where((n) => n['is_read'] == 0).length;
-      if (mounted) setState(() => _unread = unread);
+      NotificationBadge.syncFromServer(unread, syncRevision);
       // New unread items → real phone notifications (sound + status bar).
       await PhoneNotifier.showNew(items);
     } catch (_) {/* transient */}
@@ -58,6 +66,7 @@ class _AppShellState extends State<AppShell> {
   @override
   void dispose() {
     _timer?.cancel();
+    NotificationBadge.count.removeListener(_onBadgeChanged);
     CompanyProfile.rev.removeListener(_onCompanyChanged);
     super.dispose();
   }
