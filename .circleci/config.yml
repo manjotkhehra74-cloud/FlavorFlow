@@ -53,18 +53,31 @@ jobs:
             dart run flutter_launcher_icons || echo "iOS icon target absent — Android icons retained"
 
       - run:
-          name: Prepare Android NDK and low-memory Gradle
-          no_output_timeout: 20m
+          name: Prepare complete Android toolchain and low-memory Gradle
+          no_output_timeout: 25m
           command: |
             set -euo pipefail
             NDK_VERSION="28.2.13676358"
+            CMAKE_VERSION="3.22.1"
             SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/opt/android-sdk-linux}}"
-            if [ ! -d "$SDK_ROOT/ndk/$NDK_VERSION" ]; then
-              SDKMANAGER=$(find "$SDK_ROOT" -type f -name sdkmanager -print -quit)
-              test -n "$SDKMANAGER"
-              yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
-              "$SDKMANAGER" "ndk;$NDK_VERSION"
-            fi
+            SDKMANAGER=$(find "$SDK_ROOT" -type f -name sdkmanager -print -quit)
+            test -n "$SDKMANAGER"
+            yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+
+            # Install every package seen in the Gradle logs BEFORE a Gradle JVM
+            # exists. This prevents sdkmanager + a 1.4GB daemon overlapping.
+            "$SDKMANAGER" \
+              "platforms;android-34" \
+              "platforms;android-35" \
+              "build-tools;34.0.0" \
+              "build-tools;35.0.0" \
+              "cmake;$CMAKE_VERSION" \
+              "ndk;$NDK_VERSION"
+
+            test -d "$SDK_ROOT/platforms/android-34"
+            test -d "$SDK_ROOT/platforms/android-35"
+            test -d "$SDK_ROOT/build-tools/35.0.0"
+            test -d "$SDK_ROOT/cmake/$CMAKE_VERSION"
             test -d "$SDK_ROOT/ndk/$NDK_VERSION"
 
             sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx1400M -XX:MaxMetaspaceSize=384M -XX:+UseSerialGC -Dfile.encoding=UTF-8/' android/gradle.properties
@@ -75,7 +88,7 @@ jobs:
               'org.gradle.vfs.watch=false' \
               'kotlin.compiler.execution.strategy=in-process' \
               'kotlin.daemon.jvmargs=-Xmx384m' >> android/gradle.properties
-            echo "NDK ready; Gradle configured for CircleCI Medium RAM"
+            echo "Android SDK/NDK/CMake ready; Gradle configured for CircleCI Medium RAM"
 
       - run:
           name: Configure Play Store signing
