@@ -21,6 +21,12 @@ jobs:
             source $BASH_ENV
             flutter --version
       - run:
+          name: Install native build tools (ninja + cmake — CXX1416 fix)
+          command: |
+            sudo apt-get update -qq && sudo apt-get install -y -qq ninja-build cmake
+            (yes | sdkmanager "cmake;3.22.1") || true
+            ninja --version && cmake --version
+      - run:
           name: Pub get
           command: flutter pub get
       - run:
