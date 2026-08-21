@@ -35,8 +35,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
   Future<void> _open(Map<String, dynamic> n) async {
     final api = context.read<AuthController>().api;
     try {
+      if (n['is_read'] == 0) Unread.dec(); // instant badge update
       await api.post('/notifications/${n['id']}/read');
-      if (n['is_read'] == 0) Unread.dec();
     } catch (_) {/* non-blocking */}
     final route = n['route'] as String? ?? '/notifications';
     if (!mounted) return;
@@ -45,6 +45,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
   Future<void> _readAll() async {
     final api = context.read<AuthController>().api;
+    Unread.clear(); // optimistic: badge 0 INSTANTLY, server sync follows
     try {
       await api.post('/notifications/read-all');
     } catch (_) {
