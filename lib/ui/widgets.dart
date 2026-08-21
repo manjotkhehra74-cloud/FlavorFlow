@@ -185,7 +185,11 @@ class KpiCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.9, color: Theme.of(context).colorScheme.onSurfaceVariant)),
             ),
-            Icon(icon, size: 16, color: tint),
+            Container(
+              width: 30, height: 30,
+              decoration: BoxDecoration(color: tint.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(9)),
+              child: Icon(icon, size: 16, color: tint),
+            ),
           ]),
           const SizedBox(height: 7),
           FittedBox(

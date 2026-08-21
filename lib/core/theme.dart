@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 /// flat white surfaces, hairline borders, dense controls, dark navigation shell,
 /// Inter typography with tabular numbers.
 ThemeData buildTheme({bool dark = false}) {
-  const primary = Color(0xFF0A6ED1); // business blue
+  const primary = Color(0xFF1E6FE0); // logo blue
+  const accent = Color(0xFF22C55E); // logo green
   final ink = dark ? const Color(0xFFE4EAF0) : const Color(0xFF1B2733);
   final subInk = dark ? const Color(0xFF9AA8B5) : const Color(0xFF5C6B7A);
 
@@ -15,7 +16,7 @@ ThemeData buildTheme({bool dark = false}) {
           onPrimary: const Color(0xFF0B2A47),
           primaryContainer: const Color(0xFF15385C),
           onPrimaryContainer: const Color(0xFFBBD9F5),
-          secondary: const Color(0xFF6FB4E4),
+          secondary: const Color(0xFF4ADE80),
           surface: const Color(0xFF14191F),
           onSurface: const Color(0xFFE4EAF0),
           onSurfaceVariant: const Color(0xFF9AA8B5),
@@ -32,7 +33,7 @@ ThemeData buildTheme({bool dark = false}) {
     onPrimary: Colors.white,
     primaryContainer: const Color(0xFFE1EEFB),
     onPrimaryContainer: const Color(0xFF0B4E96),
-    secondary: const Color(0xFF0F6FBA),
+    secondary: accent,
     surface: Colors.white,
     onSurface: ink,
     onSurfaceVariant: subInk,
@@ -61,7 +62,7 @@ ThemeData buildTheme({bool dark = false}) {
     colorScheme: scheme,
     fontFamily: family,
     fontFamilyFallback: const ['Roboto', 'Segoe UI', 'Arial'],
-    scaffoldBackgroundColor: dark ? const Color(0xFF0F1419) : const Color(0xFFF3F5F9),
+    scaffoldBackgroundColor: dark ? const Color(0xFF0F1419) : const Color(0xFFF5F8FC),
     visualDensity: VisualDensity.standard,
     textTheme: TextTheme(
       headlineSmall: txt(20, FontWeight.w700, color: ink, ls: -0.3),
@@ -89,18 +90,19 @@ ThemeData buildTheme({bool dark = false}) {
       elevation: 0,
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: const BorderSide(color: Color(0xFFE2E8EF)),
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: dark ? const Color(0xFF2A333D) : const Color(0xFFE7EDF4)),
       ),
+      shadowColor: const Color(0x140F2440),
       clipBehavior: Clip.antiAlias,
     ),
     inputDecorationTheme: InputDecorationThemeData(
       filled: true,
       fillColor: scheme.surface,
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: Color(0xFFC3CEDA))),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: Color(0xFFC3CEDA))),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: primary, width: 1.6)),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFC3CEDA))),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFC3CEDA))),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: primary, width: 1.6)),
       labelStyle: txt(12.5, FontWeight.w500, color: subInk),
       isDense: true,
     ),
@@ -121,19 +123,19 @@ ThemeData buildTheme({bool dark = false}) {
         backgroundColor: primary,
         foregroundColor: scheme.onPrimary,
         disabledBackgroundColor: const Color(0xFFBCD3EA),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-        minimumSize: const Size(0, 36),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+        minimumSize: const Size(0, 40),
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         textStyle: txt(13, FontWeight.w600),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         foregroundColor: ink,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        minimumSize: const Size(0, 36),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+        minimumSize: const Size(0, 40),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         side: const BorderSide(color: Color(0xFFC3CEDA)),
         textStyle: txt(13, FontWeight.w600),
       ),
@@ -143,7 +145,7 @@ ThemeData buildTheme({bool dark = false}) {
         foregroundColor: primary,
         minimumSize: const Size(0, 34),
         textStyle: txt(13, FontWeight.w600),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     ),
     iconButtonTheme: IconButtonThemeData(
@@ -151,10 +153,10 @@ ThemeData buildTheme({bool dark = false}) {
     ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ),
     dialogTheme: DialogThemeData(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       backgroundColor: scheme.surface,
       surfaceTintColor: Colors.transparent,
       titleTextStyle: txt(16, FontWeight.w700, color: ink),
@@ -172,7 +174,7 @@ ThemeData buildTheme({bool dark = false}) {
     popupMenuTheme: PopupMenuThemeData(
       color: scheme.surface,
       surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: Color(0xFFE2E8EF))),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: const BorderSide(color: Color(0xFFE2E8EF))),
       textStyle: txt(13, FontWeight.w500, color: ink),
     ),
     tooltipTheme: TooltipThemeData(
@@ -203,16 +205,16 @@ class Shell {
   static const item = Color(0xFFC9D6E2);
   static const itemHover = Color(0x14FFFFFF);
   static const itemSelected = Color(0xFF133C63);
-  static const itemSelectedBar = Color(0xFF3B9DF2);
+  static const itemSelectedBar = Color(0xFF22C55E); // logo green accent
   static const border = Color(0xFF1C3850);
 }
 
 /// Semantic colors used across dashboards.
 class AppColors {
-  static const green = Color(0xFF048848);
+  static const green = Color(0xFF16A34A);
   static const red = Color(0xFFDC2626);
   static const amber = Color(0xFFD97706);
-  static const blue = Color(0xFF0A6ED1);
+  static const blue = Color(0xFF1E6FE0);
   static const teal = Color(0xFF0D9488);
   static const violet = Color(0xFF7C3AED);
   static const orange = Color(0xFFEA580C);
