@@ -32,10 +32,24 @@ jobs:
       - run:
           name: Launcher icons
           command: dart run flutter_launcher_icons || echo skipped
+      - restore_cache:
+          keys:
+            - deps-v1-{{ checksum "pubspec.lock" }}
+            - deps-v1-
       - run:
           name: Build release APK
-          no_output_timeout: 30m
-          command: flutter build apk --release --dart-define=API_BASE="$ERP_SERVER_API"
+          no_output_timeout: 75m
+          command: |
+            # heartbeat: Gradle native compile is silent for long stretches —
+            # without this CircleCI kills the step ("Too long with no output")
+            while true; do sleep 55; echo "... build chal rahi $(date +%H:%M:%S)"; done &
+            flutter build apk --release --dart-define=API_BASE="$ERP_SERVER_API"
+      - save_cache:
+          key: deps-v1-{{ checksum "pubspec.lock" }}
+          paths:
+            - ~/.pub-cache
+            - ~/.gradle/caches
+            - ~/.gradle/wrapper
       - store_artifacts:
           path: build/app/outputs/flutter-apk/app-release.apk
           destination: app-release.apk
