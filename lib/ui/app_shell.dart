@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../core/app_settings.dart';
 import '../core/notifier.dart';
 import '../core/company.dart';
+import '../core/unread.dart';
 import '../core/i18n.dart';
 import '../core/theme.dart';
 import '../core/format.dart';
@@ -37,6 +38,11 @@ class _AppShellState extends State<AppShell> {
     CompanyProfile.load(context.read<AuthController>().api);
     // Rebuild when the company profile / industry changes (units + gating).
     CompanyProfile.rev.addListener(_onCompanyChanged);
+    Unread.count.addListener(_onUnreadChanged);
+  }
+
+  void _onUnreadChanged() {
+    if (mounted) setState(() => _unread = Unread.count.value);
   }
 
   void _onCompanyChanged() {
@@ -49,6 +55,7 @@ class _AppShellState extends State<AppShell> {
       final json = await auth.api.get('/notifications');
       final items = ((json as Map)['notifications'] as List).cast<Map<String, dynamic>>();
       final unread = items.where((n) => n['is_read'] == 0).length;
+      Unread.set(unread);
       if (mounted) setState(() => _unread = unread);
       // New unread items → real phone notifications (sound + status bar).
       await PhoneNotifier.showNew(items);
@@ -59,6 +66,7 @@ class _AppShellState extends State<AppShell> {
   void dispose() {
     _timer?.cancel();
     CompanyProfile.rev.removeListener(_onCompanyChanged);
+    Unread.count.removeListener(_onUnreadChanged);
     super.dispose();
   }
 

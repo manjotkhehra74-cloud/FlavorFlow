@@ -57,16 +57,17 @@ class _DispatchDetailPageState extends State<DispatchDetailPage> {
         final items = (snap.data!['items'] as List).cast<Map<String, dynamic>>();
         final dayName = d['weekday'] as String? ?? weekdayOf(d['dispatch_date']);
         return ListView(padding: const EdgeInsets.all(20), children: [
-          Row(children: [
+          // Wrap: on narrow phones the Export button drops to its own line
+          // instead of overflowing off-screen.
+          Wrap(spacing: 4, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
             IconButton(
               onPressed: () => context.canPop() ? context.pop() : context.go('/dispatch?tab=history'),
               icon: const Icon(Icons.arrow_back_rounded),
             ),
-            const SizedBox(width: 4),
             Text(d['code'] as String, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.4)),
-            const SizedBox(width: 12),
+            const SizedBox(width: 8),
             StatusChip(d['status'] as String),
-            const Spacer(),
+            const SizedBox(width: 8),
             FilledButton.icon(
               onPressed: exporting ? null : () => _exportPdf(d, items),
               icon: const Icon(Icons.picture_as_pdf_rounded, size: 19),

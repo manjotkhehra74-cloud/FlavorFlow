@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/format.dart';
 import '../../core/i18n.dart';
+import '../../core/unread.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 
@@ -35,6 +36,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
     final api = context.read<AuthController>().api;
     try {
       await api.post('/notifications/${n['id']}/read');
+      if (n['is_read'] == 0) Unread.dec();
     } catch (_) {/* non-blocking */}
     final route = n['route'] as String? ?? '/notifications';
     if (!mounted) return;
@@ -59,6 +61,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
         return;
       }
     }
+    Unread.clear();
     if (mounted) {
       _reload();
       showOk(context, 'All notifications marked as read.');
