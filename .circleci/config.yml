@@ -12,7 +12,9 @@ executors:
     resource_class: medium
     environment:
       ERP_SERVER_API: "https://flavorflow.duckdns.org/api"
-      GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx2048m -Dkotlin.daemon.jvm.options=-Xmx1024m"
+      # CircleCI Medium has limited RAM. Keep Gradle/Kotlin in one small JVM;
+      # Flutter/Dart and Android tooling need the remaining memory.
+      GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Dorg.gradle.parallel=false -Dkotlin.compiler.execution.strategy=in-process"
 
 jobs:
   build-play-store-release:
@@ -51,6 +53,31 @@ jobs:
             dart run flutter_launcher_icons || echo "iOS icon target absent — Android icons retained"
 
       - run:
+          name: Prepare Android NDK and low-memory Gradle
+          no_output_timeout: 20m
+          command: |
+            set -euo pipefail
+            NDK_VERSION="28.2.13676358"
+            SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/opt/android-sdk-linux}}"
+            if [ ! -d "$SDK_ROOT/ndk/$NDK_VERSION" ]; then
+              SDKMANAGER=$(find "$SDK_ROOT" -type f -name sdkmanager -print -quit)
+              test -n "$SDKMANAGER"
+              yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+              "$SDKMANAGER" "ndk;$NDK_VERSION"
+            fi
+            test -d "$SDK_ROOT/ndk/$NDK_VERSION"
+
+            sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx1400M -XX:MaxMetaspaceSize=384M -XX:+UseSerialGC -Dfile.encoding=UTF-8/' android/gradle.properties
+            printf '%s\n' \
+              'org.gradle.daemon=false' \
+              'org.gradle.parallel=false' \
+              'org.gradle.workers.max=2' \
+              'org.gradle.vfs.watch=false' \
+              'kotlin.compiler.execution.strategy=in-process' \
+              'kotlin.daemon.jvmargs=-Xmx384m' >> android/gradle.properties
+            echo "NDK ready; Gradle configured for CircleCI Medium RAM"
+
+      - run:
           name: Configure Play Store signing
           command: |
             set -euo pipefail
@@ -81,28 +108,40 @@ jobs:
               "$STORE_TYPE" > android/key.properties
             echo "Signing identity validated ($STORE_TYPE)"
 
-      - run:
-          name: Build signed Play Store AAB
-          no_output_timeout: 30m
-          command: flutter build appbundle --release --dart-define=API_BASE="$ERP_SERVER_API"
-
+      # APK first: staff can install/test it even if the later AAB step fails.
       - run:
           name: Build signed release APK
           no_output_timeout: 30m
           command: flutter build apk --release --dart-define=API_BASE="$ERP_SERVER_API"
 
       - run:
-          name: Verify and collect artifacts
+          name: Collect signed APK
+          command: |
+            set -euo pipefail
+            APK=build/app/outputs/flutter-apk/app-release.apk
+            test -s "$APK"
+            mkdir -p circleci-artifacts
+            cp "$APK" circleci-artifacts/FlavorFlow-release.apk
+            ls -lh circleci-artifacts/FlavorFlow-release.apk
+
+      # Upload immediately. CircleCI still preserves this APK if AAB later fails.
+      - store_artifacts:
+          path: circleci-artifacts/FlavorFlow-release.apk
+          destination: FlavorFlow-Android/FlavorFlow-release.apk
+
+      - run:
+          name: Build signed Play Store AAB
+          no_output_timeout: 30m
+          command: flutter build appbundle --release --dart-define=API_BASE="$ERP_SERVER_API"
+
+      - run:
+          name: Verify and collect AAB
           command: |
             set -euo pipefail
             AAB=build/app/outputs/bundle/release/app-release.aab
-            APK=build/app/outputs/flutter-apk/app-release.apk
             test -s "$AAB"
-            test -s "$APK"
             jarsigner -verify "$AAB" >/dev/null
-            mkdir -p circleci-artifacts
             cp "$AAB" circleci-artifacts/FlavorFlow-release.aab
-            cp "$APK" circleci-artifacts/FlavorFlow-release.apk
             if [ -f build/app/outputs/mapping/release/mapping.txt ]; then
               cp build/app/outputs/mapping/release/mapping.txt circleci-artifacts/mapping.txt
             fi
