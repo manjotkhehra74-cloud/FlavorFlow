@@ -270,9 +270,12 @@ class _Sidebar extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         // brand
         Container(
-          height: 54,
+          height: 56,
           padding: const EdgeInsets.symmetric(horizontal: 14),
-          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Shell.border))),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: Shell.border)),
+            gradient: LinearGradient(colors: [Color(0x141E6FE0), Color(0x0022C55E)], begin: Alignment.centerLeft, end: Alignment.centerRight),
+          ),
           child: Row(children: [
             Container(
               width: 32, height: 32,
@@ -364,16 +367,18 @@ class _NavTileState extends State<_NavTile> {
         onExit: (_) => setState(() => _hover = false),
         child: InkWell(
           onTap: widget.onTap,
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(12),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 90),
-            height: 37,
+            height: 39,
             decoration: BoxDecoration(
-              color: active ? Shell.itemSelected : (_hover ? Shell.itemHover : Colors.transparent),
-              borderRadius: BorderRadius.circular(6),
-              border: active ? const Border(left: BorderSide(color: Shell.itemSelectedBar, width: 3)) : null,
+              gradient: active
+                  ? const LinearGradient(colors: [Color(0xFF1E6FE0), Color(0xFF17935F)], begin: Alignment.centerLeft, end: Alignment.centerRight)
+                  : null,
+              color: active ? null : (_hover ? Shell.itemHover : Colors.transparent),
+              borderRadius: BorderRadius.circular(12),
             ),
-            padding: EdgeInsets.only(left: active ? 9 : 12, right: 10),
+            padding: const EdgeInsets.only(left: 12, right: 10),
             child: Row(children: [
               Icon(widget.icon, size: 18, color: active ? Colors.white : Shell.item),
               const SizedBox(width: 11),

@@ -96,32 +96,41 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Row(children: [
-      Expanded(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('$greeting, ${name.split(' ').first}',
-              style: TextStyle(fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -0.4, color: scheme.onSurface)),
-          const SizedBox(height: 3),
-          // Wrap keeps each chunk intact: the date never splits across lines —
-          // on narrow phones it moves to its own line as one piece.
-          Wrap(spacing: 6, runSpacing: 2, children: [
-            Text('${session.roleLabel} workspace', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5)),
-            Text('·  ${fmtDateWithDay(todayYmd())}', softWrap: false, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5)),
-          ]),
-        ]),
-      ),
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: hexColor(session.roleColor).withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(5),
-          border: Border.all(color: hexColor(session.roleColor).withValues(alpha: 0.30)),
+    // Gradient hero card — logo blue → green, like the brand mockups.
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1E6FE0), Color(0xFF16A085), Color(0xFF22C55E)],
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
         ),
-        child: Text(session.roleLabel.toUpperCase(),
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 10.5, letterSpacing: 0.9, color: hexColor(session.roleColor))),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [BoxShadow(color: Color(0x331E6FE0), blurRadius: 18, offset: Offset(0, 6))],
       ),
-    ]);
+      child: Row(children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('$greeting, ${name.split(' ').first}',
+                style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800, letterSpacing: -0.4, color: Colors.white)),
+            const SizedBox(height: 4),
+            Wrap(spacing: 6, runSpacing: 2, children: [
+              Text('${session.roleLabel} workspace', style: const TextStyle(color: Color(0xE6FFFFFF), fontSize: 12.5)),
+              Text('·  ${fmtDateWithDay(todayYmd())}', softWrap: false, style: const TextStyle(color: Color(0xE6FFFFFF), fontSize: 12.5)),
+            ]),
+          ]),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.18),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.45)),
+          ),
+          child: Text(session.roleLabel.toUpperCase(),
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 10.5, letterSpacing: 0.9, color: Colors.white)),
+        ),
+      ]),
+    );
   }
 }
 

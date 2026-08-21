@@ -327,12 +327,30 @@ class _LoginPageState extends State<LoginPage> {
                 onSubmitted: (_) => _submit(),
               ),
               const SizedBox(height: 20),
-              FilledButton(
-                onPressed: busy ? null : _submit,
-                style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
-                child: busy
-                    ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white))
-                    : Text(tr('Sign in')),
+              // Gradient sign-in CTA (logo blue → green)
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: busy
+                        ? [const Color(0xFF9DB8DE), const Color(0xFF9DCDB2)]
+                        : [const Color(0xFF1E6FE0), const Color(0xFF22C55E)],
+                    begin: Alignment.centerLeft, end: Alignment.centerRight,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: busy ? null : const [BoxShadow(color: Color(0x2E1E6FE0), blurRadius: 12, offset: Offset(0, 4))],
+                ),
+                child: FilledButton(
+                  onPressed: busy ? null : _submit,
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    backgroundColor: Colors.transparent,
+                    disabledBackgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                  ),
+                  child: busy
+                      ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white))
+                      : Text(tr('Sign in')),
+                ),
               ),
               if (_bioEnabled) ...[
                 const SizedBox(height: 12),

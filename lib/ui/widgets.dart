@@ -150,8 +150,16 @@ class SectionCard extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
         if (title != null) ...[
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 12, 11),
+            padding: const EdgeInsets.fromLTRB(14, 12, 12, 11),
             child: Row(children: [
+              Container(
+                width: 4, height: 16,
+                margin: const EdgeInsets.only(right: 8),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(colors: [Color(0xFF1E6FE0), Color(0xFF22C55E)], begin: Alignment.topCenter, end: Alignment.bottomCenter),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
               Expanded(child: Text(tr(title!), style: const TextStyle(fontSize: 13.6, fontWeight: FontWeight.w700, letterSpacing: -0.1))),
               if (trailing != null) trailing!,
             ]),
