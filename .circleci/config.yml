@@ -7,11 +7,10 @@ jobs:
   build-apk:
     docker:
       - image: cimg/android:2024.01.1
-    resource_class: medium
+    resource_class: large
     environment:
       ERP_SERVER_API: "https://flavorflow.duckdns.org/api"
-      GRADLE_OPTS: "-Xmx1536m -XX:MaxMetaspaceSize=384m -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Dkotlin.daemon.jvmargs=-Xmx1024m"
-      _JAVA_OPTIONS: "-Xmx1536m"
+      GRADLE_OPTS: "-Dorg.gradle.daemon=false"
     steps:
       - checkout
       - run:
