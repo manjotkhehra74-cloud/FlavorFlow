@@ -54,7 +54,36 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           destination: app-release.apk
 
+  build-web:
+    docker:
+      - image: cimg/base:current
+    resource_class: medium
+    steps:
+      - checkout
+      - run:
+          name: Install Flutter (stable)
+          command: |
+            git clone --depth 1 -b stable https://github.com/flutter/flutter.git $HOME/flutter
+            echo 'export PATH=$HOME/flutter/bin:$PATH' >> $BASH_ENV
+            source $BASH_ENV
+            flutter --version
+            flutter config --enable-web
+      - run:
+          name: Pub get
+          command: flutter pub get
+      - run:
+          name: Build web release
+          no_output_timeout: 30m
+          command: flutter build web --release --no-tree-shake-icons
+      - run:
+          name: Zip website
+          command: cd build/web && zip -r ../../flavorflow-web.zip . && cd ../.. && ls -la flavorflow-web.zip
+      - store_artifacts:
+          path: flavorflow-web.zip
+          destination: flavorflow-web.zip
+
 workflows:
   android:
     jobs:
       - build-apk
+      - build-web
