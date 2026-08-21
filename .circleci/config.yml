@@ -1,0 +1,41 @@
+# FlavorFlow ERP — CircleCI Android build (memory-safe for 4GB executors).
+# The Gradle daemon was OOM-killed ("daemon disappeared unexpectedly");
+# gradle.properties caps workers/kotlin-daemon and this config caps Gradle.
+version: 2.1
+
+jobs:
+  build-apk:
+    docker:
+      - image: cimg/android:2024.01.1
+    resource_class: medium
+    environment:
+      ERP_SERVER_API: "https://flavorflow.duckdns.org/api"
+      GRADLE_OPTS: "-Xmx1536m -XX:MaxMetaspaceSize=384m -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Dkotlin.daemon.jvmargs=-Xmx1024m"
+      _JAVA_OPTIONS: "-Xmx1536m"
+    steps:
+      - checkout
+      - run:
+          name: Install Flutter (stable)
+          command: |
+            git clone --depth 1 -b stable https://github.com/flutter/flutter.git $HOME/flutter
+            echo 'export PATH=$HOME/flutter/bin:$PATH' >> $BASH_ENV
+            source $BASH_ENV
+            flutter --version
+      - run:
+          name: Pub get
+          command: flutter pub get
+      - run:
+          name: Launcher icons
+          command: dart run flutter_launcher_icons || echo skipped
+      - run:
+          name: Build release APK
+          no_output_timeout: 30m
+          command: flutter build apk --release --dart-define=API_BASE="$ERP_SERVER_API"
+      - store_artifacts:
+          path: build/app/outputs/flutter-apk/app-release.apk
+          destination: app-release.apk
+
+workflows:
+  android:
+    jobs:
+      - build-apk
