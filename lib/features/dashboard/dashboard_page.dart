@@ -110,6 +110,12 @@ class _Header extends StatelessWidget {
         boxShadow: const [BoxShadow(color: Color(0x331E6FE0), blurRadius: 18, offset: Offset(0, 6))],
       ),
       child: Row(children: [
+        Container(
+          width: 44, height: 44,
+          margin: const EdgeInsets.only(right: 12),
+          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(13)),
+          child: const Icon(Icons.insights_rounded, color: Colors.white, size: 23),
+        ),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('$greeting, ${name.split(' ').first}',
@@ -120,16 +126,6 @@ class _Header extends StatelessWidget {
               Text('·  ${fmtDateWithDay(todayYmd())}', softWrap: false, style: const TextStyle(color: Color(0xE6FFFFFF), fontSize: 12.5)),
             ]),
           ]),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.18),
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.45)),
-          ),
-          child: Text(session.roleLabel.toUpperCase(),
-              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 10.5, letterSpacing: 0.9, color: Colors.white)),
         ),
       ]),
     );

@@ -184,8 +184,11 @@ class KpiCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(15, 13, 15, 12),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(left: BorderSide(color: tint, width: 3.5)),
+        ),
+        padding: const EdgeInsets.fromLTRB(13, 13, 15, 12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
           Row(children: [
             Expanded(

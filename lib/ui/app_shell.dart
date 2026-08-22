@@ -164,7 +164,7 @@ class _AppShellState extends State<AppShell> {
         actions: [topBar.actionsPadding(child: topBar.bellAction(context)), topBar.userAction(context, compact: true)],
       ),
       drawer: Drawer(
-        backgroundColor: Shell.bg,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         child: SafeArea(
           child: _DrawerGrid(
             nav: nav,
@@ -176,11 +176,86 @@ class _AppShellState extends State<AppShell> {
                 _scaffoldKey.currentState?.closeDrawer();
               });
             },
+            onClose: () => _scaffoldKey.currentState?.closeDrawer(),
             onLogout: _logout,
           ),
         ),
       ),
       body: widget.child,
+      bottomNavigationBar: _BottomBar(
+        currentPath: nav[selected]['path'] as String,
+        onMenu: () => _scaffoldKey.currentState?.openDrawer(),
+      ),
+    );
+  }
+}
+
+/// Mobile bottom navigation: Dashboard · Notifications · center gradient
+/// menu button (opens the tile drawer) · Reports · Settings.
+class _BottomBar extends StatelessWidget {
+  final String currentPath;
+  final VoidCallback onMenu;
+  const _BottomBar({required this.currentPath, required this.onMenu});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    Widget item(String label, IconData icon, String path) {
+      final active = currentPath == path;
+      return Expanded(
+        child: InkWell(
+          onTap: () => context.go(path),
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 7),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Icon(icon, size: 22, color: active ? const Color(0xFF1E6FE0) : scheme.onSurfaceVariant),
+              const SizedBox(height: 2),
+              Text(tr(label),
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 10.5, fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+                      color: active ? const Color(0xFF1E6FE0) : scheme.onSurfaceVariant)),
+            ]),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border(top: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.55))),
+      ),
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 62,
+          child: Row(children: [
+            item('Dashboard', Icons.home_rounded, '/dashboard'),
+            item('Notifications', Icons.notifications_none_rounded, '/notifications'),
+            // center gradient menu button — opens the module tile drawer
+            Expanded(
+              child: Center(
+                child: InkWell(
+                  onTap: onMenu,
+                  borderRadius: BorderRadius.circular(999),
+                  child: Container(
+                    width: 48, height: 48,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(colors: [Color(0xFF1E6FE0), Color(0xFF17935F)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                      boxShadow: [BoxShadow(color: Color(0x331E6FE0), blurRadius: 10, offset: Offset(0, 3))],
+                    ),
+                    child: const Icon(Icons.apps_rounded, color: Colors.white, size: 24),
+                  ),
+                ),
+              ),
+            ),
+            item('Reports', Icons.bar_chart_rounded, '/reports'),
+            item('Settings', Icons.person_outline_rounded, '/settings'),
+          ]),
+        ),
+      ),
     );
   }
 }
@@ -360,124 +435,105 @@ class _Sidebar extends StatelessWidget {
 }
 
 
-/// Mobile drawer — module tiles in a 3-per-row grid of rounded squares
-/// (brand mockup style), grouped with section labels.
+/// Mobile drawer — light sheet of pastel module tiles (3 per row), brand
+/// header with close button and a user footer, matching the brand mockups.
 class _DrawerGrid extends StatelessWidget {
   final List nav;
   final int selected;
   final UserSession session;
   final void Function(int) onTap;
+  final VoidCallback onClose;
   final Future<void> Function() onLogout;
-  const _DrawerGrid({required this.nav, required this.selected, required this.session, required this.onTap, required this.onLogout});
+  const _DrawerGrid({required this.nav, required this.selected, required this.session, required this.onTap, required this.onClose, required this.onLogout});
 
   static const _tints = [
-    Color(0xFF60A5FA), Color(0xFF4ADE80), Color(0xFFC084FC), Color(0xFFFB923C),
-    Color(0xFF2DD4BF), Color(0xFFF472B6), Color(0xFFFACC15), Color(0xFF22D3EE),
+    Color(0xFF1E6FE0), Color(0xFF16A34A), Color(0xFF0D9488), Color(0xFFB45309),
+    Color(0xFF7C3AED), Color(0xFFDC2626), Color(0xFF0891B2), Color(0xFFDB2777),
   ];
 
   @override
   Widget build(BuildContext context) {
-    final groups = <String, List<int>>{};
-    for (var i = 0; i < nav.length; i++) {
-      groups.putIfAbsent(nav[i]['group'] as String? ?? 'Menu', () => []).add(i);
-    }
+    final scheme = Theme.of(context).colorScheme;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      // brand
-      Container(
-        height: 56,
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: Shell.border)),
-          gradient: LinearGradient(colors: [Color(0x141E6FE0), Color(0x0022C55E)], begin: Alignment.centerLeft, end: Alignment.centerRight),
-        ),
+      // brand header + close
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 8, 10),
         child: Row(children: [
           Container(
-            width: 32, height: 32,
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
+            width: 38, height: 38,
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: scheme.outlineVariant)),
             clipBehavior: Clip.antiAlias,
-            alignment: Alignment.center,
             child: Image.asset('assets/icon/app_icon.png', fit: BoxFit.cover),
           ),
-          const SizedBox(width: 10),
-          const Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
-            Text('FlavorFlow ERP', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: Colors.white, height: 1.15, letterSpacing: -0.1)),
-            Text('MANUFACTURING SUITE', style: TextStyle(fontSize: 8.5, color: Shell.groupLabel, letterSpacing: 1.6, fontWeight: FontWeight.w600, height: 1.4)),
-          ]),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('FlavorFlow ERP', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15.5, color: scheme.onSurface, letterSpacing: -0.2)),
+              Text(session.roleLabel, style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
+            ]),
+          ),
+          IconButton(onPressed: onClose, icon: const Icon(Icons.close_rounded)),
         ]),
       ),
+      Divider(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.6)),
+      // pastel module tiles
       Expanded(
-        child: ListView(padding: const EdgeInsets.fromLTRB(12, 10, 12, 10), children: [
-          for (final g in groups.entries) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
-              child: Text(tr(g.key).toUpperCase(),
-                  style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: Shell.groupLabel, letterSpacing: 1.5)),
-            ),
-            GridView.count(
-              crossAxisCount: 3,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 8, crossAxisSpacing: 8,
-              childAspectRatio: 0.95,
-              children: [
-                for (final i in g.value)
-                  Builder(builder: (context) {
-                    final active = i == selected;
-                    final tint = _tints[i % _tints.length];
-                    return Material(
-                      color: active ? null : const Color(0x12FFFFFF),
-                      borderRadius: BorderRadius.circular(16),
-                      child: InkWell(
-                        onTap: () => onTap(i),
-                        borderRadius: BorderRadius.circular(16),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(16),
-                            gradient: active
-                                ? const LinearGradient(colors: [Color(0xFF1E6FE0), Color(0xFF17935F)], begin: Alignment.topLeft, end: Alignment.bottomRight)
-                                : null,
-                            border: active ? null : Border.all(color: const Color(0x1FFFFFFF)),
-                          ),
-                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                            Icon(iconFor(nav[i]['icon'] as String?), size: 22, color: active ? Colors.white : tint),
-                            const SizedBox(height: 6),
-                            Text(tr(nav[i]['label'] as String),
-                                maxLines: 2, textAlign: TextAlign.center, overflow: TextOverflow.ellipsis,
-                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, height: 1.15,
-                                    color: active ? Colors.white : Shell.item)),
-                          ]),
-                        ),
+        child: GridView.count(
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+          crossAxisCount: 3,
+          mainAxisSpacing: 10, crossAxisSpacing: 10,
+          childAspectRatio: 0.92,
+          children: [
+            for (var i = 0; i < nav.length; i++)
+              Builder(builder: (context) {
+                final active = i == selected;
+                final tint = _tints[i % _tints.length];
+                return InkWell(
+                  onTap: () => onTap(i),
+                  borderRadius: BorderRadius.circular(18),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: tint.withValues(alpha: active ? 0.16 : 0.07),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: active ? tint.withValues(alpha: 0.55) : tint.withValues(alpha: 0.14), width: active ? 1.4 : 1),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+                    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      Container(
+                        width: 42, height: 42,
+                        decoration: BoxDecoration(color: tint.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(13)),
+                        child: Icon(iconFor(nav[i]['icon'] as String?), size: 22, color: tint),
                       ),
-                    );
-                  }),
-              ],
-            ),
+                      const SizedBox(height: 8),
+                      Text(tr(nav[i]['label'] as String),
+                          maxLines: 2, textAlign: TextAlign.center, overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, height: 1.15, color: scheme.onSurface)),
+                    ]),
+                  ),
+                );
+              }),
           ],
-        ]),
-      ),
-      // user footer
-      Container(
-        decoration: const BoxDecoration(
-          color: Shell.bgDeep,
-          border: Border(top: BorderSide(color: Shell.border)),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      ),
+      Divider(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.6)),
+      // user footer
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         child: Row(children: [
-          _Avatar(session: session, radius: 15),
-          const SizedBox(width: 9),
+          _Avatar(session: session, radius: 16),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(session.name, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12.3, fontWeight: FontWeight.w600, color: Colors.white, height: 1.2)),
-              Text(session.roleLabel, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 10, color: Shell.groupLabel, height: 1.3)),
+                  style: TextStyle(fontSize: 12.6, fontWeight: FontWeight.w700, color: scheme.onSurface, height: 1.2)),
+              Text(session.email, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant, height: 1.3)),
             ]),
           ),
           IconButton(
             tooltip: 'Sign out',
             onPressed: onLogout,
-            icon: const Icon(Icons.logout_rounded, size: 18, color: Color(0xFF9FB3C4)),
+            icon: Icon(Icons.logout_rounded, size: 19, color: scheme.error),
           ),
         ]),
       ),
