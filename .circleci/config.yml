@@ -9,7 +9,7 @@ executors:
   flutter_android:
     docker:
       - image: ghcr.io/cirruslabs/flutter:stable
-    resource_class: medium
+    resource_class: large
     environment:
       ERP_SERVER_API: "https://flavorflow.duckdns.org/api"
       # CircleCI Medium has limited RAM. Keep Gradle/Kotlin in one small JVM;
@@ -80,14 +80,14 @@ jobs:
             test -d "$SDK_ROOT/cmake/$CMAKE_VERSION"
             test -d "$SDK_ROOT/ndk/$NDK_VERSION"
 
-            sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx1400M -XX:MaxMetaspaceSize=384M -XX:+UseSerialGC -Dfile.encoding=UTF-8/' android/gradle.properties
+            sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx2048M -XX:MaxMetaspaceSize=512M -Dfile.encoding=UTF-8/' android/gradle.properties
             printf '%s\n' \
               'org.gradle.daemon=false' \
               'org.gradle.parallel=false' \
               'org.gradle.workers.max=2' \
               'org.gradle.vfs.watch=false' \
               'kotlin.compiler.execution.strategy=in-process' \
-              'kotlin.daemon.jvmargs=-Xmx384m' >> android/gradle.properties
+              'kotlin.daemon.jvmargs=-Xmx768m' >> android/gradle.properties
             echo "Android SDK/NDK/CMake ready; Gradle configured for CircleCI Medium RAM"
 
       - run:
