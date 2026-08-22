@@ -51,7 +51,9 @@ class _DashboardPageState extends State<DashboardPage> {
             padding: const EdgeInsets.all(20),
             children: [
               _Header(greeting: data['greeting'] as String, name: data['name'] as String, session: session),
-              const SizedBox(height: 18),
+              const SizedBox(height: 16),
+              _WorkspaceGrid(session: session),
+              const SizedBox(height: 16),
               for (final w in widgets) ...[
                 _buildWidget(w),
                 const SizedBox(height: 16),
@@ -435,5 +437,94 @@ class _Actions extends StatelessWidget {
           label: Text(a['label'] as String),
         ),
     ]);
+  }
+}
+
+
+/// "Your workspace" — rounded-square tiles (3 per row) for every module the
+/// user can open, like the brand mockups. Built from the same nav the
+/// sidebar uses, so permissions/industry gating apply automatically.
+class _WorkspaceGrid extends StatelessWidget {
+  final UserSession session;
+  const _WorkspaceGrid({required this.session});
+
+  static const _tints = [
+    Color(0xFF1E6FE0), Color(0xFF16A34A), Color(0xFF7C3AED), Color(0xFFEA580C),
+    Color(0xFF0D9488), Color(0xFFDB2777), Color(0xFFD97706), Color(0xFF0891B2),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final items = [
+      for (final e in session.nav)
+        if (e['path'] != '/dashboard') e,
+    ];
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Padding(
+        padding: const EdgeInsets.only(left: 2, bottom: 10),
+        child: Text(tr('Your workspace'),
+            style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800, letterSpacing: -0.2, color: scheme.onSurface)),
+      ),
+      LayoutBuilder(builder: (context, c) {
+        final cols = c.maxWidth > 900 ? 6 : c.maxWidth > 560 ? 4 : 3;
+        return GridView.count(
+          crossAxisCount: cols,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 10, crossAxisSpacing: 10,
+          childAspectRatio: 0.98,
+          children: [
+            for (var i = 0; i < items.length; i++)
+              _WorkTile(
+                label: tr(items[i]['label'] as String),
+                icon: iconFor(items[i]['icon'] as String?),
+                tint: _tints[i % _tints.length],
+                onTap: () => context.go(items[i]['path'] as String),
+              ),
+          ],
+        );
+      }),
+    ]);
+  }
+}
+
+class _WorkTile extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color tint;
+  final VoidCallback onTap;
+  const _WorkTile({required this.label, required this.icon, required this.tint, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.surface,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.6)),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Container(
+              width: 40, height: 40,
+              decoration: BoxDecoration(color: tint.withValues(alpha: 0.13), borderRadius: BorderRadius.circular(13)),
+              child: Icon(icon, size: 21, color: tint),
+            ),
+            const SizedBox(height: 8),
+            Text(label,
+                maxLines: 2, textAlign: TextAlign.center, overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 10.8, fontWeight: FontWeight.w700, height: 1.15, color: scheme.onSurface)),
+          ]),
+        ),
+      ),
+    );
   }
 }

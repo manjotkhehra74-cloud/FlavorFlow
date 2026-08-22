@@ -48,6 +48,8 @@ class L10n extends ChangeNotifier {
 
   static const Map<String, Map<String, String>> _tr = {
     'pa': {
+      'Your workspace': 'ਤੁਹਾਡਾ ਵਰਕਸਪੇਸ',
+
       'Trucks': 'ਟਰੱਕ',
       'Add Truck': 'ਟਰੱਕ ਜੋੜੋ',
       'Other / new truck…': 'ਹੋਰ / ਨਵਾਂ ਟਰੱਕ…',
@@ -415,6 +417,8 @@ class L10n extends ChangeNotifier {
       'Ledger': 'ਖਾਤਾ',
     },
     'hi': {
+      'Your workspace': 'आपका वर्कस्पेस',
+
       'Trucks': 'ट्रक',
       'Add Truck': 'ट्रक जोड़ें',
       'Other / new truck…': 'अन्य / नया ट्रक…',
@@ -782,6 +786,8 @@ class L10n extends ChangeNotifier {
       'Ledger': 'खाता',
     },
   'gu': {
+      'Your workspace': 'તમારું વર્કસ્પેસ',
+
       'Trucks': 'ટ્રક',
       'Add Truck': 'ટ્રક ઉમેરો',
       'Other / new truck…': 'અન્ય / નવો ટ્રક…',
@@ -1135,6 +1141,8 @@ class L10n extends ChangeNotifier {
       'Refresh permissions': 'પરવાનગીઓ તાજી કરો',
     },
     'mr': {
+      'Your workspace': 'तुमचे वर्कस्पेस',
+
       'Trucks': 'ट्रक',
       'Add Truck': 'ट्रक जोडा',
       'Other / new truck…': 'इतर / नवीन ट्रक…',
@@ -1487,6 +1495,8 @@ class L10n extends ChangeNotifier {
       'Refresh permissions': 'परवानग्या ताज्या करा',
     },
     'bn': {
+      'Your workspace': 'আপনার ওয়ার্কস্পেস',
+
       'Trucks': 'ট্রাক',
       'Add Truck': 'ট্রাক যোগ করুন',
       'Other / new truck…': 'অন্যান্য / নতুন ট্রাক…',
@@ -1839,6 +1849,8 @@ class L10n extends ChangeNotifier {
       'Refresh permissions': 'অনুমতি রিফ্রেশ',
     },
     'ta': {
+      'Your workspace': 'உங்கள் பணியிடம்',
+
       'Trucks': 'டிரக்குகள்',
       'Add Truck': 'டிரக் சேர்',
       'Other / new truck…': 'மற்றவை / புதிய டிரக்…',
@@ -2191,6 +2203,8 @@ class L10n extends ChangeNotifier {
       'Refresh permissions': 'அனுமதிகள் புதுப்பி',
     },
     'te': {
+      'Your workspace': 'మీ వర్క్‌స్పేస్',
+
       'Trucks': 'ట్రక్కులు',
       'Add Truck': 'ట్రక్ జోడించండి',
       'Other / new truck…': 'ఇతర / కొత్త ట్రక్…',

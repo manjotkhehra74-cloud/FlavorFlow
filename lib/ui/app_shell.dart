@@ -163,7 +163,23 @@ class _AppShellState extends State<AppShell> {
         titleSpacing: 0,
         actions: [topBar.actionsPadding(child: topBar.bellAction(context)), topBar.userAction(context, compact: true)],
       ),
-      drawer: Drawer(backgroundColor: Shell.bg, child: SafeArea(child: sidebar)),
+      drawer: Drawer(
+        backgroundColor: Shell.bg,
+        child: SafeArea(
+          child: _DrawerGrid(
+            nav: nav,
+            selected: selected,
+            session: session,
+            onTap: (i) {
+              context.go(nav[i]['path'] as String);
+              Future.delayed(const Duration(milliseconds: 180), () {
+                _scaffoldKey.currentState?.closeDrawer();
+              });
+            },
+            onLogout: _logout,
+          ),
+        ),
+      ),
       body: widget.child,
     );
   }
@@ -340,6 +356,132 @@ class _Sidebar extends StatelessWidget {
         ),
       ]),
     );
+  }
+}
+
+
+/// Mobile drawer — module tiles in a 3-per-row grid of rounded squares
+/// (brand mockup style), grouped with section labels.
+class _DrawerGrid extends StatelessWidget {
+  final List nav;
+  final int selected;
+  final UserSession session;
+  final void Function(int) onTap;
+  final Future<void> Function() onLogout;
+  const _DrawerGrid({required this.nav, required this.selected, required this.session, required this.onTap, required this.onLogout});
+
+  static const _tints = [
+    Color(0xFF60A5FA), Color(0xFF4ADE80), Color(0xFFC084FC), Color(0xFFFB923C),
+    Color(0xFF2DD4BF), Color(0xFFF472B6), Color(0xFFFACC15), Color(0xFF22D3EE),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final groups = <String, List<int>>{};
+    for (var i = 0; i < nav.length; i++) {
+      groups.putIfAbsent(nav[i]['group'] as String? ?? 'Menu', () => []).add(i);
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      // brand
+      Container(
+        height: 56,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: Shell.border)),
+          gradient: LinearGradient(colors: [Color(0x141E6FE0), Color(0x0022C55E)], begin: Alignment.centerLeft, end: Alignment.centerRight),
+        ),
+        child: Row(children: [
+          Container(
+            width: 32, height: 32,
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
+            clipBehavior: Clip.antiAlias,
+            alignment: Alignment.center,
+            child: Image.asset('assets/icon/app_icon.png', fit: BoxFit.cover),
+          ),
+          const SizedBox(width: 10),
+          const Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+            Text('FlavorFlow ERP', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: Colors.white, height: 1.15, letterSpacing: -0.1)),
+            Text('MANUFACTURING SUITE', style: TextStyle(fontSize: 8.5, color: Shell.groupLabel, letterSpacing: 1.6, fontWeight: FontWeight.w600, height: 1.4)),
+          ]),
+        ]),
+      ),
+      Expanded(
+        child: ListView(padding: const EdgeInsets.fromLTRB(12, 10, 12, 10), children: [
+          for (final g in groups.entries) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
+              child: Text(tr(g.key).toUpperCase(),
+                  style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: Shell.groupLabel, letterSpacing: 1.5)),
+            ),
+            GridView.count(
+              crossAxisCount: 3,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 8, crossAxisSpacing: 8,
+              childAspectRatio: 0.95,
+              children: [
+                for (final i in g.value)
+                  Builder(builder: (context) {
+                    final active = i == selected;
+                    final tint = _tints[i % _tints.length];
+                    return Material(
+                      color: active ? null : const Color(0x12FFFFFF),
+                      borderRadius: BorderRadius.circular(16),
+                      child: InkWell(
+                        onTap: () => onTap(i),
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            gradient: active
+                                ? const LinearGradient(colors: [Color(0xFF1E6FE0), Color(0xFF17935F)], begin: Alignment.topLeft, end: Alignment.bottomRight)
+                                : null,
+                            border: active ? null : Border.all(color: const Color(0x1FFFFFFF)),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                            Icon(iconFor(nav[i]['icon'] as String?), size: 22, color: active ? Colors.white : tint),
+                            const SizedBox(height: 6),
+                            Text(tr(nav[i]['label'] as String),
+                                maxLines: 2, textAlign: TextAlign.center, overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, height: 1.15,
+                                    color: active ? Colors.white : Shell.item)),
+                          ]),
+                        ),
+                      ),
+                    );
+                  }),
+              ],
+            ),
+          ],
+        ]),
+      ),
+      // user footer
+      Container(
+        decoration: const BoxDecoration(
+          color: Shell.bgDeep,
+          border: Border(top: BorderSide(color: Shell.border)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(children: [
+          _Avatar(session: session, radius: 15),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(session.name, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12.3, fontWeight: FontWeight.w600, color: Colors.white, height: 1.2)),
+              Text(session.roleLabel, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 10, color: Shell.groupLabel, height: 1.3)),
+            ]),
+          ),
+          IconButton(
+            tooltip: 'Sign out',
+            onPressed: onLogout,
+            icon: const Icon(Icons.logout_rounded, size: 18, color: Color(0xFF9FB3C4)),
+          ),
+        ]),
+      ),
+    ]);
   }
 }
 
