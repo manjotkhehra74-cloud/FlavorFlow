@@ -170,6 +170,34 @@ jobs:
           command: |
             rm -f android/key.properties "$HOME/flavorflow-upload-key"
 
+
+  build-web:
+    docker:
+      - image: ghcr.io/cirruslabs/flutter:stable
+    resource_class: medium
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - flavorflow-v2-{{ checksum "pubspec.lock" }}
+            - flavorflow-v2-
+      - run:
+          name: Get Flutter packages
+          command: flutter pub get
+      - run:
+          name: Build web release
+          no_output_timeout: 30m
+          command: flutter build web --release --no-tree-shake-icons
+      - run:
+          name: Zip website
+          command: |
+            set -euo pipefail
+            cd build/web && zip -qr ../../flavorflow-web.zip . && cd ../..
+            ls -lh flavorflow-web.zip
+      - store_artifacts:
+          path: flavorflow-web.zip
+          destination: flavorflow-web.zip
+
 workflows:
   play-store-release:
     jobs:
@@ -177,10 +205,29 @@ workflows:
           type: approval
           filters:
             branches:
-              only: arena/01a01af5-flavorflow
+              only:
+                - arena/01a003d0-flavorflow
+                - arena/01a01af5-flavorflow
       - build-play-store-release:
           requires:
             - approve-release
           filters:
             branches:
-              only: arena/01a01af5-flavorflow
+              only:
+                - arena/01a003d0-flavorflow
+                - arena/01a01af5-flavorflow
+      - approve-web:
+          type: approval
+          filters:
+            branches:
+              only:
+                - arena/01a003d0-flavorflow
+                - arena/01a01af5-flavorflow
+      - build-web:
+          requires:
+            - approve-web
+          filters:
+            branches:
+              only:
+                - arena/01a003d0-flavorflow
+                - arena/01a01af5-flavorflow
