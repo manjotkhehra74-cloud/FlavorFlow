@@ -141,7 +141,15 @@ class SectionCard extends StatelessWidget {
   final Widget child;
   final Widget? trailing;
   final EdgeInsets padding;
-  const SectionCard({super.key, this.title, required this.child, this.trailing, this.padding = const EdgeInsets.all(16)});
+  final bool stackTrailingOnNarrow;
+  const SectionCard({
+    super.key,
+    this.title,
+    required this.child,
+    this.trailing,
+    this.padding = const EdgeInsets.all(16),
+    this.stackTrailingOnNarrow = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -150,19 +158,39 @@ class SectionCard extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
         if (title != null) ...[
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 12, 11),
-            child: Row(children: [
-              Container(
-                width: 4, height: 16,
-                margin: const EdgeInsets.only(right: 8),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [Color(0xFF1E6FE0), Color(0xFF22C55E)], begin: Alignment.topCenter, end: Alignment.bottomCenter),
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              ),
-              Expanded(child: Text(tr(title!), style: const TextStyle(fontSize: 13.6, fontWeight: FontWeight.w700, letterSpacing: -0.1))),
-              if (trailing != null) trailing!,
-            ]),
+            padding: const EdgeInsets.fromLTRB(17, 14, 13, 13),
+            child: LayoutBuilder(builder: (context, constraints) {
+              Widget titleLine() => Row(children: [
+                    Container(
+                      width: 4,
+                      height: 20,
+                      decoration: BoxDecoration(gradient: AppBrand.gradient, borderRadius: BorderRadius.circular(8)),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        tr(title!),
+                        style: const TextStyle(fontSize: 13.8, fontWeight: FontWeight.w700, letterSpacing: -0.15),
+                      ),
+                    ),
+                  ]);
+
+              if (stackTrailingOnNarrow && trailing != null && constraints.maxWidth < 560) {
+                return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  titleLine(),
+                  const SizedBox(height: 11),
+                  Align(alignment: Alignment.centerRight, child: trailing!),
+                ]);
+              }
+
+              return Row(children: [
+                Expanded(child: titleLine()),
+                if (trailing != null) ...[
+                  const SizedBox(width: 10),
+                  trailing!,
+                ],
+              ]);
+            }),
           ),
           Divider(height: 1, color: scheme.outlineVariant),
         ],
@@ -183,36 +211,43 @@ class KpiCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Card(
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border(left: BorderSide(color: tint, width: 3.5)),
+      child: Stack(children: [
+        Positioned(
+          left: 0,
+          top: 15,
+          bottom: 15,
+          child: Container(width: 3, decoration: BoxDecoration(color: tint, borderRadius: const BorderRadius.horizontal(right: Radius.circular(6)))),
         ),
-        padding: const EdgeInsets.fromLTRB(13, 13, 15, 12),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
-          Row(children: [
-            Expanded(
-              child: Text(tr(label).toUpperCase(),
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.9, color: Theme.of(context).colorScheme.onSurfaceVariant)),
-            ),
-            Container(
-              width: 30, height: 30,
-              decoration: BoxDecoration(color: tint.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(9)),
-              child: Icon(icon, size: 16, color: tint),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(17, 14, 14, 13),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+            Row(children: [
+              Expanded(
+                child: Text(tr(label).toUpperCase(),
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.85, color: scheme.onSurfaceVariant)),
+              ),
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(color: tint.withValues(alpha: 0.11), borderRadius: BorderRadius.circular(10)),
+                child: Icon(icon, size: 17, color: tint),
+              ),
+            ]),
+            const SizedBox(height: 5),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(value,
+                  style: TextStyle(
+                      fontSize: 24, fontWeight: FontWeight.w700, letterSpacing: -0.6, color: scheme.onSurface,
+                      fontFeatures: const [FontFeature.tabularFigures()])),
             ),
           ]),
-          const SizedBox(height: 7),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(value,
-                style: TextStyle(
-                    fontSize: 23, fontWeight: FontWeight.w700, letterSpacing: -0.5, color: Theme.of(context).colorScheme.onSurface,
-                    fontFeatures: const [FontFeature.tabularFigures()])),
-          ),
-        ]),
-      ),
+        ),
+      ]),
     );
   }
 }

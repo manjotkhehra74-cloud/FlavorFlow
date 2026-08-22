@@ -3,9 +3,45 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
+/// Shared unread badge state. Server polling remains authoritative, while local
+/// read actions update this immediately instead of waiting up to 20 seconds.
+class NotificationBadge {
+  static final ValueNotifier<int> count = ValueNotifier<int>(0);
+  static int _mutation = 0;
+
+  /// Capture this before an async server fetch. A local read that happens while
+  /// the request is in flight invalidates the stale response.
+  static int beginSync() => _mutation;
+
+  static void syncFromServer(int value, int startedAtMutation) {
+    if (startedAtMutation != _mutation) return;
+    count.value = value < 0 ? 0 : value;
+  }
+
+  static void setFromLoadedList(int value) {
+    _mutation++;
+    count.value = value < 0 ? 0 : value;
+  }
+
+  static void markOneRead() {
+    _mutation++;
+    if (count.value > 0) count.value--;
+  }
+
+  static void markAllRead() {
+    _mutation++;
+    count.value = 0;
+  }
+
+  static void resetForAccount() {
+    _mutation++;
+    count.value = 0;
+  }
+}
+
 /// Phone notifications (status-bar) for new ERP alerts.
 ///
-/// The app already polls /notifications/unread-count every 20s while open;
+/// The app polls /notifications every 20s while open;
 /// this class turns NEW unread items into real Android notifications with
 /// sound — like any other app. No Firebase needed: notifications appear
 /// while the app is open or minimised (polling keeps running in background

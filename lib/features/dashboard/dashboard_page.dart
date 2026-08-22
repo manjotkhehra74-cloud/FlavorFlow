@@ -48,12 +48,10 @@ class _DashboardPageState extends State<DashboardPage> {
           onRefresh: () async => _reload(),
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(20),
+            padding: EdgeInsets.all(MediaQuery.sizeOf(context).width < 600 ? 14 : 24),
             children: [
               _Header(greeting: data['greeting'] as String, name: data['name'] as String, session: session),
-              const SizedBox(height: 16),
-              _WorkspaceGrid(session: session),
-              const SizedBox(height: 16),
+              const SizedBox(height: 18),
               for (final w in widgets) ...[
                 _buildWidget(w),
                 const SizedBox(height: 16),
@@ -98,35 +96,50 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Gradient hero card — logo blue → green, like the brand mockups.
     return Container(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF1E6FE0), Color(0xFF16A085), Color(0xFF22C55E)],
-          begin: Alignment.topLeft, end: Alignment.bottomRight,
+          colors: [Color(0xFF1459D9), Color(0xFF247FE7), Color(0xFF13A879)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          stops: [0, 0.62, 1],
         ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: const [BoxShadow(color: Color(0x331E6FE0), blurRadius: 18, offset: Offset(0, 6))],
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: AppBrand.blue.withValues(alpha: 0.22), blurRadius: 18, offset: const Offset(0, 7))],
       ),
       child: Row(children: [
         Container(
-          width: 44, height: 44,
-          margin: const EdgeInsets.only(right: 12),
-          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(13)),
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(13)),
           child: const Icon(Icons.insights_rounded, color: Colors.white, size: 23),
         ),
+        const SizedBox(width: 14),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('$greeting, ${name.split(' ').first}',
-                style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800, letterSpacing: -0.4, color: Colors.white)),
+                style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -0.45, color: Colors.white)),
             const SizedBox(height: 4),
             Wrap(spacing: 6, runSpacing: 2, children: [
-              Text('${session.roleLabel} workspace', style: const TextStyle(color: Color(0xE6FFFFFF), fontSize: 12.5)),
-              Text('·  ${fmtDateWithDay(todayYmd())}', softWrap: false, style: const TextStyle(color: Color(0xE6FFFFFF), fontSize: 12.5)),
+              Text('${session.roleLabel} workspace', style: TextStyle(color: Colors.white.withValues(alpha: 0.78), fontSize: 12.5)),
+              Text('·  ${fmtDateWithDay(todayYmd())}', softWrap: false, style: TextStyle(color: Colors.white.withValues(alpha: 0.78), fontSize: 12.5)),
             ]),
           ]),
         ),
+        if (MediaQuery.sizeOf(context).width >= 520) ...[
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.26)),
+            ),
+            child: Text(session.roleLabel.toUpperCase(),
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 10.5, letterSpacing: 0.8, color: Colors.white)),
+          ),
+        ],
       ]),
     );
   }
@@ -150,8 +163,10 @@ class _KpiGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, c) {
-      final cols = c.maxWidth > 1300 ? 4 : c.maxWidth > 900 ? 3 : c.maxWidth > 560 ? 2 : 1;
-      final ratio = ((c.maxWidth - (cols - 1) * 12) / cols / 84).clamp(1.6, 5.0);
+      // The Play Store mobile layout uses compact 2-column metric tiles,
+      // matching the module-card rhythm while retaining 3/4 columns on web.
+      final cols = c.maxWidth > 1300 ? 4 : c.maxWidth > 900 ? 3 : c.maxWidth < 340 ? 1 : 2;
+      final ratio = ((c.maxWidth - (cols - 1) * 12) / cols / 100).clamp(1.38, 4.5);
       return GridView.count(
         crossAxisCount: cols,
         shrinkWrap: true,
@@ -433,94 +448,5 @@ class _Actions extends StatelessWidget {
           label: Text(a['label'] as String),
         ),
     ]);
-  }
-}
-
-
-/// "Your workspace" — rounded-square tiles (3 per row) for every module the
-/// user can open, like the brand mockups. Built from the same nav the
-/// sidebar uses, so permissions/industry gating apply automatically.
-class _WorkspaceGrid extends StatelessWidget {
-  final UserSession session;
-  const _WorkspaceGrid({required this.session});
-
-  static const _tints = [
-    Color(0xFF1E6FE0), Color(0xFF16A34A), Color(0xFF7C3AED), Color(0xFFEA580C),
-    Color(0xFF0D9488), Color(0xFFDB2777), Color(0xFFD97706), Color(0xFF0891B2),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final items = [
-      for (final e in session.nav)
-        if (e['path'] != '/dashboard') e,
-    ];
-    if (items.isEmpty) return const SizedBox.shrink();
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Padding(
-        padding: const EdgeInsets.only(left: 2, bottom: 10),
-        child: Text(tr('Your workspace'),
-            style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800, letterSpacing: -0.2, color: scheme.onSurface)),
-      ),
-      LayoutBuilder(builder: (context, c) {
-        final cols = c.maxWidth > 900 ? 6 : c.maxWidth > 560 ? 4 : 3;
-        return GridView.count(
-          crossAxisCount: cols,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 10, crossAxisSpacing: 10,
-          childAspectRatio: 0.98,
-          children: [
-            for (var i = 0; i < items.length; i++)
-              _WorkTile(
-                label: tr(items[i]['label'] as String),
-                icon: iconFor(items[i]['icon'] as String?),
-                tint: _tints[i % _tints.length],
-                onTap: () => context.go(items[i]['path'] as String),
-              ),
-          ],
-        );
-      }),
-    ]);
-  }
-}
-
-class _WorkTile extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final Color tint;
-  final VoidCallback onTap;
-  const _WorkTile({required this.label, required this.icon, required this.tint, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: scheme.surface,
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.6)),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
-          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Container(
-              width: 40, height: 40,
-              decoration: BoxDecoration(color: tint.withValues(alpha: 0.13), borderRadius: BorderRadius.circular(13)),
-              child: Icon(icon, size: 21, color: tint),
-            ),
-            const SizedBox(height: 8),
-            Text(label,
-                maxLines: 2, textAlign: TextAlign.center, overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 10.8, fontWeight: FontWeight.w700, height: 1.15, color: scheme.onSurface)),
-          ]),
-        ),
-      ),
-    );
   }
 }

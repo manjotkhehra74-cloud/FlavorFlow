@@ -1,89 +1,186 @@
-# FlavorFlow ERP — CircleCI Android build (memory-safe for 4GB executors).
-# The Gradle daemon was OOM-killed ("daemon disappeared unexpectedly");
-# gradle.properties caps workers/kotlin-daemon and this config caps Gradle.
 version: 2.1
 
-jobs:
-  build-apk:
+# FlavorFlow Android release builds on CircleCI.
+# The approval gate means pushes do not consume build credits by themselves.
+# In CircleCI, open the latest pipeline and approve "approve-release" only
+# when an AAB/APK is actually needed.
+
+executors:
+  flutter_android:
     docker:
-      - image: cimg/android:2024.01.1
-    resource_class: large
+      - image: ghcr.io/cirruslabs/flutter:stable
+    resource_class: medium
     environment:
       ERP_SERVER_API: "https://flavorflow.duckdns.org/api"
-      GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+      # CircleCI Medium has limited RAM. Keep Gradle/Kotlin in one small JVM;
+      # Flutter/Dart and Android tooling need the remaining memory.
+      GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Dorg.gradle.parallel=false -Dkotlin.compiler.execution.strategy=in-process"
+
+jobs:
+  build-play-store-release:
+    executor: flutter_android
     steps:
       - checkout
+
       - run:
-          name: Install Flutter (stable)
+          name: Verify Flutter and Java
           command: |
-            git clone --depth 1 -b stable https://github.com/flutter/flutter.git $HOME/flutter
-            echo 'export PATH=$HOME/flutter/bin:$PATH' >> $BASH_ENV
-            source $BASH_ENV
             flutter --version
-      - run:
-          name: Install native build tools (ninja + cmake — CXX1416 fix)
-          command: |
-            sudo apt-get update -qq && sudo apt-get install -y -qq ninja-build cmake
-            (yes | sdkmanager "cmake;3.22.1") || true
-            ninja --version && cmake --version
-      - run:
-          name: Pub get
-          command: flutter pub get
-      - run:
-          name: Launcher icons
-          command: dart run flutter_launcher_icons || echo skipped
+            java -version
+
       - restore_cache:
           keys:
-            - deps-v1-{{ checksum "pubspec.lock" }}
-            - deps-v1-
+            - flavorflow-v2-{{ checksum "pubspec.lock" }}
+            - flavorflow-v2-
+
       - run:
-          name: Build release APK
-          no_output_timeout: 75m
-          command: |
-            # heartbeat: Gradle native compile is silent for long stretches —
-            # without this CircleCI kills the step ("Too long with no output")
-            while true; do sleep 55; echo "... build chal rahi $(date +%H:%M:%S)"; done &
-            flutter build apk --release --dart-define=API_BASE="$ERP_SERVER_API"
+          name: Get Flutter packages
+          command: flutter pub get
+
       - save_cache:
-          key: deps-v1-{{ checksum "pubspec.lock" }}
+          key: flavorflow-v2-{{ checksum "pubspec.lock" }}
           paths:
             - ~/.pub-cache
             - ~/.gradle/caches
             - ~/.gradle/wrapper
-      - store_artifacts:
-          path: build/app/outputs/flutter-apk/app-release.apk
-          destination: app-release.apk
 
-  build-web:
-    docker:
-      - image: cimg/base:current
-    resource_class: medium
-    steps:
-      - checkout
       - run:
-          name: Install Flutter (stable)
+          name: Generate launcher icons (Android)
           command: |
-            git clone --depth 1 -b stable https://github.com/flutter/flutter.git $HOME/flutter
-            echo 'export PATH=$HOME/flutter/bin:$PATH' >> $BASH_ENV
-            source $BASH_ENV
-            flutter --version
-            flutter config --enable-web
+            # This repository is Android/web only. The package generates the
+            # Android icons first, then exits when it cannot find ios/Runner.
+            # Keep the generated/committed Android icons and continue.
+            dart run flutter_launcher_icons || echo "iOS icon target absent — Android icons retained"
+
       - run:
-          name: Pub get
-          command: flutter pub get
+          name: Prepare complete Android toolchain and low-memory Gradle
+          no_output_timeout: 25m
+          command: |
+            set -euo pipefail
+            NDK_VERSION="28.2.13676358"
+            CMAKE_VERSION="3.22.1"
+            SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/opt/android-sdk-linux}}"
+            SDKMANAGER=$(find "$SDK_ROOT" -type f -name sdkmanager -print -quit)
+            test -n "$SDKMANAGER"
+            yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+
+            # Install every package seen in the Gradle logs BEFORE a Gradle JVM
+            # exists. This prevents sdkmanager + a 1.4GB daemon overlapping.
+            "$SDKMANAGER" \
+              "platforms;android-34" \
+              "platforms;android-35" \
+              "build-tools;34.0.0" \
+              "build-tools;35.0.0" \
+              "cmake;$CMAKE_VERSION" \
+              "ndk;$NDK_VERSION"
+
+            test -d "$SDK_ROOT/platforms/android-34"
+            test -d "$SDK_ROOT/platforms/android-35"
+            test -d "$SDK_ROOT/build-tools/35.0.0"
+            test -d "$SDK_ROOT/cmake/$CMAKE_VERSION"
+            test -d "$SDK_ROOT/ndk/$NDK_VERSION"
+
+            sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx1400M -XX:MaxMetaspaceSize=384M -XX:+UseSerialGC -Dfile.encoding=UTF-8/' android/gradle.properties
+            printf '%s\n' \
+              'org.gradle.daemon=false' \
+              'org.gradle.parallel=false' \
+              'org.gradle.workers.max=2' \
+              'org.gradle.vfs.watch=false' \
+              'kotlin.compiler.execution.strategy=in-process' \
+              'kotlin.daemon.jvmargs=-Xmx384m' >> android/gradle.properties
+            echo "Android SDK/NDK/CMake ready; Gradle configured for CircleCI Medium RAM"
+
       - run:
-          name: Build web release
+          name: Configure Play Store signing
+          command: |
+            set -euo pipefail
+            : "${ANDROID_KEYSTORE_BASE64:?Add ANDROID_KEYSTORE_BASE64 in CircleCI Project Settings > Environment Variables}"
+            : "${ANDROID_KEYSTORE_PASSWORD:?Add ANDROID_KEYSTORE_PASSWORD in CircleCI}"
+            : "${ANDROID_KEY_ALIAS:?Add ANDROID_KEY_ALIAS in CircleCI}"
+            : "${ANDROID_KEY_PASSWORD:?Add ANDROID_KEY_PASSWORD in CircleCI}"
+
+            KEYSTORE_FILE="$HOME/flavorflow-upload-key"
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '\r\n ' | base64 --decode > "$KEYSTORE_FILE"
+            chmod 600 "$KEYSTORE_FILE"
+
+            # Detect JKS versus PKCS12 without exposing any key information.
+            if keytool -list -keystore "$KEYSTORE_FILE" -storepass "$ANDROID_KEYSTORE_PASSWORD" -storetype JKS >/dev/null 2>&1; then
+              STORE_TYPE=jks
+            elif keytool -list -keystore "$KEYSTORE_FILE" -storepass "$ANDROID_KEYSTORE_PASSWORD" -storetype PKCS12 >/dev/null 2>&1; then
+              STORE_TYPE=pkcs12
+            else
+              echo "Keystore/password invalid or unsupported" >&2
+              exit 1
+            fi
+
+            printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\nstoreType=%s\n' \
+              "$KEYSTORE_FILE" \
+              "$ANDROID_KEYSTORE_PASSWORD" \
+              "$ANDROID_KEY_ALIAS" \
+              "$ANDROID_KEY_PASSWORD" \
+              "$STORE_TYPE" > android/key.properties
+            echo "Signing identity validated ($STORE_TYPE)"
+
+      # APK first: staff can install/test it even if the later AAB step fails.
+      - run:
+          name: Build signed release APK
           no_output_timeout: 30m
-          command: flutter build web --release --no-tree-shake-icons
+          command: flutter build apk --release --dart-define=API_BASE="$ERP_SERVER_API"
+
       - run:
-          name: Zip website
-          command: cd build/web && zip -r ../../flavorflow-web.zip . && cd ../.. && ls -la flavorflow-web.zip
+          name: Collect signed APK
+          command: |
+            set -euo pipefail
+            APK=build/app/outputs/flutter-apk/app-release.apk
+            test -s "$APK"
+            mkdir -p circleci-artifacts
+            cp "$APK" circleci-artifacts/FlavorFlow-release.apk
+            ls -lh circleci-artifacts/FlavorFlow-release.apk
+
+      # Upload immediately. CircleCI still preserves this APK if AAB later fails.
       - store_artifacts:
-          path: flavorflow-web.zip
-          destination: flavorflow-web.zip
+          path: circleci-artifacts/FlavorFlow-release.apk
+          destination: FlavorFlow-Android/FlavorFlow-release.apk
+
+      - run:
+          name: Build signed Play Store AAB
+          no_output_timeout: 30m
+          command: flutter build appbundle --release --dart-define=API_BASE="$ERP_SERVER_API"
+
+      - run:
+          name: Verify and collect AAB
+          command: |
+            set -euo pipefail
+            AAB=build/app/outputs/bundle/release/app-release.aab
+            test -s "$AAB"
+            jarsigner -verify "$AAB" >/dev/null
+            cp "$AAB" circleci-artifacts/FlavorFlow-release.aab
+            if [ -f build/app/outputs/mapping/release/mapping.txt ]; then
+              cp build/app/outputs/mapping/release/mapping.txt circleci-artifacts/mapping.txt
+            fi
+            ls -lh circleci-artifacts
+
+      - store_artifacts:
+          path: circleci-artifacts
+          destination: FlavorFlow-Android
+
+      - run:
+          name: Remove signing files
+          when: always
+          command: |
+            rm -f android/key.properties "$HOME/flavorflow-upload-key"
 
 workflows:
-  android:
+  play-store-release:
     jobs:
-      - build-apk
-      - build-web
+      - approve-release:
+          type: approval
+          filters:
+            branches:
+              only: arena/01a01af5-flavorflow
+      - build-play-store-release:
+          requires:
+            - approve-release
+          filters:
+            branches:
+              only: arena/01a01af5-flavorflow

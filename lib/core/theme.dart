@@ -1,132 +1,152 @@
 import 'package:flutter/material.dart';
 
-/// FlavorFlow ERP theme — enterprise console look (SAP Business One / Fiori inspired):
-/// flat white surfaces, hairline borders, dense controls, dark navigation shell,
-/// Inter typography with tabular numbers.
-ThemeData buildTheme({bool dark = false}) {
-  const primary = Color(0xFF1E6FE0); // logo blue
-  const accent = Color(0xFF22C55E); // logo green
-  final ink = dark ? const Color(0xFFE4EAF0) : const Color(0xFF1B2733);
-  final subInk = dark ? const Color(0xFF9AA8B5) : const Color(0xFF5C6B7A);
+/// FlavorFlow's visual identity, derived from the Flow Mark logo.
+/// Keep brand colours here so the shell, dashboard and feature pages stay in sync.
+class AppBrand {
+  static const blue = Color(0xFF1E6FE0);
+  static const blueDeep = Color(0xFF1556B8);
+  static const green = Color(0xFF16B878);
+  static const greenDeep = Color(0xFF07945D);
+  static const navy = Color(0xFF081C33);
 
-  final base = ColorScheme.fromSeed(seedColor: primary, brightness: dark ? Brightness.dark : Brightness.light);
-  final scheme = dark
-      ? base.copyWith(
-          primary: const Color(0xFF64A8E8),
-          onPrimary: const Color(0xFF0B2A47),
-          primaryContainer: const Color(0xFF15385C),
-          onPrimaryContainer: const Color(0xFFBBD9F5),
-          secondary: const Color(0xFF4ADE80),
-          surface: const Color(0xFF14191F),
-          onSurface: const Color(0xFFE4EAF0),
-          onSurfaceVariant: const Color(0xFF9AA8B5),
-          surfaceContainerLowest: const Color(0xFF0F1419),
-          surfaceContainerLow: const Color(0xFF181E25),
-          surfaceContainerHigh: const Color(0xFF1F262E),
-          surfaceContainerHighest: const Color(0xFF262E37),
-          outline: const Color(0xFF5B6875),
-          outlineVariant: const Color(0xFF313A44),
-          error: const Color(0xFFFF6B6B),
-        )
-      : base.copyWith(
-    primary: primary,
-    onPrimary: Colors.white,
-    primaryContainer: const Color(0xFFE1EEFB),
-    onPrimaryContainer: const Color(0xFF0B4E96),
-    secondary: accent,
-    surface: Colors.white,
+  static const gradient = LinearGradient(
+    colors: [blue, Color(0xFF258FD0), green],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+}
+
+/// Modern, compact ERP theme. Light and dark palettes share the Flow Mark
+/// blue-to-green identity while preserving dense, readable data screens.
+ThemeData buildTheme({bool dark = false}) {
+  final ink = dark ? const Color(0xFFF0F5FA) : const Color(0xFF172334);
+  final subInk = dark ? const Color(0xFFA7B4C2) : const Color(0xFF617083);
+  final surface = dark ? const Color(0xFF151D27) : Colors.white;
+  final border = dark ? const Color(0xFF2D3947) : const Color(0xFFDDE6EF);
+  final fieldBorder = dark ? const Color(0xFF3B4958) : const Color(0xFFC9D5E2);
+
+  final base = ColorScheme.fromSeed(
+    seedColor: AppBrand.blue,
+    brightness: dark ? Brightness.dark : Brightness.light,
+  );
+  final scheme = base.copyWith(
+    primary: dark ? const Color(0xFF78B4FF) : AppBrand.blue,
+    onPrimary: dark ? const Color(0xFF06244A) : Colors.white,
+    primaryContainer: dark ? const Color(0xFF173D68) : const Color(0xFFE7F1FF),
+    onPrimaryContainer: dark ? const Color(0xFFD7E9FF) : const Color(0xFF124C9D),
+    secondary: dark ? const Color(0xFF51D8A3) : AppBrand.greenDeep,
+    onSecondary: dark ? const Color(0xFF063625) : Colors.white,
+    secondaryContainer: dark ? const Color(0xFF123E31) : const Color(0xFFE1F8EF),
+    onSecondaryContainer: dark ? const Color(0xFFB6F3DB) : const Color(0xFF06613E),
+    surface: surface,
     onSurface: ink,
     onSurfaceVariant: subInk,
-    surfaceContainerLowest: Colors.white,
-    surfaceContainerLow: const Color(0xFFF8FAFC),
-    surfaceContainerHigh: const Color(0xFFF1F5F9),
-    surfaceContainerHighest: const Color(0xFFE9EEF3),
-    outline: const Color(0xFF94A3B8),
-    outlineVariant: const Color(0xFFDDE3EA),
-    error: const Color(0xFFBB0000),
+    surfaceContainerLowest: dark ? const Color(0xFF0D131B) : Colors.white,
+    surfaceContainerLow: dark ? const Color(0xFF121922) : const Color(0xFFF8FAFD),
+    surfaceContainer: dark ? const Color(0xFF18212B) : const Color(0xFFF3F7FB),
+    surfaceContainerHigh: dark ? const Color(0xFF202A35) : const Color(0xFFEDF3F8),
+    surfaceContainerHighest: dark ? const Color(0xFF283440) : const Color(0xFFE6EDF4),
+    outline: dark ? const Color(0xFF637181) : const Color(0xFF91A1B3),
+    outlineVariant: border,
+    error: dark ? const Color(0xFFFF7B7B) : const Color(0xFFC52B35),
   );
 
   const family = 'Inter';
-
-  TextStyle txt(double size, FontWeight w, {Color? color, double? ls, double? h}) => TextStyle(
+  TextStyle txt(double size, FontWeight weight, {Color? color, double? ls, double? h}) => TextStyle(
         fontFamily: family,
         fontSize: size,
-        fontWeight: w,
+        fontWeight: weight,
         color: color,
         letterSpacing: ls,
         height: h,
       );
 
+  OutlineInputBorder inputBorder(Color color, {double width = 1}) => OutlineInputBorder(
+        borderRadius: BorderRadius.circular(11),
+        borderSide: BorderSide(color: color, width: width),
+      );
+
   return ThemeData(
     useMaterial3: true,
+    brightness: dark ? Brightness.dark : Brightness.light,
     colorScheme: scheme,
     fontFamily: family,
     fontFamilyFallback: const ['Roboto', 'Segoe UI', 'Arial'],
-    scaffoldBackgroundColor: dark ? const Color(0xFF0F1419) : const Color(0xFFF5F8FC),
+    scaffoldBackgroundColor: dark ? const Color(0xFF0E151D) : const Color(0xFFF4F7FB),
+    canvasColor: surface,
+    shadowColor: const Color(0xFF0B2545).withValues(alpha: dark ? 0.28 : 0.10),
     visualDensity: VisualDensity.standard,
     textTheme: TextTheme(
-      headlineSmall: txt(20, FontWeight.w700, color: ink, ls: -0.3),
-      titleLarge: txt(17, FontWeight.w700, color: ink, ls: -0.2),
+      headlineSmall: txt(21, FontWeight.w700, color: ink, ls: -0.45),
+      titleLarge: txt(17.5, FontWeight.w700, color: ink, ls: -0.25),
       titleMedium: txt(14.5, FontWeight.w600, color: ink),
       titleSmall: txt(13, FontWeight.w600, color: ink),
-      bodyLarge: txt(14, FontWeight.w400, color: ink),
-      bodyMedium: txt(13, FontWeight.w400, color: ink),
-      bodySmall: txt(12, FontWeight.w400, color: subInk),
+      bodyLarge: txt(14, FontWeight.w400, color: ink, h: 1.4),
+      bodyMedium: txt(13, FontWeight.w400, color: ink, h: 1.35),
+      bodySmall: txt(12, FontWeight.w400, color: subInk, h: 1.35),
       labelLarge: txt(13, FontWeight.w600, color: ink),
-      labelSmall: txt(11, FontWeight.w600, color: subInk, ls: 0.4),
+      labelSmall: txt(11, FontWeight.w600, color: subInk, ls: 0.35),
     ),
     appBarTheme: AppBarTheme(
-      backgroundColor: scheme.surface,
+      backgroundColor: surface,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       scrolledUnderElevation: 0,
       centerTitle: false,
-      toolbarHeight: 54,
-      titleTextStyle: txt(16.5, FontWeight.w700, color: ink, ls: -0.2),
-      iconTheme: IconThemeData(color: subInk, size: 21),
+      toolbarHeight: 62,
+      titleTextStyle: txt(17, FontWeight.w700, color: ink, ls: -0.25),
+      iconTheme: IconThemeData(color: subInk, size: 22),
     ),
     cardTheme: CardThemeData(
-      color: scheme.surface,
-      elevation: 0,
+      color: surface,
+      surfaceTintColor: Colors.transparent,
+      elevation: dark ? 0 : 1.2,
+      shadowColor: const Color(0xFF123A63).withValues(alpha: 0.10),
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: dark ? const Color(0xFF2A333D) : const Color(0xFFE7EDF4)),
+        borderRadius: BorderRadius.circular(15),
+        side: BorderSide(color: border),
       ),
-      shadowColor: const Color(0x140F2440),
       clipBehavior: Clip.antiAlias,
     ),
     inputDecorationTheme: InputDecorationThemeData(
       filled: true,
-      fillColor: scheme.surface,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFC3CEDA))),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFC3CEDA))),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: primary, width: 1.6)),
+      fillColor: dark ? const Color(0xFF111923) : Colors.white,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      border: inputBorder(fieldBorder),
+      enabledBorder: inputBorder(fieldBorder),
+      focusedBorder: inputBorder(scheme.primary, width: 1.8),
+      errorBorder: inputBorder(scheme.error),
+      focusedErrorBorder: inputBorder(scheme.error, width: 1.8),
       labelStyle: txt(12.5, FontWeight.w500, color: subInk),
+      hintStyle: txt(12.5, FontWeight.w400, color: subInk.withValues(alpha: 0.75)),
+      prefixIconColor: subInk,
+      suffixIconColor: subInk,
       isDense: true,
     ),
     dataTableTheme: DataTableThemeData(
-      headingRowColor: WidgetStatePropertyAll(dark ? const Color(0xFF1F262E) : const Color(0xFFF5F8FB)),
-      headingRowHeight: 38,
-      dataRowMinHeight: 40,
-      dataRowMaxHeight: 46,
-      headingTextStyle: txt(11, FontWeight.w700, color: const Color(0xFF55677A), ls: 0.6),
+      headingRowColor: WidgetStatePropertyAll(scheme.surfaceContainerLow),
+      headingRowHeight: 42,
+      dataRowMinHeight: 42,
+      dataRowMaxHeight: 50,
+      headingTextStyle: txt(10.8, FontWeight.w700, color: subInk, ls: 0.65),
       dataTextStyle: txt(12.8, FontWeight.w400, color: ink),
-      dataRowColor: const WidgetStateProperty.fromMap({WidgetState.hovered: Color(0xFFF3F8FD)}),
-      horizontalMargin: 14,
-      columnSpacing: 26,
-      dividerThickness: 0.6,
+      dataRowColor: WidgetStateProperty.fromMap({
+        WidgetState.hovered: scheme.primary.withValues(alpha: dark ? 0.08 : 0.045),
+      }),
+      horizontalMargin: 16,
+      columnSpacing: 28,
+      dividerThickness: 0.65,
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        backgroundColor: primary,
+        backgroundColor: dark ? scheme.primary : AppBrand.blue,
         foregroundColor: scheme.onPrimary,
-        disabledBackgroundColor: const Color(0xFFBCD3EA),
+        disabledBackgroundColor: dark ? const Color(0xFF334353) : const Color(0xFFBED1E8),
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
         minimumSize: const Size(0, 40),
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         textStyle: txt(13, FontWeight.w600),
       ),
     ),
@@ -135,94 +155,123 @@ ThemeData buildTheme({bool dark = false}) {
         foregroundColor: ink,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
         minimumSize: const Size(0, 40),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        side: const BorderSide(color: Color(0xFFC3CEDA)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        side: BorderSide(color: fieldBorder),
         textStyle: txt(13, FontWeight.w600),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
-        foregroundColor: primary,
-        minimumSize: const Size(0, 34),
+        foregroundColor: scheme.primary,
+        minimumSize: const Size(0, 38),
         textStyle: txt(13, FontWeight.w600),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
       ),
     ),
     iconButtonTheme: IconButtonThemeData(
       style: IconButton.styleFrom(foregroundColor: subInk, iconSize: 20),
     ),
+    floatingActionButtonTheme: FloatingActionButtonThemeData(
+      backgroundColor: scheme.primary,
+      foregroundColor: scheme.onPrimary,
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      backgroundColor: dark ? const Color(0xFF273543) : AppBrand.navy,
+      contentTextStyle: txt(12.8, FontWeight.w500, color: Colors.white),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
     ),
     dialogTheme: DialogThemeData(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      backgroundColor: scheme.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      backgroundColor: surface,
       surfaceTintColor: Colors.transparent,
-      titleTextStyle: txt(16, FontWeight.w700, color: ink),
+      titleTextStyle: txt(17, FontWeight.w700, color: ink),
     ),
     tabBarTheme: TabBarThemeData(
-      labelColor: primary,
+      labelColor: scheme.primary,
       unselectedLabelColor: subInk,
-      indicatorColor: primary,
+      indicatorColor: scheme.primary,
+      indicatorSize: TabBarIndicatorSize.label,
+      dividerColor: border,
       labelStyle: txt(13, FontWeight.w700),
       unselectedLabelStyle: txt(13, FontWeight.w500),
     ),
     checkboxTheme: CheckboxThemeData(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3)),
+      fillColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? scheme.primary : null),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
     ),
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? Colors.white : null),
+      trackColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? AppBrand.green : null),
+    ),
+    progressIndicatorTheme: ProgressIndicatorThemeData(color: scheme.primary),
     popupMenuTheme: PopupMenuThemeData(
-      color: scheme.surface,
+      color: surface,
       surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: const BorderSide(color: Color(0xFFE2E8EF))),
+      elevation: 7,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13), side: BorderSide(color: border)),
       textStyle: txt(13, FontWeight.w500, color: ink),
     ),
     tooltipTheme: TooltipThemeData(
-      decoration: BoxDecoration(color: ink, borderRadius: BorderRadius.circular(4)),
-      textStyle: txt(11.5, FontWeight.w500, color: Colors.white),
+      decoration: BoxDecoration(color: dark ? const Color(0xFFDFE9F2) : AppBrand.navy, borderRadius: BorderRadius.circular(7)),
+      textStyle: txt(11.5, FontWeight.w500, color: dark ? AppBrand.navy : Colors.white),
     ),
-    scrollbarTheme: const ScrollbarThemeData(
-      thumbVisibility: WidgetStatePropertyAll(true),
-      thickness: WidgetStatePropertyAll(6),
-      radius: Radius.circular(3),
+    scrollbarTheme: ScrollbarThemeData(
+      thumbVisibility: const WidgetStatePropertyAll(true),
+      thumbColor: WidgetStatePropertyAll(scheme.outline.withValues(alpha: 0.60)),
+      thickness: const WidgetStatePropertyAll(6),
+      radius: const Radius.circular(8),
     ),
     listTileTheme: ListTileThemeData(
       dense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 1),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
       titleTextStyle: txt(13, FontWeight.w500, color: ink),
       subtitleTextStyle: txt(12, FontWeight.w400, color: subInk),
     ),
-    dividerTheme: const DividerThemeData(color: Color(0xFFE4E9EF), thickness: 1, space: 1),
-    chipTheme: const ChipThemeData(padding: EdgeInsets.symmetric(horizontal: 4, vertical: 0)),
+    dividerTheme: DividerThemeData(color: border, thickness: 1, space: 1),
+    chipTheme: ChipThemeData(
+      backgroundColor: scheme.surfaceContainerLow,
+      side: BorderSide(color: border),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+    ),
   );
 }
 
-/// Dark shell palette (sidebar + login brand panel).
+/// Dark navigation shell palette.
 class Shell {
-  static const bg = Color(0xFF0C2135);        // deep navy
-  static const bgDeep = Color(0xFF081827);    // darker footer strip
-  static const groupLabel = Color(0xFF7C93A8);
-  static const item = Color(0xFFC9D6E2);
-  static const itemHover = Color(0x14FFFFFF);
-  static const itemSelected = Color(0xFF133C63);
-  static const itemSelectedBar = Color(0xFF22C55E); // logo green accent
-  static const border = Color(0xFF1C3850);
+  static const bg = Color(0xFF0A2037);
+  static const bgDeep = Color(0xFF071827);
+  static const groupLabel = Color(0xFF7892AA);
+  static const item = Color(0xFFC6D5E3);
+  static const itemHover = Color(0x12FFFFFF);
+  static const itemSelected = Color(0xFF173D64);
+  static const itemSelectedBar = AppBrand.green;
+  static const border = Color(0xFF1A3A55);
+  static const gradient = LinearGradient(
+    colors: [Color(0xFF0B2743), Color(0xFF081C31)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
 }
 
-/// Semantic colors used across dashboards.
+/// Semantic colours used across dashboards and charts.
 class AppColors {
-  static const green = Color(0xFF16A34A);
-  static const red = Color(0xFFDC2626);
-  static const amber = Color(0xFFD97706);
-  static const blue = Color(0xFF1E6FE0);
-  static const teal = Color(0xFF0D9488);
-  static const violet = Color(0xFF7C3AED);
-  static const orange = Color(0xFFEA580C);
-  static const pink = Color(0xFFDB2777);
-  static const cyan = Color(0xFF0891B2);
-  static const slate = Color(0xFF51606F);
+  static const green = Color(0xFF07945D);
+  static const red = Color(0xFFDC3545);
+  static const amber = Color(0xFFD98200);
+  static const blue = AppBrand.blue;
+  static const teal = Color(0xFF0B9F99);
+  static const violet = Color(0xFF7657D6);
+  static const orange = Color(0xFFE5622A);
+  static const pink = Color(0xFFD84F91);
+  static const cyan = Color(0xFF159CB8);
+  static const slate = Color(0xFF617083);
 
-  static const chart = [blue, teal, amber, violet, orange, cyan, pink, green, slate];
+  static const chart = [blue, green, teal, amber, violet, orange, cyan, pink, slate];
 }
 
 Color hexColor(String? hex, {Color fallback = AppColors.blue}) {

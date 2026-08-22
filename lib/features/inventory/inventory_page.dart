@@ -250,7 +250,8 @@ class _BatchStockSectionState extends State<_BatchStockSection> {
         final rows = (data['rows'] as List).map((r) => (r as List).cast<dynamic>()).toList();
         return SectionCard(
           title: 'Batch-wise Stock',
-          trailing: Wrap(spacing: 8, children: [
+          stackTrailingOnNarrow: true,
+          trailing: Wrap(spacing: 8, runSpacing: 8, children: [
             OutlinedButton.icon(
               onPressed: _exporting ? null : () => _export(data, pdf: true),
               icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
