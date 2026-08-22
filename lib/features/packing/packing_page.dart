@@ -144,8 +144,32 @@ class _StockTabState extends State<_StockTab> {
   }
 
   Future<Map<String, dynamic>> _load() async {
-    final json = await context.read<AuthController>().api.get('/packing/materials${_lowOnly ? '?filter=low' : ''}');
-    return (json as Map).cast<String, dynamic>();
+    final api = context.read<AuthController>().api;
+    final json = await api.get('/packing/materials${_lowOnly ? '?filter=low' : ''}');
+    final data = (json as Map).cast<String, dynamic>();
+    if (!widget.rawOnly) {
+      // Product-wise order: all 180 materials together, then 250, then 740…
+      // (BOM product order). Unmapped materials go last, alphabetically.
+      try {
+        final bomJson = await api.get('/packing/bom');
+        final bom = ((bomJson as Map)['bom'] as List).cast<Map<String, dynamic>>();
+        final rank = <String, int>{};
+        for (var pi = 0; pi < bom.length; pi++) {
+          for (final it in (bom[pi]['items'] as List).cast<Map<String, dynamic>>()) {
+            final key = '${it['material']}'.toLowerCase();
+            if (!rank.containsKey(key) || rank[key]! > pi) rank[key] = pi;
+          }
+        }
+        final list = (data['materials'] as List).cast<Map<String, dynamic>>();
+        int r(Map<String, dynamic> m) => rank['${m['name']}'.toLowerCase()] ?? 9999;
+        list.sort((a, b) {
+          final c = r(a).compareTo(r(b));
+          return c != 0 ? c : '${a['name']}'.toLowerCase().compareTo('${b['name']}'.toLowerCase());
+        });
+        data['materials'] = list;
+      } catch (_) {/* BOM optional — keep server order */}
+    }
+    return data;
   }
 
   void _reload() => setState(() => _future = _load());
@@ -542,6 +566,9 @@ class _TxnDialogState extends State<_TxnDialog> {
   final remark = TextEditingController();
   bool busy = false;
   String? loadError;
+  /// material name (lowercase) → products that use it in their BOM
+  /// [{id, name, idx}] — idx keeps the product order for sorting.
+  final Map<String, List<Map<String, dynamic>>> _owners = {};
 
   bool get isReceive => widget.kind == 'receive';
 
@@ -557,14 +584,80 @@ class _TxnDialogState extends State<_TxnDialog> {
             : list.where((m) => m['category'] != 'Raw Material').toList();
         materials = list;
         materialId = materials.isNotEmpty ? materials.first['id'] as int : null;
+        _applyProductOrder();
       });
     }).catchError((e) { setState(() => loadError = '$e'); });
+    if (!widget.rawOnly) {
+      // BOM: which product each material belongs to — used to sort the
+      // material list product-wise AND to auto-pick the Loss% product.
+      context.read<AuthController>().api.get('/packing/bom').then((json) {
+        if (!mounted) return;
+        setState(() {
+          _owners.clear();
+          final bom = ((json as Map)['bom'] as List).cast<Map<String, dynamic>>();
+          for (var pi = 0; pi < bom.length; pi++) {
+            final prod = (bom[pi]['product'] as Map).cast<String, dynamic>();
+            for (final it in (bom[pi]['items'] as List).cast<Map<String, dynamic>>()) {
+              final key = '${it['material']}'.toLowerCase();
+              _owners.putIfAbsent(key, () => []).add({'id': prod['id'], 'name': prod['name'], 'idx': pi});
+            }
+          }
+          _applyProductOrder();
+        });
+      }).catchError((_) {});
+    }
     if (widget.kind == 'consume' && !widget.rawOnly) {
       context.read<AuthController>().api.get('/products').then((json) {
         if (!mounted) return;
         setState(() => products = ((json as Map)['products'] as List).cast<Map<String, dynamic>>());
       }).catchError((_) {});
     }
+  }
+
+  /// Sort materials product-wise: every 180 material together, then 250,
+  /// then 740… (BOM product order). Materials with no BOM owner go last.
+  void _applyProductOrder() {
+    if (_owners.isEmpty || materials.isEmpty) return;
+    int rank(Map<String, dynamic> m) {
+      final own = _owners['${m['name']}'.toLowerCase()];
+      if (own == null || own.isEmpty) return 9999;
+      return own.map((o) => o['idx'] as int).reduce((a, b) => a < b ? a : b);
+    }
+    materials.sort((a, b) {
+      final r = rank(a).compareTo(rank(b));
+      return r != 0 ? r : '${a['name']}'.toLowerCase().compareTo('${b['name']}'.toLowerCase());
+    });
+    materialId ??= materials.isNotEmpty ? materials.first['id'] as int : null;
+    _autoTagProduct();
+  }
+
+  /// Auto-select the Loss% product from the chosen material's BOM owner —
+  /// unique owner picks itself; shared materials keep the (filtered) choice.
+  void _autoTagProduct() {
+    if (isReceive || widget.rawOnly) return;
+    final m = _material;
+    if (m == null) return;
+    final own = _owners['${m['name']}'.toLowerCase()] ?? const [];
+    if (own.length == 1) {
+      productId = own.first['id'] as int?;
+    } else if (own.isNotEmpty && !own.any((o) => o['id'] == productId)) {
+      productId = null; // previous pick doesn't apply to this material
+    }
+  }
+
+  /// Products offered in the "For product" dropdown: only the material's BOM
+  /// owners when known (e.g. HDPE 610/740 → just those two), else all.
+  List<Map<String, dynamic>> get _productChoices {
+    final m = _material;
+    if (m != null) {
+      final own = _owners['${m['name']}'.toLowerCase()] ?? const [];
+      if (own.isNotEmpty && products.isNotEmpty) {
+        final ids = own.map((o) => o['id']).toSet();
+        final filtered = products.where((p) => ids.contains(p['id'])).toList();
+        if (filtered.isNotEmpty) return filtered;
+      }
+    }
+    return products;
   }
 
   Map<String, dynamic>? get _material =>
@@ -611,15 +704,16 @@ class _TxnDialogState extends State<_TxnDialog> {
                       decoration: InputDecoration(labelText: tr('Material *')),
                       // Raw screen: category suffix skipped so the full name fits.
                       items: [for (final m in materials) DropdownMenuItem(value: m['id'] as int, child: Text(widget.rawOnly ? '${m['name']}' : '${m['name']} (${m['category']})', overflow: TextOverflow.ellipsis))],
-                      onChanged: (v) => setState(() => materialId = v),
+                      onChanged: (v) => setState(() { materialId = v; _autoTagProduct(); }),
                     ),
                     if (widget.kind == 'consume' && !widget.rawOnly) ...[
                       const SizedBox(height: 12),
                       DropdownButtonFormField<int>(
+                        key: ValueKey('prodpick-$materialId-$productId'),
                         initialValue: productId,
                         isExpanded: true,
                         decoration: InputDecoration(labelText: tr('For product * (Loss% sheet)')),
-                        items: [for (final p in products) DropdownMenuItem(value: p['id'] as int, child: Text(p['name'] as String, overflow: TextOverflow.ellipsis))],
+                        items: [for (final p in _productChoices) DropdownMenuItem(value: p['id'] as int, child: Text(p['name'] as String, overflow: TextOverflow.ellipsis))],
                         onChanged: (v) => setState(() => productId = v),
                       ),
                     ],
