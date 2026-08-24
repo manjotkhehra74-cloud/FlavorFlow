@@ -119,9 +119,60 @@ class _SettingsPageState extends State<SettingsPage> {
       _tile(
         icon: Icons.dark_mode_outlined,
         title: 'Dark theme',
-        subtitle: settings.darkMode ? 'ON — easier on the eyes at night' : 'OFF — classic light look',
-        trailing: Switch(value: settings.darkMode, onChanged: (v) => settings.setDarkMode(v)),
-        onTap: () => settings.setDarkMode(!settings.darkMode),
+        subtitle: switch (settings.darkPref) {
+          DarkPref.off => 'OFF — classic light look',
+          DarkPref.on => 'ON — easier on the eyes at night',
+          DarkPref.system => 'System — follows the phone setting',
+          DarkPref.auto =>
+            'Auto — dark ${settings.autoDarkStart > 12 ? settings.autoDarkStart - 12 : settings.autoDarkStart} PM to ${settings.autoDarkEnd} AM (by time)',
+        },
+        onTap: () async {
+          final picked = await showDialog<DarkPref>(
+            context: context,
+            builder: (ctx) => SimpleDialog(
+              title: Text(tr('Dark theme')),
+              children: [
+                for (final (mode, label, icon) in [
+                  (DarkPref.off, tr('Off — always light'), Icons.light_mode_outlined),
+                  (DarkPref.on, tr('On — always dark'), Icons.dark_mode_outlined),
+                  (DarkPref.system, tr('System — follow phone setting'), Icons.smartphone_rounded),
+                  (DarkPref.auto, tr('Auto — dark by time (evening to morning)'), Icons.schedule_rounded),
+                ])
+                  SimpleDialogOption(
+                    onPressed: () => Navigator.pop(ctx, mode),
+                    child: Row(children: [
+                      Icon(icon, size: 20, color: settings.darkPref == mode ? Theme.of(ctx).colorScheme.primary : null),
+                      const SizedBox(width: 12),
+                      Expanded(child: Text(label, style: TextStyle(fontWeight: settings.darkPref == mode ? FontWeight.w700 : FontWeight.w400))),
+                      if (settings.darkPref == mode) Icon(Icons.check_rounded, size: 18, color: Theme.of(ctx).colorScheme.primary),
+                    ]),
+                  ),
+              ],
+            ),
+          );
+          if (picked == null) return;
+          if (picked == DarkPref.auto) {
+            // choose the evening hour for switching to dark
+            final start = await showDialog<int>(
+              // ignore: use_build_context_synchronously
+              context: context,
+              builder: (ctx) => SimpleDialog(
+                title: Text(tr('Dark from (evening)')),
+                children: [
+                  for (final h in [17, 18, 19, 20, 21])
+                    SimpleDialogOption(
+                      onPressed: () => Navigator.pop(ctx, h),
+                      child: Text('${h - 12}:00 PM'),
+                    ),
+                ],
+              ),
+            );
+            await settings.setDarkPref(DarkPref.auto, start: start ?? settings.autoDarkStart);
+          } else {
+            await settings.setDarkPref(picked);
+          }
+          setState(() {});
+        },
       ),
       _tile(
         icon: Icons.format_size_rounded,

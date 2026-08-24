@@ -48,6 +48,12 @@ class L10n extends ChangeNotifier {
 
   static const Map<String, Map<String, String>> _tr = {
     'pa': {
+      'Off — always light': 'ਬੰਦ — ਹਮੇਸ਼ਾ ਲਾਈਟ',
+      'On — always dark': 'ਚਾਲੂ — ਹਮੇਸ਼ਾ ਡਾਰਕ',
+      'System — follow phone setting': 'ਸਿਸਟਮ — ਫੋਨ ਦੀ ਸੈਟਿੰਗ ਮੁਤਾਬਕ',
+      'Auto — dark by time (evening to morning)': 'ਆਟੋ — ਸਮੇਂ ਮੁਤਾਬਕ ਡਾਰਕ (ਸ਼ਾਮ ਤੋਂ ਸਵੇਰ)',
+      'Dark from (evening)': 'ਡਾਰਕ ਕਦੋਂ ਤੋਂ (ਸ਼ਾਮ)',
+
       'Trucks': 'ਟਰੱਕ',
       'Add Truck': 'ਟਰੱਕ ਜੋੜੋ',
       'Other / new truck…': 'ਹੋਰ / ਨਵਾਂ ਟਰੱਕ…',
@@ -415,6 +421,12 @@ class L10n extends ChangeNotifier {
       'Ledger': 'ਖਾਤਾ',
     },
     'hi': {
+      'Off — always light': 'बंद — हमेशा लाइट',
+      'On — always dark': 'चालू — हमेशा डार्क',
+      'System — follow phone setting': 'सिस्टम — फ़ोन की सेटिंग अनुसार',
+      'Auto — dark by time (evening to morning)': 'ऑटो — समय अनुसार डार्क (शाम से सुबह)',
+      'Dark from (evening)': 'डार्क कब से (शाम)',
+
       'Trucks': 'ट्रक',
       'Add Truck': 'ट्रक जोड़ें',
       'Other / new truck…': 'अन्य / नया ट्रक…',
@@ -782,6 +794,12 @@ class L10n extends ChangeNotifier {
       'Ledger': 'खाता',
     },
   'gu': {
+      'Off — always light': 'બંધ — હંમેશા લાઇટ',
+      'On — always dark': 'ચાલુ — હંમેશા ડાર્ક',
+      'System — follow phone setting': 'સિસ્ટમ — ફોન સેટિંગ મુજબ',
+      'Auto — dark by time (evening to morning)': 'ઓટો — સમય મુજબ ડાર્ક (સાંજથી સવાર)',
+      'Dark from (evening)': 'ડાર્ક ક્યારથી (સાંજ)',
+
       'Trucks': 'ટ્રક',
       'Add Truck': 'ટ્રક ઉમેરો',
       'Other / new truck…': 'અન્ય / નવો ટ્રક…',
@@ -1135,6 +1153,12 @@ class L10n extends ChangeNotifier {
       'Refresh permissions': 'પરવાનગીઓ તાજી કરો',
     },
     'mr': {
+      'Off — always light': 'बंद — नेहमी लाइट',
+      'On — always dark': 'चालू — नेहमी डार्क',
+      'System — follow phone setting': 'सिस्टम — फोन सेटिंगनुसार',
+      'Auto — dark by time (evening to morning)': 'ऑटो — वेळेनुसार डार्क (संध्याकाळ ते सकाळ)',
+      'Dark from (evening)': 'डार्क कधीपासून (संध्याकाळ)',
+
       'Trucks': 'ट्रक',
       'Add Truck': 'ट्रक जोडा',
       'Other / new truck…': 'इतर / नवीन ट्रक…',
@@ -1487,6 +1511,12 @@ class L10n extends ChangeNotifier {
       'Refresh permissions': 'परवानग्या ताज्या करा',
     },
     'bn': {
+      'Off — always light': 'বন্ধ — সবসময় লাইট',
+      'On — always dark': 'চালু — সবসময় ডার্ক',
+      'System — follow phone setting': 'সিস্টেম — ফোন সেটিং অনুযায়ী',
+      'Auto — dark by time (evening to morning)': 'অটো — সময় অনুযায়ী ডার্ক (সন্ধ্যা থেকে সকাল)',
+      'Dark from (evening)': 'ডার্ক কখন থেকে (সন্ধ্যা)',
+
       'Trucks': 'ট্রাক',
       'Add Truck': 'ট্রাক যোগ করুন',
       'Other / new truck…': 'অন্যান্য / নতুন ট্রাক…',
@@ -1839,6 +1869,12 @@ class L10n extends ChangeNotifier {
       'Refresh permissions': 'অনুমতি রিফ্রেশ',
     },
     'ta': {
+      'Off — always light': 'அணை — எப்போதும் லைட்',
+      'On — always dark': 'இயக்கு — எப்போதும் டார்க்',
+      'System — follow phone setting': 'சிஸ்டம் — போன் அமைப்புப்படி',
+      'Auto — dark by time (evening to morning)': 'ஆட்டோ — நேரப்படி டார்க் (மாலை-காலை)',
+      'Dark from (evening)': 'டார்க் எப்போதிருந்து (மாலை)',
+
       'Trucks': 'டிரக்குகள்',
       'Add Truck': 'டிரக் சேர்',
       'Other / new truck…': 'மற்றவை / புதிய டிரக்…',
@@ -2191,6 +2227,12 @@ class L10n extends ChangeNotifier {
       'Refresh permissions': 'அனுமதிகள் புதுப்பி',
     },
     'te': {
+      'Off — always light': 'ఆఫ్ — ఎల్లప్పుడూ లైట్',
+      'On — always dark': 'ఆన్ — ఎల్లప్పుడూ డార్క్',
+      'System — follow phone setting': 'సిస్టమ్ — ఫోన్ సెట్టింగ్ ప్రకారం',
+      'Auto — dark by time (evening to morning)': 'ఆటో — సమయం ప్రకారం డార్క్ (సాయంత్రం-ఉదయం)',
+      'Dark from (evening)': 'డార్క్ ఎప్పటి నుండి (సాయంత్రం)',
+
       'Trucks': 'ట్రక్కులు',
       'Add Truck': 'ట్రక్ జోడించండి',
       'Other / new truck…': 'ఇతర / కొత్త ట్రక్…',
