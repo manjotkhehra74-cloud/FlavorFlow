@@ -75,10 +75,14 @@ class PhoneNotifier {
     try { (await SharedPreferences.getInstance()).setInt('notif_last_seen', _lastSeenId); } catch (_) {}
   }
 
+  static bool _showing = false;
+
   /// Show phone notifications for notifications newer than the last seen id.
   /// [items] = server list (each: id, title, body, is_read).
   static Future<void> showNew(List<Map<String, dynamic>> items) async {
     if (kIsWeb || !_ready) return;
+    if (_showing) return; // overlapping poll — the running call handles it
+    _showing = true;
     try {
       final unread = items.where((n) => n['is_read'] == 0).toList();
       // very first run on this device: don't blast history — remember newest
@@ -119,7 +123,9 @@ class PhoneNotifier {
         if (id > _lastSeenId) _lastSeenId = id;
       }
       await _persistSeen();
-    } catch (_) {}
+    } catch (_) {} finally {
+      _showing = false;
+    }
   }
 }
 
