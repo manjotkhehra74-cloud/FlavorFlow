@@ -391,13 +391,62 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
   /// selected destination; 'Other/new' falls back to free typing.
   List<Map<String, dynamic>> _trucks = [];
 
+  /// DRAFT: the half-filled entry survives leaving this screen (e.g. going
+  /// to Production to create the missing batch) — restored on return,
+  /// cleared after a successful dispatch.
+  static Map<String, dynamic>? _draft;
+
+  void _saveDraft() {
+    _draft = {
+      'truck': truck.text,
+      'destination': destination,
+      'otherDest': otherDest.text,
+      'remarks': remarks.text,
+      'date': date.toIso8601String(),
+      'lines': [
+        for (final l in lines)
+          {'productId': l.productId, 'cartons': l.cartons.text, 'trays': l.trays.text, 'batchCode': l.batchCode.text},
+      ],
+    };
+  }
+
+  void _restoreDraft() {
+    final d = _draft;
+    if (d == null) return;
+    truck.text = d['truck'] as String? ?? '';
+    destination = d['destination'] as String? ?? 'NEEMRANA';
+    otherDest.text = d['otherDest'] as String? ?? '';
+    remarks.text = d['remarks'] as String? ?? '';
+    date = DateTime.tryParse(d['date'] as String? ?? '') ?? DateTime.now();
+    final ls = (d['lines'] as List?) ?? const [];
+    if (ls.isNotEmpty) {
+      lines.clear();
+      for (final ld in ls.cast<Map<String, dynamic>>()) {
+        final l = _Line();
+        l.productId = ld['productId'] as int?;
+        l.cartons.text = ld['cartons'] as String? ?? '';
+        l.trays.text = ld['trays'] as String? ?? '';
+        l.batchCode.text = ld['batchCode'] as String? ?? '';
+        lines.add(l);
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    _restoreDraft();
     if (!widget.readOnly) {
       loadProducts();
       _loadTrucks();
     }
+  }
+
+  @override
+  void dispose() {
+    // keep the half-filled form for when the user comes back
+    _saveDraft();
+    super.dispose();
   }
 
   Future<void> _loadTrucks() async {
@@ -461,6 +510,9 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
       });
       if (!mounted) return;
       final id = (json as Map)['id'];
+      _draft = null; // success — draft is no longer needed
+      for (final l in lines) { l.cartons.clear(); l.trays.clear(); l.batchCode.clear(); }
+      remarks.clear();
       showOk(context, '${json['code']} dispatched to $_destination · ${qty(json['totals']['grossWeight'])} kg gross (${json['weekday']}).');
       context.push('/dispatch/$id');
     } catch (e) {
