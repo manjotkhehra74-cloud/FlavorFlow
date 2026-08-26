@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
@@ -61,8 +62,17 @@ class PhoneNotifier {
       await _plugin
           .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
           ?.requestNotificationsPermission();
+      // Remember where we left off across app restarts, so alerts that
+      // arrived while the app was closed still pop on next open.
+      try {
+        _lastSeenId = (await SharedPreferences.getInstance()).getInt('notif_last_seen') ?? 0;
+      } catch (_) {}
       _ready = true;
     } catch (_) {}
+  }
+
+  static Future<void> _persistSeen() async {
+    try { (await SharedPreferences.getInstance()).setInt('notif_last_seen', _lastSeenId); } catch (_) {}
   }
 
   /// Show phone notifications for notifications newer than the last seen id.
@@ -71,13 +81,23 @@ class PhoneNotifier {
     if (kIsWeb || !_ready) return;
     try {
       final unread = items.where((n) => n['is_read'] == 0).toList();
-      // first sync: don't blast old items — just remember the newest id
+      // very first run on this device: don't blast history — remember newest
       if (_lastSeenId == 0) {
         for (final n in unread) {
           final id = (n['id'] as num?)?.toInt() ?? 0;
           if (id > _lastSeenId) _lastSeenId = id;
         }
+        await _persistSeen();
         return;
+      }
+      // don't blast a giant backlog either — show the latest few, mark rest seen
+      final fresh = unread.where((n) => ((n['id'] as num?)?.toInt() ?? 0) > _lastSeenId).toList()
+        ..sort((a, b) => ((a['id'] as num).toInt()).compareTo((b['id'] as num).toInt()));
+      if (fresh.length > 5) {
+        for (final n in fresh.sublist(0, fresh.length - 5)) {
+          final id = (n['id'] as num?)?.toInt() ?? 0;
+          if (id > _lastSeenId) _lastSeenId = id;
+        }
       }
       const details = NotificationDetails(
         android: AndroidNotificationDetails(
@@ -98,6 +118,7 @@ class PhoneNotifier {
         );
         if (id > _lastSeenId) _lastSeenId = id;
       }
+      await _persistSeen();
     } catch (_) {}
   }
 }
