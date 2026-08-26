@@ -442,13 +442,6 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
     }
   }
 
-  @override
-  void dispose() {
-    // keep the half-filled form for when the user comes back
-    _saveDraft();
-    super.dispose();
-  }
-
   Future<void> _loadTrucks() async {
     try {
       final json = await context.read<AuthController>().api.get('/dispatch/trucks');
@@ -465,6 +458,8 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
 
   @override
   void dispose() {
+    // keep the half-filled form for when the user comes back
+    _saveDraft();
     disposeLines();
     super.dispose();
   }
