@@ -308,7 +308,7 @@ class _StockTabState extends State<_StockTab> {
                   if (saved == true) _reload();
                 },
                 icon: const Icon(Icons.north_east_rounded, size: 18),
-                label: Text(tr('Record Consumption')),
+                label: Text(tr('Extra Consumption')),
               ),
               if (widget.rawOnly && CompanyProfile.usesRecipes) ...[
                 OutlinedButton.icon(
@@ -690,7 +690,7 @@ class _TxnDialogState extends State<_TxnDialog> {
     return AlertDialog(
       title: Text(isReceive
           ? (widget.rawOnly ? 'Receive Raw Material' : 'Receive Packing Stock')
-          : 'Record Consumption'),
+          : tr('Extra Consumption')),
       content: SizedBox(
         width: 400,
         child: loadError != null

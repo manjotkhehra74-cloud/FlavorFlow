@@ -228,7 +228,7 @@ class _LossPageState extends State<LossPage> {
             const SizedBox(height: 12),
           ],
           Text(
-            'CB = BOM × month production (sare batch codes da jod) · Extra = manual Record Consumption entries · Loss% = Extra ÷ CB. Har number edit ho sakda (product name nahi). Close month: export pehla, fer closing → next month opening.',
+            'CB = BOM × month production (sare batch codes da jod) · Extra = manual Extra Consumption entries · Loss% = Extra ÷ CB. Har number edit ho sakda (product name nahi). Close month: export pehla, fer closing → next month opening.',
             style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
           ),
         ]);
