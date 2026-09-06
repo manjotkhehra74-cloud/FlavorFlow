@@ -23,6 +23,59 @@ class AppShell extends StatefulWidget {
   State<AppShell> createState() => _AppShellState();
 }
 
+/// Debounces keyboard viewInsets for the page body.
+///
+/// When the keyboard opens, Android animates the inset ~60x/second and
+/// Flutter re-lays-out the WHOLE page (incl. big data tables behind an open
+/// dialog) on every frame — that made the keyboard open visibly slowly on
+/// every device (Redmi Note 11 and S25 Ultra alike), only in dialogs sitting
+/// over heavy pages. This widget lets the page resize ONCE, ~90ms after the
+/// inset stops changing, instead of 20 times during the animation. Dialogs
+/// themselves read the root MediaQuery, so they still avoid the keyboard
+/// normally.
+class _StableInsets extends StatefulWidget {
+  final Widget child;
+  const _StableInsets({required this.child});
+  @override
+  State<_StableInsets> createState() => _StableInsetsState();
+}
+
+class _StableInsetsState extends State<_StableInsets> {
+  EdgeInsets _applied = EdgeInsets.zero;
+  Timer? _settle;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final target = MediaQuery.of(context).viewInsets;
+    if (target == _applied) return;
+    _settle?.cancel();
+    _settle = Timer(const Duration(milliseconds: 90), () {
+      if (!mounted) return;
+      setState(() => _applied = MediaQuery.of(context).viewInsets);
+    });
+  }
+
+  @override
+  void dispose() {
+    _settle?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // The host Scaffold has resizeToAvoidBottomInset:false, so we apply the
+    // (debounced) keyboard inset ourselves — one relayout instead of ~20.
+    return MediaQuery(
+      data: MediaQuery.of(context).copyWith(viewInsets: _applied),
+      child: Padding(
+        padding: EdgeInsets.only(bottom: _applied.bottom),
+        child: widget.child,
+      ),
+    );
+  }
+}
+
 class _AppShellState extends State<AppShell> {
   int _unread = 0;
   Timer? _timer;
@@ -155,13 +208,14 @@ class _AppShellState extends State<AppShell> {
 
     if (wide) {
       return Scaffold(
+        resizeToAvoidBottomInset: false, // _StableInsets applies the (debounced) inset
         body: Row(children: [
           sidebar,
           Expanded(
             child: Column(children: [
               topBar,
               const Divider(height: 1),
-              Expanded(child: widget.child),
+              Expanded(child: _StableInsets(child: widget.child)),
             ]),
           ),
         ]),
@@ -171,6 +225,7 @@ class _AppShellState extends State<AppShell> {
     final path = GoRouterState.of(context).uri.path;
     return Scaffold(
       key: _scaffoldKey,
+      resizeToAvoidBottomInset: false, // _StableInsets applies the (debounced) inset
       appBar: AppBar(
         title: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text(title)),
         titleSpacing: 0,
@@ -179,7 +234,7 @@ class _AppShellState extends State<AppShell> {
       drawer: phone
           ? _MobileModulesDrawer(nav: nav, selected: selected, session: session, onTap: goTo, onLogout: _logout)
           : Drawer(backgroundColor: Shell.bg, child: SafeArea(child: sidebar)),
-      body: widget.child,
+      body: _StableInsets(child: widget.child),
       bottomNavigationBar: phone
           ? _MobileBottomBar(
               currentPath: path,
