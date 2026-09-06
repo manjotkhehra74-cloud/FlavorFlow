@@ -66,11 +66,17 @@ class _StableInsetsState extends State<_StableInsets> {
   Widget build(BuildContext context) {
     // The host Scaffold has resizeToAvoidBottomInset:false, so we apply the
     // (debounced) keyboard inset ourselves — one relayout instead of ~20.
+    //
+    // RepaintBoundary: when a dialog opens/closes, its barrier fades over the
+    // page and Flutter otherwise re-PAINTS the whole heavy page (big tables)
+    // on every animation frame — that made dialogs open, and especially
+    // close, with visible stutter. The boundary caches the page as its own
+    // layer, so the fade animation composites cheaply instead of repainting.
     return MediaQuery(
       data: MediaQuery.of(context).copyWith(viewInsets: _applied),
       child: Padding(
         padding: EdgeInsets.only(bottom: _applied.bottom),
-        child: widget.child,
+        child: RepaintBoundary(child: widget.child),
       ),
     );
   }
