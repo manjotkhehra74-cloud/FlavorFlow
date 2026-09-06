@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../core/i18n.dart';
@@ -412,7 +414,51 @@ Future<T?> showFastDialog<T>(BuildContext context, Widget Function(BuildContext)
     barrierLabel: 'dialog',
     barrierColor: Colors.black54,
     transitionDuration: const Duration(milliseconds: 100),
-    pageBuilder: (ctx, a1, a2) => builder(ctx),
+    pageBuilder: (ctx, a1, a2) => _DialogStableInsets(child: builder(ctx)),
     transitionBuilder: (ctx, a1, a2, child) => FadeTransition(opacity: a1, child: child),
   );
+}
+
+/// Keyboard-inset debouncer for DIALOGS (same trick as the page-level
+/// _StableInsets in app_shell): while the keyboard animates (~60 inset
+/// changes/second) the dialog would re-layout on EVERY frame — tapping a
+/// TextField inside a dialog stuttered even on an S25 Ultra. We freeze the
+/// inset during the animation and apply it ONCE ~90ms after it settles, so
+/// the dialog jumps above the keyboard in a single cheap relayout.
+class _DialogStableInsets extends StatefulWidget {
+  final Widget child;
+  const _DialogStableInsets({required this.child});
+  @override
+  State<_DialogStableInsets> createState() => _DialogStableInsetsState();
+}
+
+class _DialogStableInsetsState extends State<_DialogStableInsets> {
+  EdgeInsets _applied = EdgeInsets.zero;
+  Timer? _settle;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final target = MediaQuery.of(context).viewInsets;
+    if (target == _applied) return;
+    _settle?.cancel();
+    _settle = Timer(const Duration(milliseconds: 90), () {
+      if (!mounted) return;
+      setState(() => _applied = MediaQuery.of(context).viewInsets);
+    });
+  }
+
+  @override
+  void dispose() {
+    _settle?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MediaQuery(
+      data: MediaQuery.of(context).copyWith(viewInsets: _applied),
+      child: widget.child,
+    );
+  }
 }
