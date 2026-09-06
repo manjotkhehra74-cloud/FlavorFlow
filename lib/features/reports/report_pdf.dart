@@ -209,7 +209,7 @@ class ReportPdf {
       // heading row + column labels + first data row = one unbreakable block
       out.add(block([
         pw.TableRow(
-          decoration: const pw.BoxDecoration(color: headerBg),
+          decoration: pw.BoxDecoration(color: headerBg),
           children: [
             cell(s.title, bold: true),
             for (final c in s.columns) cell(tr(c).toUpperCase(), header: true, right: true),
