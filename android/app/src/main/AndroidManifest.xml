@@ -48,6 +48,12 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Keyboard/animation jank fix: Impeller's shader warm-up causes
+             visible stutter (slow keyboard open) on many mid-range Android
+             GPUs — fall back to the battle-tested Skia renderer. -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
         <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
         <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
             <intent-filter>
