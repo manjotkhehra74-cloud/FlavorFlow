@@ -254,41 +254,82 @@ class KpiCard extends StatelessWidget {
 
 /// Responsive table that scrolls horizontally on narrow screens.
 /// Numbers render right-aligned with tabular figures — classic ERP grid.
-class AppDataTable extends StatelessWidget {
+///
+/// PAGINATED: only [pageSize] rows are built at a time (Show more adds the
+/// next chunk). A full 150-row DataTable is ~1500 widgets that Flutter
+/// re-lays-out on EVERY keyboard-animation frame — that was the "keyboard
+/// opens slowly" lag. 60 rows keeps the tree light; totals/exports are
+/// unaffected because callers still pass the full row list.
+class AppDataTable extends StatefulWidget {
   final List<String> columns;
   final List<List<dynamic>> rows;
   final Set<int> moneyColumns;
   final void Function(int rowIndex)? onRowTap;
   final bool Function(int rowIndex)? highlight;
-  const AppDataTable({super.key, required this.columns, required this.rows, this.moneyColumns = const {}, this.onRowTap, this.highlight});
+  final int pageSize;
+  const AppDataTable({super.key, required this.columns, required this.rows, this.moneyColumns = const {}, this.onRowTap, this.highlight, this.pageSize = 60});
+
+  @override
+  State<AppDataTable> createState() => _AppDataTableState();
+}
+
+class _AppDataTableState extends State<AppDataTable> {
+  int _shown = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _shown = widget.pageSize;
+  }
+
+  @override
+  void didUpdateWidget(covariant AppDataTable old) {
+    super.didUpdateWidget(old);
+    // dataset replaced (reload/filter) → start from the first page again
+    if (old.rows.length != widget.rows.length) _shown = widget.pageSize;
+  }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: DataTable(
-        columns: [for (final c in columns) DataColumn(label: Text(tr(c).toUpperCase()))],
-        rows: [
-          for (var i = 0; i < rows.length; i++)
-            DataRow(
-              color: (highlight?.call(i) ?? false)
-                  ? WidgetStatePropertyAll(AppColors.amber.withValues(alpha: 0.07))
-                  : null,
-              onSelectChanged: onRowTap == null ? null : (_) => onRowTap!(i),
-              cells: [
-                for (var c = 0; c < rows[i].length; c++)
-                  DataCell(_cell(rows[i][c], c, scheme)),
-              ],
-            ),
-        ],
+    final visible = widget.rows.length > _shown ? _shown : widget.rows.length;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          columns: [for (final c in widget.columns) DataColumn(label: Text(tr(c).toUpperCase()))],
+          rows: [
+            for (var i = 0; i < visible; i++)
+              DataRow(
+                color: (widget.highlight?.call(i) ?? false)
+                    ? WidgetStatePropertyAll(AppColors.amber.withValues(alpha: 0.07))
+                    : null,
+                onSelectChanged: widget.onRowTap == null ? null : (_) => widget.onRowTap!(i),
+                cells: [
+                  for (var c = 0; c < rows_(i).length; c++)
+                    DataCell(_cell(rows_(i)[c], c, scheme)),
+                ],
+              ),
+          ],
+        ),
       ),
-    );
+      if (widget.rows.length > visible)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
+          child: TextButton.icon(
+            onPressed: () => setState(() => _shown += widget.pageSize),
+            icon: const Icon(Icons.expand_more_rounded, size: 18),
+            label: Text('${tr('Show more')} (${widget.rows.length - visible})'),
+          ),
+        ),
+    ]);
   }
+
+  List<dynamic> rows_(int i) => widget.rows[i];
 
   Widget _cell(dynamic v, int col, ColorScheme scheme) {
     if (v is Widget) return v;
-    if (moneyColumns.contains(col)) {
+    if (widget.moneyColumns.contains(col)) {
       return Text(inr(v), style: const TextStyle(fontWeight: FontWeight.w600, fontFeatures: [FontFeature.tabularFigures()]));
     }
     if (v is num) {
