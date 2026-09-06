@@ -256,7 +256,9 @@ class _LoginPageState extends State<LoginPage> {
     );
 
     final formPanel = Container(
-      color: Colors.white,
+      // scheme.surface (NOT hard-coded white) — in dark mode the text colours
+      // come from the scheme, so a white panel made them unreadable.
+      color: scheme.surface,
       child: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(28),
