@@ -399,3 +399,20 @@ void showOk(BuildContext context, String msg) {
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(content: Text(msg)));
 }
+
+/// Lightweight dialog opener for dialogs that sit over heavy pages.
+/// Default showDialog runs a 150ms barrier+scale animation that repaints the
+/// page behind on every frame — on budget phones (Redmi Note 11) that made
+/// dialogs open/close with stutter. This variant: 100ms, fades ONLY the
+/// dialog itself, dims the barrier instantly (no per-frame page repaint).
+Future<T?> showFastDialog<T>(BuildContext context, Widget Function(BuildContext) builder) {
+  return showGeneralDialog<T>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: 'dialog',
+    barrierColor: Colors.black54,
+    transitionDuration: const Duration(milliseconds: 100),
+    pageBuilder: (ctx, a1, a2) => builder(ctx),
+    transitionBuilder: (ctx, a1, a2, child) => FadeTransition(opacity: a1, child: child),
+  );
+}

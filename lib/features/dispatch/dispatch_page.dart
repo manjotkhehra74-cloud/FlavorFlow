@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -394,9 +396,18 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
   /// DRAFT: the half-filled entry survives leaving this screen (e.g. going
   /// to Production to create the missing batch) — restored on return,
   /// cleared after a successful dispatch.
+  /// Persisted to SharedPreferences so it survives app restarts too.
   static Map<String, dynamic>? _draft;
+  static const _draftKey = 'dispatch_entry_draft';
+  bool _hasDraft = false; // drives the draft banner
+
+  bool get _formHasData =>
+      truck.text.trim().isNotEmpty ||
+      remarks.text.trim().isNotEmpty ||
+      lines.any((l) => l.cartons.text.trim().isNotEmpty || l.trays.text.trim().isNotEmpty || l.batchCode.text.trim().isNotEmpty);
 
   void _saveDraft() {
+    if (!_formHasData) { _clearDraft(); return; } // empty form → no draft
     _draft = {
       'truck': truck.text,
       'destination': destination,
@@ -408,6 +419,41 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
           {'productId': l.productId, 'cartons': l.cartons.text, 'trays': l.trays.text, 'batchCode': l.batchCode.text},
       ],
     };
+    // survive app restarts too (fire-and-forget)
+    SharedPreferences.getInstance().then((p) => p.setString(_draftKey, jsonEncode(_draft))).catchError((_) {});
+  }
+
+  void _clearDraft() {
+    _draft = null;
+    SharedPreferences.getInstance().then((p) => p.remove(_draftKey)).catchError((_) {});
+  }
+
+  /// Wipe the form fields AND the saved draft (Delete draft button).
+  void _deleteDraftAndReset() {
+    truck.clear();
+    otherDest.clear();
+    remarks.clear();
+    destination = 'NEEMRANA';
+    date = DateTime.now();
+    for (final l in lines) { l.dispose(); }
+    lines
+      ..clear()
+      ..add(_Line()..productId = products.isNotEmpty ? products.first['id'] as int : null);
+    _clearDraft();
+    setState(() { _hasDraft = false; calc = null; });
+  }
+
+  /// Load the draft saved on disk (app was closed) if the in-memory one is gone.
+  Future<void> _restorePersistedDraft() async {
+    if (_draft != null) return;
+    try {
+      final p = await SharedPreferences.getInstance();
+      final raw = p.getString(_draftKey);
+      if (raw == null || raw.isEmpty) return;
+      _draft = (jsonDecode(raw) as Map).cast<String, dynamic>();
+      if (mounted) setState(() { _restoreDraft(); _hasDraft = _formHasData; });
+      recalcDebounced();
+    } catch (_) {}
   }
 
   void _restoreDraft() {
@@ -436,6 +482,8 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
   void initState() {
     super.initState();
     _restoreDraft();
+    _hasDraft = _draft != null;
+    _restorePersistedDraft(); // app-restart case (async)
     if (!widget.readOnly) {
       loadProducts();
       _loadTrucks();
@@ -505,7 +553,8 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
       });
       if (!mounted) return;
       final id = (json as Map)['id'];
-      _draft = null; // success — draft is no longer needed
+      _clearDraft(); // success — draft is no longer needed (memory + disk)
+      _hasDraft = false;
       for (final l in lines) { l.cartons.clear(); l.trays.clear(); l.batchCode.clear(); }
       remarks.clear();
       showOk(context, '${json['code']} dispatched to $_destination · ${qty(json['totals']['grossWeight'])} kg gross (${json['weekday']}).');
@@ -535,6 +584,30 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
     }
     final scheme = Theme.of(context).colorScheme;
     return ListView(padding: const EdgeInsets.all(20), children: [
+      // DRAFT banner — restored half-filled entry: keep typing or delete it.
+      if (_hasDraft && _formHasData)
+        Container(
+          margin: const EdgeInsets.only(bottom: 14),
+          padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+          decoration: BoxDecoration(
+            color: AppColors.amber.withValues(alpha: 0.09),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.amber.withValues(alpha: 0.45)),
+          ),
+          child: Row(children: [
+            const Icon(Icons.history_edu_rounded, size: 20, color: AppColors.amber),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(tr('Draft restored — your last unsent entry. Continue filling or delete it.'),
+                  style: TextStyle(fontSize: 12.5, color: scheme.onSurface)),
+            ),
+            TextButton.icon(
+              onPressed: _deleteDraftAndReset,
+              icon: const Icon(Icons.delete_outline_rounded, size: 18, color: AppColors.red),
+              label: Text(tr('Delete draft'), style: const TextStyle(color: AppColors.red)),
+            ),
+          ]),
+        ),
       LayoutBuilder(builder: (context, c) {
         final wide = c.maxWidth > 900;
         final form = SectionCard(title: 'Dispatch Entry', child: Column(children: [

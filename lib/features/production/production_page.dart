@@ -59,7 +59,7 @@ class _ProductionPageState extends State<ProductionPage> {
                 padding: const EdgeInsets.only(left: 8),
                 child: FilledButton.icon(
                   onPressed: () async {
-                    final saved = await showDialog<bool>(context: context, builder: (_) => const BatchFormDialog());
+                    final saved = await showFastDialog<bool>(context, (_) => const BatchFormDialog());
                     if (saved == true) _reload();
                   },
                   icon: const Icon(Icons.add_rounded),
@@ -99,7 +99,7 @@ class _ProductionPageState extends State<ProductionPage> {
                                 tooltip: 'Edit batch',
                                 icon: const Icon(Icons.edit_outlined, size: 19),
                                 onPressed: () async {
-                                  final saved = await showDialog<bool>(context: context, builder: (_) => BatchFormDialog(batch: b));
+                                  final saved = await showFastDialog<bool>(context, (_) => BatchFormDialog(batch: b));
                                   if (saved == true) _reload();
                                 },
                               ),

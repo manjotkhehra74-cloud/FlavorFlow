@@ -295,7 +295,7 @@ class _StockTabState extends State<_StockTab> {
                 padding: const EdgeInsets.only(left: 8),
                 child: FilledButton.icon(
                   onPressed: () async {
-                    final saved = await showDialog<bool>(context: context, builder: (_) => _TxnDialog(kind: 'receive', rawOnly: widget.rawOnly));
+                    final saved = await showFastDialog<bool>(context, (_) => _TxnDialog(kind: 'receive', rawOnly: widget.rawOnly));
                     if (saved == true) _reload();
                   },
                   icon: const Icon(Icons.south_west_rounded, size: 18),
@@ -304,7 +304,7 @@ class _StockTabState extends State<_StockTab> {
               ),
               OutlinedButton.icon(
                 onPressed: () async {
-                  final saved = await showDialog<bool>(context: context, builder: (_) => _TxnDialog(kind: 'consume', rawOnly: widget.rawOnly));
+                  final saved = await showFastDialog<bool>(context, (_) => _TxnDialog(kind: 'consume', rawOnly: widget.rawOnly));
                   if (saved == true) _reload();
                 },
                 icon: const Icon(Icons.north_east_rounded, size: 18),
@@ -313,7 +313,7 @@ class _StockTabState extends State<_StockTab> {
               if (widget.rawOnly && CompanyProfile.usesRecipes) ...[
                 OutlinedButton.icon(
                   onPressed: () async {
-                    final saved = await showDialog<bool>(context: context, builder: (_) => const _RecipeConsumeDialog());
+                    final saved = await showFastDialog<bool>(context, (_) => const _RecipeConsumeDialog());
                     if (saved == true) _reload();
                   },
                   icon: const Icon(Icons.science_rounded, size: 18),
@@ -321,7 +321,7 @@ class _StockTabState extends State<_StockTab> {
                 ),
                 OutlinedButton.icon(
                   onPressed: () async {
-                    final saved = await showDialog<bool>(context: context, builder: (_) => const _RecipeEditDialog());
+                    final saved = await showFastDialog<bool>(context, (_) => const _RecipeEditDialog());
                     if (saved == true) _reload();
                   },
                   icon: const Icon(Icons.edit_note_rounded, size: 18),
@@ -342,7 +342,7 @@ class _StockTabState extends State<_StockTab> {
               ],
               OutlinedButton.icon(
                 onPressed: () async {
-                  final saved = await showDialog<bool>(context: context, builder: (_) => const _MaterialFormDialog());
+                  final saved = await showFastDialog<bool>(context, (_) => const _MaterialFormDialog());
                   if (saved == true) _reload();
                 },
                 icon: const Icon(Icons.add_rounded, size: 18),
@@ -374,7 +374,7 @@ class _StockTabState extends State<_StockTab> {
                                 tooltip: 'Edit material & stock',
                                 icon: const Icon(Icons.edit_outlined, size: 18),
                                 onPressed: () async {
-                                  final saved = await showDialog<bool>(context: context, builder: (_) => _MaterialFormDialog(material: m));
+                                  final saved = await showFastDialog<bool>(context, (_) => _MaterialFormDialog(material: m));
                                   if (saved == true) _reload();
                                 },
                               ),
