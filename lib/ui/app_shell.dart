@@ -26,6 +26,7 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   int _unread = 0;
   Timer? _timer;
+  bool _polling = false; // in-flight guard — never stack polls
 
   @override
   void initState() {
@@ -35,7 +36,9 @@ class _AppShellState extends State<AppShell> {
     NotificationBadge.count.addListener(_onBadgeChanged);
     PhoneNotifier.init(); // status-bar notifications (Android permission ask)
     _loadUnread();
-    _timer = Timer.periodic(const Duration(seconds: 20), (_) => _loadUnread());
+    // 45s (was 20s) — the poll downloads + parses the notification list; doing
+    // that every 20s caused visible jank (slow keyboard open) while typing.
+    _timer = Timer.periodic(const Duration(seconds: 45), (_) => _loadUnread());
     // Load the editable company identity used on every exported PDF.
     CompanyProfile.load(context.read<AuthController>().api);
     // Rebuild when the company profile / industry changes (units + gating).
@@ -51,6 +54,12 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> _loadUnread() async {
+    if (_polling) return; // previous poll still running
+    // Keyboard open = the user is typing — skip this cycle entirely so the
+    // download/parse never competes with text input (keyboard-lag fix).
+    final keyboardOpen = WidgetsBinding.instance.platformDispatcher.views.any((v) => v.viewInsets.bottom > 0);
+    if (keyboardOpen) return;
+    _polling = true;
     final syncRevision = NotificationBadge.beginSync();
     try {
       final auth = context.read<AuthController>();
@@ -60,7 +69,9 @@ class _AppShellState extends State<AppShell> {
       NotificationBadge.syncFromServer(unread, syncRevision);
       // New unread items → real phone notifications (sound + status bar).
       await PhoneNotifier.showNew(items);
-    } catch (_) {/* transient */}
+    } catch (_) {/* transient */} finally {
+      _polling = false;
+    }
   }
 
   @override
