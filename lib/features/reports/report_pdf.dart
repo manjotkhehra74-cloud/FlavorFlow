@@ -8,6 +8,16 @@ import '../../core/company.dart';
 import '../../core/i18n.dart';
 import '../../core/pdf_fonts.dart';
 
+/// A grouped block inside a report (e.g. one product's materials in Loss%).
+/// Rendered as its OWN table so the heading row always stays attached to its
+/// data rows across page breaks (repeat:true re-prints it on continuations).
+class PdfSection {
+  final String title;
+  final List<String> columns; // headers for the value columns (title fills col 0)
+  final List<List<dynamic>> rows; // each row: [name, ...values] (1 + columns.length cells)
+  const PdfSection({required this.title, required this.columns, required this.rows});
+}
+
 /// Generic report PDF — renders any report (title + table) in the company style.
 class ReportPdf {
   static pw.Font? _regular;
@@ -35,10 +45,45 @@ class ReportPdf {
     required String desc,
     required List<String> columns,
     required List<List<dynamic>> rows,
+    List<PdfSection> sections = const [],
   }) async {
     title = tr(title);
     desc = tr(desc);
     columns = [for (final c in columns) tr(c)];
+
+    // Auto-detect legacy "▶ Heading" rows (e.g. server-built batch-stock rows)
+    // and lift them into proper sections so a heading is never stranded at the
+    // bottom of a page away from its data, and pages pack fully.
+    if (sections.isEmpty) {
+      final firstHead = rows.indexWhere((r) => r.isNotEmpty && '${r[0]}'.trimLeft().startsWith('▶'));
+      if (firstHead != -1) {
+        bool blank(List<dynamic> r) => r.every((c) => '${c ?? ''}'.trim().isEmpty);
+        final main = [for (final r in rows.sublist(0, firstHead)) if (!blank(r)) r];
+        final auto = <PdfSection>[];
+        String? curTitle;
+        List<String>? curCols;
+        var curRows = <List<dynamic>>[];
+        void flush() {
+          if (curTitle != null) auto.add(PdfSection(title: curTitle!, columns: curCols!, rows: curRows));
+          curRows = <List<dynamic>>[];
+        }
+        for (final r in rows.sublist(firstHead)) {
+          if (blank(r)) continue;
+          if ('${r[0]}'.trimLeft().startsWith('▶')) {
+            flush();
+            curTitle = '${r[0]}'.trimLeft().replaceFirst('▶', '').trim();
+            final rest = [for (var c = 1; c < r.length; c++) '${r[c] ?? ''}'.trim()];
+            curCols = rest.any((s) => s.isNotEmpty) ? rest : [for (var c = 1; c < columns.length; c++) columns[c]];
+          } else if (curTitle != null) {
+            curRows.add(r);
+          }
+        }
+        flush();
+        rows = main;
+        sections = auto;
+      }
+    }
+
     await _loadFonts();
     const primary = PdfColor.fromInt(0xFF0A6ED1);
     const headerBg = PdfColor.fromInt(0xFFEFF5FC);
@@ -122,8 +167,61 @@ class ReportPdf {
               ]),
           ],
         ),
+        // ---- grouped sections (e.g. Loss% per-product blocks) ----
+        // Each section renders as its own small tables so MultiPage can pack
+        // pages fully (no half-empty pages), while the heading + column labels
+        // + first data row form ONE widget — a heading can never be left
+        // orphaned at the bottom of a page without its data.
+        ..._sectionWidgets(sections, cell, ts, headerBg, lineCol, primary),
       ],
     ));
     return doc.save();
+  }
+
+  static List<pw.Widget> _sectionWidgets(
+    List<PdfSection> sections,
+    pw.Widget Function(String, {bool bold, bool right, bool header}) cell,
+    pw.TextStyle Function(double, {bool bold, PdfColor? color}) ts,
+    PdfColor headerBg,
+    PdfColor lineCol,
+    PdfColor primary,
+  ) {
+    if (sections.isEmpty) return const [];
+
+    pw.Table block(List<pw.TableRow> trs, int valueCols) => pw.Table(
+          border: pw.TableBorder.all(color: lineCol, width: 0.7),
+          tableWidth: pw.TableWidth.max,
+          columnWidths: {
+            for (var c = 0; c <= valueCols; c++)
+              c: c == 0 ? const pw.FlexColumnWidth(2.2) : const pw.FlexColumnWidth(1.4),
+          },
+          children: trs,
+        );
+
+    pw.TableRow dataRow(List<dynamic> r, int valueCols) => pw.TableRow(children: [
+          for (var c = 0; c <= valueCols; c++) cell(c < r.length ? _fmt(r[c]) : '', right: c > 0),
+        ]);
+
+    final out = <pw.Widget>[];
+    for (final s in sections) {
+      final vc = s.columns.length;
+      out.add(pw.SizedBox(height: 10));
+      // heading row + column labels + first data row = one unbreakable block
+      out.add(block([
+        pw.TableRow(
+          decoration: const pw.BoxDecoration(color: headerBg),
+          children: [
+            cell(s.title, bold: true),
+            for (final c in s.columns) cell(tr(c).toUpperCase(), header: true, right: true),
+          ],
+        ),
+        if (s.rows.isNotEmpty) dataRow(s.rows.first, vc),
+      ], vc));
+      // remaining rows flow one-by-one → pages fill completely
+      for (final r in s.rows.skip(1)) {
+        out.add(block([dataRow(r, vc)], vc));
+      }
+    }
+    return out;
   }
 }

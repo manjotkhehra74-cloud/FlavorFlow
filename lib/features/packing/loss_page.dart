@@ -79,19 +79,25 @@ class _LossPageState extends State<LossPage> {
       for (final t in (data['top'] as List).cast<Map<String, dynamic>>()) {
         rows.add([t['name'], t['projection'], t['opening'], t['actual'], t['openingActual'], ((t['adherence'] as num?) ?? 0).toStringAsFixed(1), t['closing']]);
       }
-      rows.add(['', '', '', '', '', '', '']);
-      for (final s in (data['sections'] as List).cast<Map<String, dynamic>>()) {
-        rows.add(['▶ ${s['name']}', 'CB', 'Extra', 'Total used', 'Loss%', '', '']);
-        for (final r in (s['rows'] as List).cast<Map<String, dynamic>>()) {
-          rows.add([r['name'], r['cb'], r['extra'], r['total'], '${((r['lossPct'] as num?) ?? 0).toStringAsFixed(2)}%', '', '']);
-        }
-        rows.add(['', '', '', '', '', '', '']);
-      }
+      // Per-product material blocks as proper PDF sections: heading stays with
+      // its rows across page breaks, and pages pack fully (no half-empty pages).
+      final sections = <PdfSection>[
+        for (final s in (data['sections'] as List).cast<Map<String, dynamic>>())
+          PdfSection(
+            title: '${s['name']}',
+            columns: const ['CB', 'Extra', 'Total used', 'Loss%'],
+            rows: [
+              for (final r in (s['rows'] as List).cast<Map<String, dynamic>>())
+                [r['name'], r['cb'], r['extra'], r['total'], '${((r['lossPct'] as num?) ?? 0).toStringAsFixed(2)}%'],
+            ],
+          ),
+      ];
       final bytes = await ReportPdf.build(
         title: 'Packing Loss% — $ym',
         desc: 'Projection vs production, CB (as per BOM) vs Extra (manual consumption), Loss% per material.',
         columns: columns,
         rows: rows,
+        sections: sections,
       );
       await Printing.sharePdf(bytes: bytes, filename: 'flavorflow-loss-$ym.pdf');
     } catch (e) {
