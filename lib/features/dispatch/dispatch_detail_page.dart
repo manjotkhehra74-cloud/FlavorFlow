@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/company.dart';
 import '../../core/format.dart';
+import '../../core/i18n.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
@@ -21,6 +22,39 @@ class DispatchDetailPage extends StatefulWidget {
 class _DispatchDetailPageState extends State<DispatchDetailPage> {
   late Future<Map<String, dynamic>> _future;
   bool exporting = false;
+  bool voiding = false;
+
+  /// Void a wrong dispatch: server returns all items to inventory
+  /// (and batches for batch-coded lines) and marks the dispatch VOID.
+  Future<void> _voidDispatch(Map<String, dynamic> d) async {
+    final sure = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('${tr('Void dispatch')} ${d['code']}?'),
+        content: Text(tr('All quantities of this dispatch will be returned to stock (batch-wise too). The entry stays in history as VOID. Then create the corrected dispatch.')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('Cancel'))),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(tr('Void (return stock)')),
+          ),
+        ],
+      ),
+    );
+    if (sure != true || !mounted) return;
+    setState(() => voiding = true);
+    try {
+      await context.read<AuthController>().api.post('/dispatch/${widget.id}/void');
+      if (!mounted) return;
+      showOk(context, tr('Dispatch voided — stock returned to inventory.'));
+      setState(() => _future = _load());
+    } catch (e) {
+      if (mounted) showErr(context, e);
+    } finally {
+      if (mounted) setState(() => voiding = false);
+    }
+  }
 
   @override
   void initState() {
@@ -73,6 +107,14 @@ class _DispatchDetailPageState extends State<DispatchDetailPage> {
               icon: const Icon(Icons.picture_as_pdf_rounded, size: 19),
               label: Text(exporting ? 'Preparing…' : 'Export PDF'),
             ),
+            // Wrong entry? Void returns every item's stock to inventory
+            // (batch-wise too) and marks this dispatch VOID — then re-enter.
+            if (context.watch<AuthController>().can('dispatch.manage') && '${d['status']}'.toUpperCase() != 'VOID')
+              OutlinedButton.icon(
+                onPressed: voiding ? null : () => _voidDispatch(d),
+                icon: const Icon(Icons.undo_rounded, size: 18, color: AppColors.red),
+                label: Text(voiding ? 'Voiding…' : tr('Void (return stock)'), style: const TextStyle(color: AppColors.red)),
+              ),
           ]),
           const SizedBox(height: 18),
           LayoutBuilder(builder: (context, c) {

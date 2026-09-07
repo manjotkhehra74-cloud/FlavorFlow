@@ -295,7 +295,10 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
         width: 440,
         child: products.isEmpty
             ? const SizedBox(height: 90, child: Center(child: CircularProgressIndicator()))
-            : Column(mainAxisSize: MainAxisSize.min, children: [
+            // Scrollable: on phones (adjustPan + frozen insets) a tall dialog
+            // could overlap its own buttons — scrolling keeps fields inside.
+            : SingleChildScrollView(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
                 TextField(
                   controller: code,
                   textCapitalization: TextCapitalization.characters,
@@ -361,7 +364,7 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
                 ]),
                 const SizedBox(height: 12),
                 TextField(controller: remarks, decoration: InputDecoration(labelText: tr('Remarks (optional)'))),
-              ]),
+              ])),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
