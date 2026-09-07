@@ -174,7 +174,14 @@ class _LossPageState extends State<LossPage> {
                   const DropdownMenuItem<String>(value: null, child: Text('Current month')),
                   for (final a in archives) DropdownMenuItem(value: a, child: Text(a)),
                 ],
-                onChanged: (v) => setState(() { _viewYm = v; _future = _load(); }),
+                onChanged: (v) {
+                  // Let the dropdown menu route pop completely BEFORE swapping
+                  // the whole page future — rebuilding mid-pop left the menu's
+                  // barrier stuck as a washed-out overlay (archive → Current).
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) setState(() { _viewYm = v; _future = _load(); });
+                  });
+                },
               ),
             OutlinedButton.icon(
               onPressed: _busy ? null : () => _export(data, pdf: true),
