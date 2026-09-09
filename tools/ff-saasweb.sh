@@ -74,7 +74,8 @@ cat > /etc/systemd/system/ff-demo-reset.service <<'UNIT'
 Description=FlavorFlow demo company nightly reset
 [Service]
 Type=oneshot
-ExecStart=/bin/bash -c 'P=$(node -e "const r=require(\"/opt/flavorflow-saas/data/registry.json\");const d=r.companies.demo;d&&d.adminPassword===undefined&&(d.adminPassword=\"Demo@1234\",require(\"fs\").writeFileSync(\"/opt/flavorflow-saas/data/registry.json\",JSON.stringify(r,null,2)));console.log(1)"); rm -rf /opt/flavorflow-saas/data/tenant-demo; systemctl restart flavorflow-saas'
+ExecStart=/bin/bash -c 'P=$(node -e "const r=require(\"/opt/flavorflow-saas/data/registry.json\");const d=r.companies.demo;d&&d.adminPassword===undefined&&(d.adminPassword=\"Demo@1234\",require(\"fs\").writeFileSync(\"/opt/flavorflow-saas/data/registry.json\",JSON.stringify(r,null,2)));console.log(1)"); rm -rf /opt/flavorflow-saas/data/tenant-demo; mkdir -p "$BASE/web/download"  # download dir — APK ethe copy karni: /opt/flavorflow-saas/web/download/flavorflow-erp.apk
+systemctl restart flavorflow-saas'
 UNIT
 cat > /etc/systemd/system/ff-demo-reset.timer <<'UNIT'
 [Unit]
