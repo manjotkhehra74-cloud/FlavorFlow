@@ -461,9 +461,9 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
     final set = <String>{};
     for (final t in _trucks) {
       final d = '${t['destination'] ?? ''}'.trim().toUpperCase();
-      if (d.isNotEmpty) set.add(d);
+      if (d.isNotEmpty && !_isLegacyDest(d)) set.add(d); // old-build forced choices stay hidden
     }
-    set.addAll(_savedDests);
+    set.addAll(_savedDests); // typed on THIS build → always shown (even Neemrana, if real)
     final l = set.toList()..sort();
     return l;
   }
@@ -492,7 +492,7 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
     } catch (_) {}
   }
 
-  Future<void> _rememberDest(String d) async {
+  static Future<void> rememberDest(String d) async {
     d = d.trim().toUpperCase();
     if (d.isEmpty || d == 'OTHER' || _savedDests.contains(d)) return;
     _savedDests = [..._savedDests, d]..sort();
@@ -661,7 +661,7 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
       });
       if (!mounted) return;
       final id = (json as Map)['id'];
-      _rememberDest(_destination); // company's own list grows automatically
+      rememberDest(_destination); // company's own list grows automatically
       _clearDraft(); // success — draft is no longer needed (memory + disk)
       _hasDraft = false;
       for (final l in lines) { l.cartons.clear(); l.trays.clear(); l.batchCode.clear(); }
@@ -1117,6 +1117,7 @@ class _TrucksTabState extends State<_TrucksTab> {
                 if (n.isEmpty || d.isEmpty) return;
                 try {
                   await ctx.read<AuthController>().api.post('/dispatch/trucks', {'number': n, 'destination': d});
+                  await _EntryTabState.rememberDest(d); // typed here = real destination → shown in entry dropdown
                   if (ctx.mounted) Navigator.pop(ctx, true);
                 } catch (e) {
                   if (ctx.mounted) showErr(ctx, e);
