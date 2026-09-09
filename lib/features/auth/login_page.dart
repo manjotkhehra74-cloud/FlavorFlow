@@ -19,6 +19,7 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final _email = TextEditingController();
   final _password = TextEditingController();
+  final _companyCode = TextEditingController();
   bool _obscure = true;
   String? _error;
   bool _bioAvailable = false; // device supports fingerprint/face/PIN
@@ -29,6 +30,10 @@ class _LoginPageState extends State<LoginPage> {
     super.initState();
     AppPermissions.requestAllOnce(); // one-time upfront permissions
     _checkBio();
+    // Prefill company code from the saved SaaS server URL.
+    final base = context.read<AuthController>().serverBase ?? '';
+    final m = RegExp(r'/t/([^/]+)/api').firstMatch(base);
+    if (m != null) _companyCode.text = m.group(1)!;
   }
 
   Future<void> _checkBio() async {
@@ -306,6 +311,27 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 const SizedBox(height: 16),
               ],
+              // COMPANY CODE — SaaS tenants: typing the code auto-connects the
+              // app to that company's server, so an employee can only reach
+              // their own company. Blank = factory/own-server default.
+              TextField(
+                controller: _companyCode,
+                textCapitalization: TextCapitalization.none,
+                decoration: InputDecoration(
+                  labelText: tr('Company code'),
+                  hintText: 'e.g. khehrafoods-e998',
+                  helperText: tr('Given at registration — sets your company server. Leave blank for own server.'),
+                  helperMaxLines: 2,
+                  prefixIcon: const Icon(Icons.business_rounded, size: 19),
+                ),
+                onChanged: (v) {
+                  final code = v.trim().toLowerCase();
+                  if (code.isNotEmpty) {
+                    context.read<AuthController>().setServerBase('https://app.flavorflow.co.in/t/$code/api');
+                  }
+                },
+              ),
+              const SizedBox(height: 13),
               TextField(
                 controller: _email,
                 keyboardType: TextInputType.emailAddress,
