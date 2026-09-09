@@ -274,7 +274,7 @@ class _SettingsPageState extends State<SettingsPage> {
         _tile(
           icon: Icons.business_rounded,
           title: tr('Company details (PDF header)'),
-          subtitle: 'Name, address, GSTIN · industry & unit names (view)',
+          subtitle: 'Name, address, GSTIN · industry (units, categories, destinations)',
           onTap: () => showDialog(context: context, builder: (_) => const CompanyProfileDialog()),
         ),
       ],

@@ -132,17 +132,19 @@ class _DispatchDetailPageState extends State<DispatchDetailPage> {
                 _BigStat(label: 'Gross Weight', value: '${qty(d['gross_weight'])} kg', tint: AppColors.orange),
                 const SizedBox(height: 10),
                 Row(children: [
-                  Expanded(child: _BigStat(label: 'Carton Weight', value: '${qty(d['carton_weight'])} kg', tint: AppColors.blue, small: true)),
+                  Expanded(child: _BigStat(label: '${U.carton} Weight', value: '${qty(d['carton_weight'])} kg', tint: AppColors.blue, small: true)),
                   const SizedBox(width: 10),
                   Expanded(child: _BigStat(label: 'Tray Weight', value: '${qty(d['tray_weight'])} kg', tint: AppColors.teal, small: true)),
                 ]),
                 const SizedBox(height: 10),
                 Row(children: [
-                  Expanded(child: _BigStat(label: 'Total Cartons', value: '${qtyInt(d['total_cartons'])} CB', tint: AppColors.violet, small: true)),
+                  Expanded(child: _BigStat(label: 'Total ${U.carton}', value: '${qtyInt(d['total_cartons'])} ${U.cb}', tint: AppColors.violet, small: true)),
+                  if (CompanyProfile.usesTrays) ...[
+                    const SizedBox(width: 10),
+                    Expanded(child: _BigStat(label: 'Total ${U.tray}', value: qtyInt(d['total_trays'] ?? 0), tint: AppColors.pink, small: true)),
+                  ],
                   const SizedBox(width: 10),
-                  Expanded(child: _BigStat(label: 'Total Trays', value: qtyInt(d['total_trays'] ?? 0), tint: AppColors.pink, small: true)),
-                  const SizedBox(width: 10),
-                  Expanded(child: _BigStat(label: 'Total Bottles', value: qtyInt(d['total_bottles']), tint: AppColors.cyan, small: true)),
+                  Expanded(child: _BigStat(label: 'Total ${U.piece}', value: qtyInt(d['total_bottles']), tint: AppColors.cyan, small: true)),
                 ]),
               ]),
             );
@@ -155,24 +157,26 @@ class _DispatchDetailPageState extends State<DispatchDetailPage> {
           SectionCard(
             title: 'Loaded Items',
             child: AppDataTable(
-              columns: ['Product', 'Batch', U.carton, U.tray, U.piece, '${U.cb} kg', '${U.tray} kg', 'Gross kg'],
+              columns: ['Product', 'Batch', U.carton, if (CompanyProfile.usesTrays) U.tray, U.piece, '${U.cb} kg', if (CompanyProfile.usesTrays) '${U.tray} kg', 'Gross kg'],
               rows: [
                 for (final it in items)
                   [
                     Text(it['product_name'] as String, style: const TextStyle(fontWeight: FontWeight.w600)),
                     (it['batch_code'] ?? '—').toString(),
                     qtyInt(it['cartons']),
-                    qtyInt(it['trays'] ?? 0),
+                    if (CompanyProfile.usesTrays) qtyInt(it['trays'] ?? 0),
                     qtyInt(it['total_bottles']),
                     qty(it['carton_weight']),
-                    qty(it['tray_weight'] ?? 0),
+                    if (CompanyProfile.usesTrays) qty(it['tray_weight'] ?? 0),
                     qty(it['gross_weight']),
                   ],
               ],
             ),
           ),
           const SizedBox(height: 10),
-          Text('Weights computed from the Product Master: cartons × weight/CB and trays × tray weight.',
+          Text(CompanyProfile.usesTrays
+                  ? 'Weights computed from the Product Master: ${U.carton.toLowerCase()} × weight/${U.cb} and ${U.trayLc} × ${U.trayLc} weight.'
+                  : 'Weights computed from the Product Master: ${U.carton.toLowerCase()} × weight/${U.cb}.',
               style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
         ]);
       },

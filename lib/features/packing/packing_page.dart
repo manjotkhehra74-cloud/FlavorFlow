@@ -3,6 +3,7 @@ import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/company.dart';
+import '../../core/industry_pack.dart';
 import '../../core/download.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
@@ -342,12 +343,21 @@ class _StockTabState extends State<_StockTab> {
               ],
               OutlinedButton.icon(
                 onPressed: () async {
-                  final saved = await showFastDialog<bool>(context, (_) => const _MaterialFormDialog());
+                  final saved = await showFastDialog<bool>(context, (_) => _MaterialFormDialog(rawOnly: widget.rawOnly));
                   if (saved == true) _reload();
                 },
                 icon: const Icon(Icons.add_rounded, size: 18),
                 label: Text(tr('New Material')),
               ),
+              if (all.isEmpty)
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final added = await showFastDialog<bool>(context, (_) => _StarterListDialog(rawOnly: widget.rawOnly));
+                    if (added == true) _reload();
+                  },
+                  icon: const Icon(Icons.playlist_add_rounded, size: 18),
+                  label: Text(tr('Add industry starter list')),
+                ),
             ],
           ]),
           const SizedBox(height: 16),
@@ -356,7 +366,11 @@ class _StockTabState extends State<_StockTab> {
                 ? (_lowOnly ? 'Low Stock Raw Material' : 'Raw Material Stock')
                 : (_lowOnly ? 'Low Stock Packing Material' : 'Packing Material Stock'),
             child: rows.isEmpty
-                ? EmptyState(_lowOnly ? 'Nothing running low 🎉' : (widget.rawOnly ? 'No raw material yet' : 'No packing material yet'))
+                ? EmptyState(_lowOnly
+                    ? 'Nothing running low 🎉'
+                    : (widget.rawOnly
+                        ? 'No raw material yet — tap “New Material” to add what you consume (${IndustryPack.eg(IndustryPack.current.rawExamples, 3)}).'
+                        : 'No packing material yet — tap “New Material” to add what you pack with (${IndustryPack.eg(IndustryPack.current.packingExamples, 3)}).'))
                 : AppDataTable(
                     columns: const ['Material', 'Category', 'In Stock', 'Unit', 'Min Stock', 'Status', ''],
                     rows: [
@@ -374,7 +388,7 @@ class _StockTabState extends State<_StockTab> {
                                 tooltip: 'Edit material & stock',
                                 icon: const Icon(Icons.edit_outlined, size: 18),
                                 onPressed: () async {
-                                  final saved = await showFastDialog<bool>(context, (_) => _MaterialFormDialog(material: m));
+                                  final saved = await showFastDialog<bool>(context, (_) => _MaterialFormDialog(material: m, rawOnly: widget.rawOnly));
                                   if (saved == true) _reload();
                                 },
                               ),
@@ -391,7 +405,11 @@ class _StockTabState extends State<_StockTab> {
                   ),
           ),
           const SizedBox(height: 10),
-          Text('When a production batch is completed with “Deduct packing material” ticked, stock is consumed automatically as per the product BOM.',
+          Text(widget.rawOnly
+              ? (CompanyProfile.usesRecipes
+                  ? 'Raw material is consumed by recipe (Recipe Consumption) or manually (Extra Consumption). Receipts add to stock.'
+                  : 'Raw material is consumed manually (Extra Consumption) against a batch or job. Receipts add to stock.')
+              : 'When a production batch is completed with “Deduct packing material” ticked, stock is consumed automatically as per the product BOM.',
               style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
         ]);
       },
@@ -431,27 +449,35 @@ class _BomTabState extends State<_BomTab> {
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
         final bom = snap.data!;
         return ListView(padding: const EdgeInsets.all(20), children: [
-          Text('Packing material needed to pack 1 CB and 1 tray of each product (from your Packing Material sheet).',
+          Text(
+              CompanyProfile.usesTrays
+                  ? 'Packing material needed to pack 1 ${U.cb} and 1 ${U.trayLc} of each product (from your Packing Material sheet).'
+                  : 'Packing material needed to pack 1 ${U.cb} of each product (from your Packing Material sheet).',
               style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
           const SizedBox(height: 14),
+          if (bom.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 40),
+              child: EmptyState('No products yet — add finished goods in Products first, then set each product\'s packing BOM here.', icon: Icons.inventory_2_outlined),
+            ),
           for (final entry in bom) ...[
             SectionCard(
               title: entry['product']['name'] as String,
-              trailing: Text('${qtyInt(entry['product']['bottles_per_cb'])}/CB'
-                  '${(entry['product']['bottles_per_tray'] as num) > 0 ? ' · ${qtyInt(entry['product']['bottles_per_tray'])}/tray' : ''}',
+              trailing: Text('${qtyInt(entry['product']['bottles_per_cb'])}/${U.cb}'
+                  '${(entry['product']['bottles_per_tray'] as num) > 0 ? ' · ${qtyInt(entry['product']['bottles_per_tray'])}/${U.trayLc}' : ''}',
                   style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
               padding: const EdgeInsets.fromLTRB(18, 12, 18, 14),
               child: (entry['items'] as List).isEmpty
                   ? Text('No BOM recorded.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5))
                   : AppDataTable(
-                      columns: ['Material', 'Category', 'Per ${U.cb}', 'Per ${U.tray}', 'Unit', 'In Stock'],
+                      columns: ['Material', 'Category', 'Per ${U.cb}', if (CompanyProfile.usesTrays) 'Per ${U.tray}', 'Unit', 'In Stock'],
                       rows: [
                         for (final i in (entry['items'] as List).cast<Map<String, dynamic>>())
                           [
                             Text(i['material'] as String, style: const TextStyle(fontWeight: FontWeight.w600)),
                             tr('${i['category']}'),
                             (i['perCb'] as num) > 0 ? qty(i['perCb']) : '—',
-                            (i['perTray'] as num) > 0 ? qty(i['perTray']) : '—',
+                            if (CompanyProfile.usesTrays) (i['perTray'] as num) > 0 ? qty(i['perTray']) : '—',
                             i['unit'],
                             qtyInt(i['inStock']),
                           ],
@@ -727,9 +753,9 @@ class _TxnDialogState extends State<_TxnDialog> {
                     TextField(controller: qty, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${tr('Quantity')} (${_material?['unit'] ?? 'pcs'}) *')),
                     const SizedBox(height: 12),
                     if (isReceive)
-                      TextField(controller: reference, decoration: InputDecoration(labelText: tr('Reference (PO no. / supplier)'), hintText: 'e.g. PO-1187 / Kapoor Plastics'))
+                      TextField(controller: reference, decoration: InputDecoration(labelText: tr('Reference (PO no. / supplier)'), hintText: 'e.g. PO-1187 / supplier name'))
                     else
-                      TextField(controller: reference, decoration: InputDecoration(labelText: tr('Reference (batch / purpose)'), hintText: 'e.g. B-2603 / QC samples')),
+                      TextField(controller: reference, decoration: InputDecoration(labelText: tr('Reference (batch / purpose)'), hintText: 'e.g. batch B-2603 / QC samples')),
                     const SizedBox(height: 12),
                     TextField(controller: remark, decoration: InputDecoration(labelText: tr('Remark (optional)'))),
                   ]),
@@ -742,23 +768,136 @@ class _TxnDialogState extends State<_TxnDialog> {
   }
 }
 
+/// One-tap starter list for a brand-new company: the typical materials of
+/// THEIR industry (from IndustryPack), each with a tick box — creates the
+/// ticked ones with 0 stock so the store can start receiving immediately.
+class _StarterListDialog extends StatefulWidget {
+  final bool rawOnly;
+  const _StarterListDialog({required this.rawOnly});
+  @override
+  State<_StarterListDialog> createState() => _StarterListDialogState();
+}
+
+class _StarterListDialogState extends State<_StarterListDialog> {
+  late final List<String> items = widget.rawOnly ? IndustryPack.current.rawExamples : IndustryPack.current.packingExamples;
+  late final Set<String> picked = items.toSet();
+  bool busy = false;
+
+  /// Best-guess category for a packing example from its name.
+  String _categoryFor(String name) {
+    if (widget.rawOnly) return IndustryPack.rawCategory;
+    final n = name.toLowerCase();
+    for (final c in IndustryPack.current.packingCategories) {
+      final words = c.toLowerCase().replaceAll(RegExp(r'[()/&]'), ' ').split(RegExp(r'\s+')).where((w) => w.length > 2);
+      for (final w in words) {
+        final stem = w.endsWith('s') ? w.substring(0, w.length - 1) : w;
+        if (n.contains(stem)) return c;
+      }
+    }
+    return IndustryPack.current.packingCategories.last;
+  }
+
+  String _unitFor(String name) {
+    if (!widget.rawOnly) return 'pcs';
+    final n = name.toLowerCase();
+    final units = IndustryPack.current.rawUnits;
+    if (n.contains('oil') || n.contains('milk') || n.contains('acid') || n.contains('solvent') || n.contains('water')) {
+      if (units.contains('Ltr')) return 'Ltr';
+    }
+    if (n.contains('leather')) return 'sq ft';
+    if (n.contains('yarn') || n.contains('thread')) return units.contains('kg') ? 'kg' : units.first;
+    if (n.contains('fabric')) return units.contains('Meter') ? 'Meter' : units.first;
+    if (n.contains('sole') || n.contains('lace') || n.contains('button') || n.contains('zipper') || n.contains('eyelet') || n.contains('buckle') || n.contains('capsule')) return 'pcs';
+    return units.first;
+  }
+
+  Future<void> _create() async {
+    setState(() => busy = true);
+    final api = context.read<AuthController>().api;
+    var ok = 0;
+    for (final name in items.where(picked.contains)) {
+      try {
+        await api.post('/packing/materials', {'name': name, 'category': _categoryFor(name), 'unit': _unitFor(name), 'stock': 0, 'minStock': 0});
+        ok++;
+      } catch (_) {/* duplicate or server-side validation — skip */}
+    }
+    if (!mounted) return;
+    showOk(context, '$ok materials added — now receive opening stock for each.');
+    Navigator.pop(context, ok > 0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sub = Theme.of(context).colorScheme.onSurfaceVariant;
+    return AlertDialog(
+      title: Text(widget.rawOnly ? tr('Typical raw materials') : tr('Typical packing materials')),
+      content: SizedBox(
+        width: 400,
+        child: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('For ${CompanyProfile.presetFor(CompanyProfile.current.industry)[1]} units. Untick what you don\'t use — names can be edited later.',
+                style: TextStyle(fontSize: 12.5, color: sub)),
+            const SizedBox(height: 8),
+            for (final it in items)
+              CheckboxListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: picked.contains(it),
+                onChanged: (v) => setState(() => v == true ? picked.add(it) : picked.remove(it)),
+                title: Text(it, style: const TextStyle(fontSize: 13.5)),
+                subtitle: Text('${tr(_categoryFor(it))} · ${_unitFor(it)}', style: TextStyle(fontSize: 11, color: sub)),
+              ),
+          ]),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(onPressed: busy || picked.isEmpty ? null : _create, child: Text(busy ? 'Adding…' : 'Add ${picked.length} materials')),
+      ],
+    );
+  }
+}
+
 class _MaterialFormDialog extends StatefulWidget {
   final Map<String, dynamic>? material; // set → edit mode
-  const _MaterialFormDialog({this.material});
+  final bool rawOnly; // opened from the Raw Material screen
+  const _MaterialFormDialog({this.material, this.rawOnly = false});
   @override
   State<_MaterialFormDialog> createState() => _MaterialFormDialogState();
 }
 
 class _MaterialFormDialogState extends State<_MaterialFormDialog> {
   late final TextEditingController name = TextEditingController(text: widget.material?['name']?.toString() ?? '');
-  late String category = widget.material?['category']?.toString() ?? 'Other';
+  late String category = widget.material?['category']?.toString() ?? (widget.rawOnly ? IndustryPack.rawCategory : IndustryPack.current.packingCategories.first);
+  late String unit = widget.material?['unit']?.toString() ?? (widget.rawOnly ? IndustryPack.current.rawUnits.first : 'pcs');
   late final TextEditingController stock = TextEditingController(text: widget.material != null ? '${widget.material!['stock']}' : '0');
   late final TextEditingController minStock = TextEditingController(text: widget.material != null ? '${widget.material!['min_stock']}' : '0');
   bool busy = false;
 
   bool get editing => widget.material != null;
+  bool get isRaw => category == IndustryPack.rawCategory;
 
-  static const categories = ['Bottles', 'Jerry Cans', 'Caps', 'Labels', 'Holograms', 'Plugs', 'Sleeves', 'Cartons', 'Trays', 'Tray Caps', 'Raw Material', 'Other'];
+  /// Categories for THIS company's industry (a rice mill sees PP Woven Bags /
+  /// BOPP Bags / Jute Bags…, a dairy sees Pouch Film / Cups & Lids / Crates…).
+  /// An existing material keeps its old category even if not in the list.
+  List<String> get categories {
+    final pack = IndustryPack.current;
+    final list = <String>[
+      if (widget.rawOnly) IndustryPack.rawCategory,
+      ...pack.packingCategories,
+      if (!widget.rawOnly) IndustryPack.rawCategory,
+    ];
+    if (!list.contains(category)) list.insert(0, category);
+    return list;
+  }
+
+  /// Unit options: raw = industry raw units, packing = piece-ish units.
+  List<String> get units {
+    final list = <String>[...(isRaw ? IndustryPack.current.rawUnits : const ['pcs', 'kg', 'Roll', 'Meter', 'Ltr', 'Bundle', 'Ream'])];
+    if (!list.contains(unit)) list.insert(0, unit);
+    return list;
+  }
 
   Future<void> _save() async {
     setState(() => busy = true);
@@ -766,6 +905,7 @@ class _MaterialFormDialogState extends State<_MaterialFormDialog> {
       final body = {
         'name': name.text.trim(),
         'category': category,
+        'unit': unit,
         'stock': num.tryParse(stock.text) ?? 0,
         'minStock': num.tryParse(minStock.text) ?? 0,
       };
@@ -785,31 +925,71 @@ class _MaterialFormDialogState extends State<_MaterialFormDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(editing ? 'Edit Packing Material' : 'New Packing Material'),
+      title: Text(editing
+          ? (isRaw ? 'Edit Raw Material' : 'Edit Packing Material')
+          : (isRaw ? 'New Raw Material' : 'New Packing Material')),
       content: SizedBox(
         width: 380,
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          if (editing)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Text('Stock entered here replaces the current count (use for opening stock / corrections).',
-                  style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        child: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            if (editing)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text('Stock entered here replaces the current count (use for opening stock / corrections).',
+                    style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+              ),
+            TextField(
+              controller: name,
+              textCapitalization: TextCapitalization.words,
+              decoration: InputDecoration(
+                labelText: tr('Material name *'),
+                hintText: IndustryPack.eg(isRaw ? IndustryPack.current.rawExamples : IndustryPack.current.packingExamples),
+              ),
             ),
-          TextField(controller: name, decoration: InputDecoration(labelText: tr('Material name *'), hintText: 'e.g. Cap Green 500ml')),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: category,
-            decoration: InputDecoration(labelText: tr('Category')),
-            items: [for (final c in categories) DropdownMenuItem(value: c, child: Text(c))],
-            onChanged: (v) => setState(() => category = v ?? 'Other'),
-          ),
-          const SizedBox(height: 12),
-          Row(children: [
-            Expanded(child: TextField(controller: stock, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('Opening stock (pcs)')))),
-            const SizedBox(width: 12),
-            Expanded(child: TextField(controller: minStock, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('Minimum stock')))),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              key: ValueKey('cat-$category'),
+              initialValue: category,
+              isExpanded: true,
+              decoration: InputDecoration(labelText: tr('Category')),
+              items: [for (final c in categories) DropdownMenuItem(value: c, child: Text(tr(c), overflow: TextOverflow.ellipsis))],
+              onChanged: (v) => setState(() {
+                final wasRaw = isRaw;
+                category = v ?? category;
+                // switching between raw ↔ packing resets the unit to a sensible default
+                if (wasRaw != isRaw) unit = isRaw ? IndustryPack.current.rawUnits.first : 'pcs';
+              }),
+            ),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(
+                flex: 3,
+                child: TextField(controller: stock, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('Opening stock'))),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: DropdownButtonFormField<String>(
+                  key: ValueKey('unit-$category-$unit'),
+                  initialValue: unit,
+                  isExpanded: true,
+                  decoration: InputDecoration(labelText: tr('Unit')),
+                  items: [for (final u in units) DropdownMenuItem(value: u, child: Text(u))],
+                  onChanged: (v) => setState(() => unit = v ?? unit),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 12),
+            TextField(controller: minStock, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('Minimum stock (low-stock alert below this)'))),
+            const SizedBox(height: 10),
+            Text(
+              isRaw
+                  ? 'Raw material = what you consume to MAKE the product (${IndustryPack.eg(IndustryPack.current.rawExamples, 3)}).'
+                  : 'Packing material = what you PACK the product in (${IndustryPack.eg(IndustryPack.current.packingExamples, 3)}).',
+              style: TextStyle(fontSize: 11.5, color: Theme.of(context).colorScheme.onSurfaceVariant),
+            ),
           ]),
-        ]),
+        ),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),

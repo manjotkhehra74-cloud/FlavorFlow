@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/company.dart';
+import '../../core/industry_pack.dart';
 import '../../core/format.dart';
 import '../../core/i18n.dart';
 import '../../state/auth.dart';
@@ -174,7 +175,7 @@ class _ProductionPageState extends State<ProductionPage> {
   }
 
   Future<void> _complete(BuildContext context, Map<String, dynamic> b) async {
-    final hasTray = (b['bottles_per_tray'] as num? ?? 0) > 0;
+    final hasTray = CompanyProfile.usesTrays && (b['bottles_per_tray'] as num? ?? 0) > 0;
     final qtyCtl = TextEditingController(text: '${b['planned_cb']}');
     final trayCtl = TextEditingController(text: '0');
     var consume = true;
@@ -190,7 +191,7 @@ class _ProductionPageState extends State<ProductionPage> {
               Expanded(child: TextField(controller: qtyCtl, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('Produced ${U.carton.toLowerCase()} (${U.cb})')))),
               if (hasTray) ...[
                 const SizedBox(width: 12),
-                Expanded(child: TextField(controller: trayCtl, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('Produced trays')))),
+                Expanded(child: TextField(controller: trayCtl, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${tr('Produced')} ${U.trayLc}'))),
               ],
             ]),
             const SizedBox(height: 8),
@@ -201,7 +202,7 @@ class _ProductionPageState extends State<ProductionPage> {
               value: consume,
               onChanged: (v) => setLocal(() => consume = v ?? true),
               title: const Text('Deduct packing material as per BOM', style: TextStyle(fontSize: 13.5)),
-              subtitle: const Text('Bottles, caps, labels, cartons & trays are consumed automatically', style: TextStyle(fontSize: 11.5)),
+              subtitle: Text(IndustryPack.current.consumeNote, style: const TextStyle(fontSize: 11.5)),
             ),
           ])),
           actions: [
@@ -256,7 +257,7 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
 
   bool get editing => widget.batch != null;
   bool get completed => widget.batch != null && widget.batch!['status'] == 'COMPLETED';
-  bool get hasTray => editing && (widget.batch!['bottles_per_tray'] as num? ?? 0) > 0;
+  bool get hasTray => editing && CompanyProfile.usesTrays && (widget.batch!['bottles_per_tray'] as num? ?? 0) > 0;
 
   @override
   void initState() {
@@ -334,7 +335,7 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
                   ),
                   if (completed && hasTray) ...[
                     const SizedBox(width: 12),
-                    Expanded(child: TextField(controller: trays, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('Produced trays')))),
+                    Expanded(child: TextField(controller: trays, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${tr('Produced')} ${U.trayLc}'))),
                   ],
                 ]),
                 if (completed)

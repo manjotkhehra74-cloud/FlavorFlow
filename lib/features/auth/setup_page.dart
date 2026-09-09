@@ -106,7 +106,7 @@ class _SetupPageState extends State<SetupPage> {
                 Text(tr('Choose your industry'), style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: scheme.onSurface)),
                 const SizedBox(height: 4),
                 Text(
-                  'Unit names (${CompanyProfile.industries.first[2]}, ${CompanyProfile.industries.first[4]}…) are set as per your industry. This cannot be changed later.',
+                  'Unit names, packing & raw-material categories and dispatch destinations are set as per your industry. The company admin can change it later in Settings → Company details.',
                   style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 14),

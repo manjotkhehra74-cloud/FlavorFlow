@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../core/app_settings.dart';
 import '../core/notifier.dart';
 import '../core/company.dart';
+import '../core/industry_pack.dart';
 import '../core/i18n.dart';
 import '../core/theme.dart';
 import '../core/format.dart';
@@ -162,6 +163,13 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
+    // Remount the current page when the company's industry / unit names
+    // change (server sync after login, or Settings → Company details) so
+    // every label, column and dropdown re-reads the IndustryPack.
+    final page = KeyedSubtree(
+      key: ValueKey('co-${CompanyProfile.current.industry}-${U.cb}-${U.tray}-${U.piece}'),
+      child: widget.child,
+    );
     final auth = context.watch<AuthController>();
     final session = auth.session;
     if (session == null) return const Scaffold();
@@ -221,7 +229,7 @@ class _AppShellState extends State<AppShell> {
             child: Column(children: [
               topBar,
               const Divider(height: 1),
-              Expanded(child: _StableInsets(child: widget.child)),
+              Expanded(child: _StableInsets(child: page)),
             ]),
           ),
         ]),
@@ -240,7 +248,7 @@ class _AppShellState extends State<AppShell> {
       drawer: phone
           ? _MobileModulesDrawer(nav: nav, selected: selected, session: session, onTap: goTo, onLogout: _logout)
           : Drawer(backgroundColor: Shell.bg, child: SafeArea(child: sidebar)),
-      body: _StableInsets(child: widget.child),
+      body: _StableInsets(child: page),
       bottomNavigationBar: phone
           ? _MobileBottomBar(
               currentPath: path,
@@ -769,6 +777,7 @@ class _CompanyProfileDialogState extends State<CompanyProfileDialog> {
   late final TextEditingController name;
   late final TextEditingController address;
   late final TextEditingController tax;
+  late String industry;
   bool saving = false;
 
   @override
@@ -778,16 +787,13 @@ class _CompanyProfileDialogState extends State<CompanyProfileDialog> {
     name = TextEditingController(text: p.name);
     address = TextEditingController(text: p.address);
     tax = TextEditingController(text: p.taxLine);
+    industry = p.industry;
   }
 
   @override
   void dispose() { name.dispose(); address.dispose(); tax.dispose(); super.dispose(); }
 
-  String _industryLabel() {
-    final id = CompanyProfile.current.industry;
-    final row = CompanyProfile.industries.firstWhere((r) => r[0] == id, orElse: () => CompanyProfile.industries.last);
-    return row[1];
-  }
+  List<String> get _row => CompanyProfile.presetFor(industry);
 
   Future<void> _save() async {
     if (name.text.trim().isEmpty) {
@@ -795,23 +801,29 @@ class _CompanyProfileDialogState extends State<CompanyProfileDialog> {
       return;
     }
     setState(() => saving = true);
-    final p = CompanyProfile.current; // industry & unit labels stay as set at first-run
+    final p = CompanyProfile.current;
+    final changed = industry != p.industry;
+    // Industry change → unit labels follow the new preset (a mill must not
+    // keep "Bottles"); unchanged → keep whatever labels the company has.
+    final row = _row;
     await CompanyProfile.save(
       CompanyProfile(
         name: name.text.trim(),
         address: address.text.trim(),
         taxLine: tax.text.trim(),
-        industry: p.industry,
-        cartonLabel: p.cartonLabel,
-        cartonShort: p.cartonShort,
-        trayLabel: p.trayLabel,
-        pieceLabel: p.pieceLabel,
+        industry: industry,
+        cartonLabel: changed ? row[2] : p.cartonLabel,
+        cartonShort: changed ? row[3] : p.cartonShort,
+        trayLabel: changed ? row[4] : p.trayLabel,
+        pieceLabel: changed ? row[5] : p.pieceLabel,
       ),
       context.read<AuthController>().api,
     );
     if (!mounted) return;
     Navigator.pop(context);
-    showOk(context, 'Company details saved — all exported PDFs will use them.');
+    showOk(context, changed
+        ? 'Industry changed to ${row[1]} — units, categories and destinations updated on every screen.'
+        : 'Company details saved — all exported PDFs will use them.');
   }
 
   @override
@@ -826,16 +838,27 @@ class _CompanyProfileDialogState extends State<CompanyProfileDialog> {
             Text('Printed at the top of every exported PDF (packing slips, stock reports, registers).',
                 style: TextStyle(fontSize: 12.5, color: sub)),
             const SizedBox(height: 14),
-            TextField(controller: name, decoration: InputDecoration(labelText: tr('Company name *'), hintText: 'e.g. G.D. Foods Mfg (I) Pvt. Ltd.')),
+            TextField(controller: name, decoration: InputDecoration(labelText: tr('Company name *'), hintText: 'e.g. Khalsa Foods Pvt. Ltd.')),
             const SizedBox(height: 12),
-            TextField(controller: address, decoration: InputDecoration(labelText: tr('Address'), hintText: 'e.g. Khadoor Sahib, Punjab')),
+            TextField(controller: address, decoration: InputDecoration(labelText: tr('Address'), hintText: 'e.g. Focal Point, Ludhiana, Punjab')),
             const SizedBox(height: 12),
             TextField(controller: tax, decoration: InputDecoration(labelText: tr('GSTIN / tax & contact line'), hintText: 'e.g. GSTIN 03XXXXX · info@company.in')),
             const SizedBox(height: 18),
             Text('INDUSTRY & UNIT NAMES', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, letterSpacing: 1.1, color: sub)),
             const SizedBox(height: 4),
-            Text('Set once during first-run setup — shown here for reference.',
+            Text('Drives unit names, packing & raw-material categories, dispatch destinations and report wording on every screen and PDF.',
                 style: TextStyle(fontSize: 11.5, color: sub)),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              initialValue: industry,
+              isExpanded: true,
+              decoration: InputDecoration(labelText: tr('Industry *')),
+              items: [
+                for (final r in CompanyProfile.industries)
+                  DropdownMenuItem(value: r[0], child: Text(r[1], overflow: TextOverflow.ellipsis)),
+              ],
+              onChanged: (v) => setState(() => industry = v ?? industry),
+            ),
             const SizedBox(height: 10),
             Container(
               width: double.infinity,
@@ -849,13 +872,18 @@ class _CompanyProfileDialogState extends State<CompanyProfileDialog> {
                 Row(children: [
                   Icon(Icons.factory_outlined, size: 17, color: Theme.of(context).colorScheme.primary),
                   const SizedBox(width: 8),
-                  Text(_industryLabel(), style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700)),
+                  Expanded(child: Text(_row[1], style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700))),
                 ]),
                 const SizedBox(height: 6),
-                Text(
-                  '${CompanyProfile.current.cartonLabel} (${CompanyProfile.current.cartonShort}) · ${CompanyProfile.current.trayLabel} · ${CompanyProfile.current.pieceLabel}',
-                  style: TextStyle(fontSize: 12, color: sub),
-                ),
+                Text('Units: ${_row[2]} (${_row[3]})${(CompanyProfile.industryFeatures[industry]?['trays'] ?? true) ? ' · ${_row[4]}' : ''} · ${_row[5]}',
+                    style: TextStyle(fontSize: 12, color: sub)),
+                const SizedBox(height: 4),
+                Text('Packing: ${IndustryPack.forIndustry(industry).packingCategories.take(4).join(', ')}…',
+                    style: TextStyle(fontSize: 12, color: sub)),
+                Text('Raw: ${IndustryPack.forIndustry(industry).rawExamples.take(4).join(', ')}…',
+                    style: TextStyle(fontSize: 12, color: sub)),
+                Text('Ships to: ${IndustryPack.forIndustry(industry).destinations.take(3).join(', ')}…',
+                    style: TextStyle(fontSize: 12, color: sub)),
               ]),
             ),
           ]),

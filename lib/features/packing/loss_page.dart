@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/company.dart';
 import '../../core/download.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
@@ -74,7 +75,7 @@ class _LossPageState extends State<LossPage> {
     setState(() => _busy = true);
     try {
       final ym = data['ym'];
-      final columns = ['Product / Material', 'Projection·CB', 'Opening·Extra', 'Actual·Total', 'Op+Act·Loss%', '%Adh', 'Closing'];
+      final columns = ['Product / Material', 'Projection·${U.cb}', 'Opening·Extra', 'Actual·Total', 'Op+Act·Loss%', '%Adh', 'Closing'];
       final rows = <List<dynamic>>[];
       for (final t in (data['top'] as List).cast<Map<String, dynamic>>()) {
         rows.add([t['name'], t['projection'], t['opening'], t['actual'], t['openingActual'], ((t['adherence'] as num?) ?? 0).toStringAsFixed(1), t['closing']]);
@@ -85,7 +86,7 @@ class _LossPageState extends State<LossPage> {
         for (final s in (data['sections'] as List).cast<Map<String, dynamic>>())
           PdfSection(
             title: '${s['name']}',
-            columns: const ['CB', 'Extra', 'Total used', 'Loss%'],
+            columns: [U.cb, 'Extra', 'Total used', 'Loss%'],
             rows: [
               for (final r in (s['rows'] as List).cast<Map<String, dynamic>>())
                 [r['name'], r['cb'], r['extra'], r['total'], '${((r['lossPct'] as num?) ?? 0).toStringAsFixed(2)}%'],
@@ -94,7 +95,7 @@ class _LossPageState extends State<LossPage> {
       ];
       final bytes = await ReportPdf.build(
         title: 'Packing Loss% — $ym',
-        desc: 'Projection vs production, CB (as per BOM) vs Extra (manual consumption), Loss% per material.',
+        desc: 'Projection vs production, ${U.cb} (as per BOM) vs Extra (manual consumption), Loss% per material.',
         columns: columns,
         rows: rows,
         sections: sections,
@@ -207,7 +208,7 @@ class _LossPageState extends State<LossPage> {
                         ? Text(tr('Total'), style: const TextStyle(fontWeight: FontWeight.w800))
                         : Text('${t['name']}', style: const TextStyle(fontWeight: FontWeight.w600)),
                     t['name'] == 'Total' ? qtyInt(t['projection']) : edit('proj:${t['productId']}', (t['projection'] as num?) ?? 0, '${t['name']} — Projection'),
-                    t['name'] == 'Total' ? qtyInt(t['opening']) : edit('open:${t['productId']}', (t['opening'] as num?) ?? 0, '${t['name']} — Opening (last month closing + Neemrana/Matiala stock)'),
+                    t['name'] == 'Total' ? qtyInt(t['opening']) : edit('open:${t['productId']}', (t['opening'] as num?) ?? 0, '${t['name']} — Opening (last month closing + depot stock)'),
                     t['name'] == 'Total' ? qtyInt(t['actual']) : edit('act:${t['productId']}', (t['actual'] as num?) ?? 0, '${t['name']} — Actual production (month total)'),
                     qtyInt(t['openingActual']),
                     ((t['adherence'] as num?) ?? 0).toStringAsFixed(1),
@@ -221,12 +222,12 @@ class _LossPageState extends State<LossPage> {
             SectionCard(
               title: '${s['name']}',
               child: AppDataTable(
-                columns: const ['Material', 'CB', 'Extra', 'Total used', 'Loss %'],
+                columns: ['Material', U.cb, 'Extra', 'Total used', 'Loss %'],
                 rows: [
                   for (final r in (s['rows'] as List).cast<Map<String, dynamic>>())
                     [
                       '${r['name']}',
-                      edit('cb:${s['productId']}:${r['materialId']}', (r['cb'] as num?) ?? 0, '${r['name']} — CB (as per BOM × production)'),
+                      edit('cb:${s['productId']}:${r['materialId']}', (r['cb'] as num?) ?? 0, '${r['name']} — ${U.cb} (as per BOM × production)'),
                       edit('extra:${s['productId']}:${r['materialId']}', (r['extra'] as num?) ?? 0, '${r['name']} — Extra (manual consumption)'),
                       qty(r['total']),
                       Text('${((r['lossPct'] as num?) ?? 0).toStringAsFixed(2)}%',
@@ -241,7 +242,7 @@ class _LossPageState extends State<LossPage> {
             const SizedBox(height: 12),
           ],
           Text(
-            'CB = BOM × month production (sare batch codes da jod) · Extra = manual Extra Consumption entries · Loss% = Extra ÷ CB. Har number edit ho sakda (product name nahi). Close month: export pehla, fer closing → next month opening.',
+            '${U.cb} = BOM × month production (sare batch codes da jod) · Extra = manual Extra Consumption entries · Loss% = Extra ÷ ${U.cb}. Har number edit ho sakda (product name nahi). Close month: export pehla, fer closing → next month opening.',
             style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
           ),
         ]);

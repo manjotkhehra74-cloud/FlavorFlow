@@ -179,7 +179,7 @@ class _AdjustmentFormDialogState extends State<AdjustmentFormDialog> {
                 if (_product != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
-                    child: Text('In stock: ${qtyInt(_product!['qty_cb'])} CB${(_product!['qty_trays'] as num? ?? 0) > 0 ? ' + ${qtyInt(_product!['qty_trays'])} trays' : ''}',
+                    child: Text('In stock: ${qtyInt(_product!['qty_cb'])} ${U.cb}${CompanyProfile.usesTrays && (_product!['qty_trays'] as num? ?? 0) > 0 ? ' + ${qtyInt(_product!['qty_trays'])} ${U.trayLc}' : ''}',
                         style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5)),
                   ),
                 const SizedBox(height: 14),
@@ -194,7 +194,7 @@ class _AdjustmentFormDialogState extends State<AdjustmentFormDialog> {
                 const SizedBox(height: 14),
                 TextField(controller: cb, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('${U.carton} (${U.cb})'))),
                 const SizedBox(height: 12),
-                TextField(controller: reason, maxLines: 2, decoration: InputDecoration(labelText: tr('Reason *'), hintText: 'e.g. Damaged cartons, QC sample, sales return…')),
+                TextField(controller: reason, maxLines: 2, decoration: InputDecoration(labelText: tr('Reason *'), hintText: 'e.g. Damaged ${U.carton.toLowerCase()}, QC sample, sales return…')),
                 if (!kIsWeb) ...[
                   const SizedBox(height: 12),
                   Row(children: [

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/company.dart';
 import '../../core/download.dart';
 import '../../core/theme.dart';
 import '../../core/i18n.dart';
@@ -49,7 +50,18 @@ class _ReportsPageState extends State<ReportsPage> {
     });
   }
 
-  List<String> get _columns => (_data?['columns'] as List? ?? const []).cast<String>();
+  List<String> get _columns => (_data?['columns'] as List? ?? const []).cast<String>().map(U.ize).toList();
+
+  /// Empty-state text that tells a NEW company what feeds each report.
+  String _emptyHint(String id) {
+    if (id.contains('raw')) return 'No data yet — add raw materials (Raw Material → New Material) and receive stock; consumption appears here.';
+    if (id.contains('packing')) return 'No data yet — add packing materials (Packing Material → New Material) and receive stock.';
+    if (id.contains('dispatch')) return 'No data yet — dispatches you confirm appear here.';
+    if (id.contains('production') || id.contains('batch')) return 'No data yet — production batches you complete appear here.';
+    if (id.contains('adjust') || id.contains('approval') || id.contains('audit')) return 'No data yet — stock adjustments and approvals appear here.';
+    if (id.contains('low')) return 'Nothing below minimum stock 🎉';
+    return 'No data yet — add products in Products and receive opening stock; it appears here as you start working.';
+  }
   List<List<dynamic>> get _rows =>
       ((_data?['rows'] as List? ?? const [])).map((r) => (r as List).cast<dynamic>()).toList();
 
@@ -74,8 +86,8 @@ class _ReportsPageState extends State<ReportsPage> {
     setState(() => _exporting = true);
     try {
       final bytes = await ReportPdf.build(
-        title: _data!['title'] as String,
-        desc: _selected!['desc'] as String? ?? '',
+        title: U.ize(_data!['title'] as String),
+        desc: U.ize(_selected!['desc'] as String? ?? ''),
         columns: _columns,
         rows: _rows,
       );
@@ -136,7 +148,7 @@ class _ReportsPageState extends State<ReportsPage> {
           borderRadius: BorderRadius.circular(5),
           border: Border.all(color: sel ? AppColors.blue : const Color(0xFFC3CEDA)),
         ),
-        child: Text(tr(r['title'] as String),
+        child: Text(U.ize(tr(r['title'] as String)),
             style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: sel ? Theme.of(context).colorScheme.onPrimaryContainer : Theme.of(context).colorScheme.onSurface)),
       ),
     );
@@ -157,10 +169,10 @@ class _ReportsPageState extends State<ReportsPage> {
           ),
           padding: EdgeInsets.fromLTRB(sel ? 9 : 12, 9, 10, 9),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(tr(r['title'] as String),
+            Text(U.ize(tr(r['title'] as String)),
                 style: TextStyle(fontSize: 12.6, fontWeight: FontWeight.w600, color: sel ? Theme.of(context).colorScheme.onPrimaryContainer : Theme.of(context).colorScheme.onSurface)),
             const SizedBox(height: 2),
-            Text(tr(r['desc'] as String),
+            Text(U.ize(tr(r['desc'] as String)),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant, height: 1.35)),
@@ -173,7 +185,7 @@ class _ReportsPageState extends State<ReportsPage> {
   Widget _reportBody() {
     if (_selected == null) return const SizedBox.shrink();
     return SectionCard(
-      title: _selected!['title'] as String,
+      title: U.ize(_selected!['title'] as String),
       stackTrailingOnNarrow: true,
       trailing: Wrap(spacing: 8, runSpacing: 8, children: [
         OutlinedButton.icon(
@@ -198,18 +210,18 @@ class _ReportsPageState extends State<ReportsPage> {
         ),
       ]),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(tr(_selected!['desc'] as String), style: TextStyle(fontSize: 11.5, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        Text(U.ize(tr(_selected!['desc'] as String)), style: TextStyle(fontSize: 11.5, color: Theme.of(context).colorScheme.onSurfaceVariant)),
         const SizedBox(height: 12),
         FutureBuilder<Map<String, dynamic>>(
           future: _reportFuture,
           builder: (context, rsnap) {
             if (rsnap.hasError) return ErrorState(rsnap.error!, onRetry: () => setState(() => _select(_selected!)));
             if (!rsnap.hasData) return const Padding(padding: EdgeInsets.all(30), child: Center(child: CircularProgressIndicator()));
-            final columns = (rsnap.data!['columns'] as List).cast<String>();
+            final columns = (rsnap.data!['columns'] as List).cast<String>().map(U.ize).toList();
             final rows = (rsnap.data!['rows'] as List).map((r) => (r as List).cast<dynamic>()).toList();
             final moneyCols = <int>{for (final i in (rsnap.data!['moneyColumns'] as List? ?? const [])) i as int};
             if (rows.isEmpty) {
-              return const EmptyState('No data yet — it appears here as you start working.', icon: Icons.table_rows_outlined);
+              return EmptyState(_emptyHint(_selected!['id'] as String? ?? ''), icon: Icons.table_rows_outlined);
             }
             return AppDataTable(columns: columns, rows: rows, moneyColumns: moneyCols);
           },

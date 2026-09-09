@@ -44,7 +44,9 @@ class StockPdf {
               style: ts(header ? 8.6 : 9, bold: bold || header, color: color ?? (header ? primary : null))),
         );
 
-    final headers = ['#', tr('Product'), '${tr(U.carton)} (${U.cb})', tr(U.tray), '${tr('Total')} ${tr(U.piece)}', tr('Gross kg'), '${tr('Min')} (${U.cb})', tr('Status')];
+    final trays = CompanyProfile.usesTrays;
+    final headers = ['#', tr('Product'), '${tr(U.carton)} (${U.cb})', if (trays) tr(U.tray), '${tr('Total')} ${tr(U.piece)}', tr('Gross kg'), '${tr('Min')} (${U.cb})', tr('Status')];
+    final last = headers.length - 1; // status column index (7 with trays, 6 without)
     double sumCb = 0, sumTrays = 0, sumBottles = 0, sumGross = 0;
     final rows = <List<Object>>[];
     for (var i = 0; i < items.length; i++) {
@@ -57,7 +59,7 @@ class StockPdf {
         '${i + 1}',
         '${it['name']}',
         n(it['qty_cb']),
-        n(it['qty_trays']),
+        if (trays) n(it['qty_trays']),
         n(it['total_bottles']),
         n(it['gross_kg']),
         n(it['min_stock_cb']),
@@ -106,37 +108,47 @@ class StockPdf {
         pw.Divider(color: lineCol, thickness: 0.8),
         pw.SizedBox(height: 10),
         pw.Wrap(spacing: 8, runSpacing: 8, children: [
-          metaBox(tr('Total cartons'), '${n(summary['total_cb'])} CB'),
-          metaBox(tr('Total trays'), n(summary['total_trays'])),
-          metaBox(tr('Total bottles'), n(summary['total_bottles'])),
+          metaBox('${tr('Total')} ${tr(U.carton).toLowerCase()}', '${n(summary['total_cb'])} ${U.cb}'),
+          if (trays) metaBox('${tr('Total')} ${tr(U.tray).toLowerCase()}', n(summary['total_trays'])),
+          metaBox('${tr('Total')} ${tr(U.piece).toLowerCase()}', n(summary['total_bottles'])),
           metaBox(tr('Low stock items'), '${summary['low_count']}'),
         ]),
         pw.SizedBox(height: 16),
         pw.Table(
           border: pw.TableBorder.all(color: lineCol, width: 0.7),
-          columnWidths: {
-            0: const pw.FixedColumnWidth(26),
-            1: const pw.FlexColumnWidth(2.6),
-            2: const pw.FlexColumnWidth(1.1),
-            3: const pw.FlexColumnWidth(0.9),
-            4: const pw.FlexColumnWidth(1.1),
-            5: const pw.FlexColumnWidth(1.0),
-            6: const pw.FlexColumnWidth(0.95),
-            7: const pw.FixedColumnWidth(48),
-          },
+          columnWidths: trays
+              ? {
+                  0: const pw.FixedColumnWidth(26),
+                  1: const pw.FlexColumnWidth(2.6),
+                  2: const pw.FlexColumnWidth(1.1),
+                  3: const pw.FlexColumnWidth(0.9),
+                  4: const pw.FlexColumnWidth(1.1),
+                  5: const pw.FlexColumnWidth(1.0),
+                  6: const pw.FlexColumnWidth(0.95),
+                  7: const pw.FixedColumnWidth(48),
+                }
+              : {
+                  0: const pw.FixedColumnWidth(26),
+                  1: const pw.FlexColumnWidth(2.9),
+                  2: const pw.FlexColumnWidth(1.1),
+                  3: const pw.FlexColumnWidth(1.1),
+                  4: const pw.FlexColumnWidth(1.0),
+                  5: const pw.FlexColumnWidth(0.95),
+                  6: const pw.FixedColumnWidth(48),
+                },
           children: [
             pw.TableRow(
               repeat: true,
               decoration: const pw.BoxDecoration(color: headerBg),
-              children: [for (var i = 0; i < headers.length; i++) cell(headers[i], header: true, right: i >= 2 && i <= 6)],
+              children: [for (var i = 0; i < headers.length; i++) cell(headers[i], header: true, right: i >= 2 && i < last)],
             ),
             for (final r in rows)
               pw.TableRow(children: [
                 for (var i = 0; i < r.length; i++)
-                  cell(i == 7 ? tr('${r[i]}') : '${r[i]}',
-                      right: i >= 2 && i <= 6,
-                      bold: i == 7,
-                      color: i == 7 ? (r[i] == 'LOW' ? lowRed : null) : null),
+                  cell(i == last ? tr('${r[i]}') : '${r[i]}',
+                      right: i >= 2 && i < last,
+                      bold: i == last,
+                      color: i == last ? (r[i] == 'LOW' ? lowRed : null) : null),
               ]),
             pw.TableRow(
               decoration: const pw.BoxDecoration(color: headerBg),
@@ -144,7 +156,7 @@ class StockPdf {
                 cell('', color: primary),
                 cell(tr('Total').toUpperCase(), bold: true, color: primary),
                 cell(n(sumCb), bold: true, right: true, color: primary),
-                cell(n(sumTrays), bold: true, right: true, color: primary),
+                if (trays) cell(n(sumTrays), bold: true, right: true, color: primary),
                 cell(n(sumBottles), bold: true, right: true, color: primary),
                 cell(n(sumGross), bold: true, right: true, color: primary),
                 cell('', color: primary),
@@ -154,7 +166,7 @@ class StockPdf {
           ],
         ),
         pw.SizedBox(height: 12),
-        pw.Text(PdfFonts.shape(tr('Generated from live inventory — cartons and trays tracked separately.')),
+        pw.Text(PdfFonts.shape(U.ize(tr('Generated from live inventory — cartons and trays tracked separately.'))),
             style: ts(8, color: greyTxt)),
       ],
     ));

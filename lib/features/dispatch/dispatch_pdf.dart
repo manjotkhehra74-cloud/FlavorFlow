@@ -38,10 +38,10 @@ class DispatchPdf {
           '${items[i]['product_name']}',
           if (hasBatch) '${items[i]['batch_code'] ?? '—'}',
           '${items[i]['cartons']}',
-          '${items[i]['trays'] ?? 0}',
+          if (_trays) '${items[i]['trays'] ?? 0}',
           '${items[i]['total_bottles']}',
           kg(items[i]['carton_weight']),
-          kg(items[i]['tray_weight'] ?? 0),
+          if (_trays) kg(items[i]['tray_weight'] ?? 0),
           kg(items[i]['gross_weight']),
         ],
     ];
@@ -50,6 +50,7 @@ class DispatchPdf {
       title: tr('Dispatch Packing Slip').toUpperCase(),
       subtitle: '', // dispatch number intentionally not printed on the slip
       headers: hasBatch ? _headersWithBatch : _headers,
+      hasBatch: hasBatch,
       meta: [
         [tr('Dispatch Date'), _dateWithDay(d['dispatch_date'])],
         [tr('Truck / Vehicle No.'), '${d['truck_number']}'],
@@ -59,8 +60,8 @@ class DispatchPdf {
       remarks: '${d['remarks'] ?? ''}',
       rows: rows,
       totals: [
-        'TOTAL', '', if (hasBatch) '', '${d['total_cartons']}', '${d['total_trays'] ?? 0}', '${d['total_bottles']}',
-        kg(d['carton_weight']), kg(d['tray_weight'] ?? 0), kg(d['gross_weight']),
+        'TOTAL', '', if (hasBatch) '', '${d['total_cartons']}', if (_trays) '${d['total_trays'] ?? 0}', '${d['total_bottles']}',
+        kg(d['carton_weight']), if (_trays) kg(d['tray_weight'] ?? 0), kg(d['gross_weight']),
       ],
       footnote: tr('Date & day are recorded automatically at dispatch time.'),
       preparedBy: '${d['created_by_name'] ?? ''}',
@@ -83,10 +84,10 @@ class DispatchPdf {
           '${i + 1}',
           '${lines[i]['productName']}',
           '${lines[i]['cartons']}',
-          '${lines[i]['trays'] ?? 0}',
+          if (_trays) '${lines[i]['trays'] ?? 0}',
           '${lines[i]['totalBottles']}',
           kg(lines[i]['cartonWeight']),
-          kg(lines[i]['trayWeight'] ?? 0),
+          if (_trays) kg(lines[i]['trayWeight'] ?? 0),
           kg(lines[i]['grossWeight']),
         ],
     ];
@@ -101,16 +102,18 @@ class DispatchPdf {
       ],
       rows: rows,
       totals: [
-        'TOTAL', '', '${totals['totalCartons']}', '${totals['totalTrays'] ?? 0}', '${totals['totalBottles']}',
-        kg(totals['cartonWeight']), kg(totals['trayWeight'] ?? 0), kg(totals['grossWeight']),
+        'TOTAL', '', '${totals['totalCartons']}', if (_trays) '${totals['totalTrays'] ?? 0}', '${totals['totalBottles']}',
+        kg(totals['cartonWeight']), if (_trays) kg(totals['trayWeight'] ?? 0), kg(totals['grossWeight']),
       ],
       footnote: tr('Estimate only — actual challan is generated at dispatch.'),
     ));
     return doc.save();
   }
 
-  static List<String> get _headers => ['#', tr('Product'), tr(U.carton), tr(U.tray), tr(U.piece), '${U.cb} ${tr('Wt')}', '${tr(U.tray)} ${tr('Wt')}', tr('Gross Wt')];
-  static List<String> get _headersWithBatch => ['#', tr('Product'), tr('Batch'), tr(U.carton), tr(U.tray), tr(U.piece), '${U.cb} ${tr('Wt')}', '${tr(U.tray)} ${tr('Wt')}', tr('Gross Wt')];
+  /// Tray columns only for industries that use the secondary unit.
+  static bool get _trays => CompanyProfile.usesTrays;
+  static List<String> get _headers => ['#', tr('Product'), tr(U.carton), if (_trays) tr(U.tray), tr(U.piece), '${U.cb} ${tr('Wt')}', if (_trays) '${tr(U.tray)} ${tr('Wt')}', tr('Gross Wt')];
+  static List<String> get _headersWithBatch => ['#', tr('Product'), tr('Batch'), tr(U.carton), if (_trays) tr(U.tray), tr(U.piece), '${U.cb} ${tr('Wt')}', if (_trays) '${tr(U.tray)} ${tr('Wt')}', tr('Gross Wt')];
 
   static pw.Page _page({
     required String title,
@@ -121,6 +124,7 @@ class DispatchPdf {
     required String footnote,
     String remarks = '',
     List<String>? headers,
+    bool hasBatch = false,
     String preparedBy = '',
   }) {
     final company = CompanyProfile.current;
@@ -143,7 +147,6 @@ class DispatchPdf {
               style: ts(header ? 8.6 : 9, bold: bold || header, color: color ?? (header ? primary : null))),
         );
 
-    final hasBatch = hdrs.length == _headersWithBatch.length;
     final widths = <int, pw.TableColumnWidth>{
       0: const pw.FixedColumnWidth(26),
       1: pw.FlexColumnWidth(hasBatch ? 2.2 : 2.6),
@@ -230,7 +233,7 @@ class DispatchPdf {
         pw.SizedBox(height: 8),
         pw.Text(PdfFonts.shape(footnote), style: ts(9.4, bold: true)),
         pw.SizedBox(height: 6),
-        pw.Text(PdfFonts.shape(tr('Weights are computed from the Product Master (carton gross weight and tray weight).')),
+        pw.Text(PdfFonts.shape(U.ize(tr('Weights are computed from the Product Master (carton gross weight and tray weight).'))),
             style: ts(8, color: greyTxt)),
         pw.Spacer(),
 

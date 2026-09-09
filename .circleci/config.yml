@@ -208,6 +208,7 @@ workflows:
               only:
                 - arena/01a003d0-flavorflow
                 - arena/01a01af5-flavorflow
+                - arena/01a0858b-flavorflow
       - build-play-store-release:
           requires:
             - approve-release
@@ -216,6 +217,7 @@ workflows:
               only:
                 - arena/01a003d0-flavorflow
                 - arena/01a01af5-flavorflow
+                - arena/01a0858b-flavorflow
       - approve-web:
           type: approval
           filters:
@@ -223,6 +225,7 @@ workflows:
               only:
                 - arena/01a003d0-flavorflow
                 - arena/01a01af5-flavorflow
+                - arena/01a0858b-flavorflow
       - build-web:
           requires:
             - approve-web
@@ -231,3 +234,4 @@ workflows:
               only:
                 - arena/01a003d0-flavorflow
                 - arena/01a01af5-flavorflow
+                - arena/01a0858b-flavorflow

@@ -140,15 +140,15 @@ class _InventoryPageState extends State<InventoryPage> {
           SectionCard(
             title: _lowOnly ? 'Low Stock Products' : 'Stock on Hand',
             child: items.isEmpty
-                ? EmptyState(_lowOnly ? 'No products below minimum stock 🎉' : 'No inventory yet')
+                ? EmptyState(_lowOnly ? 'No products below minimum stock 🎉' : 'No inventory yet — add products in Products, then receive opening stock or complete a production batch.')
                 : AppDataTable(
-                    columns: ['Product', '${U.carton} (${U.cb})', U.tray, 'Total ${U.piece}', 'Gross kg', 'Min (${U.cb})', 'Status', ''],
+                    columns: ['Product', '${U.carton} (${U.cb})', if (CompanyProfile.usesTrays) U.tray, 'Total ${U.piece}', 'Gross kg', 'Min (${U.cb})', 'Status', ''],
                     rows: [
                       for (final it in items)
                         [
                           Text(it['name'] as String, style: const TextStyle(fontWeight: FontWeight.w600)),
                           qtyInt(it['qty_cb']),
-                          qtyInt(it['qty_trays']),
+                          if (CompanyProfile.usesTrays) qtyInt(it['qty_trays']),
                           qtyInt(it['total_bottles']),
                           qty(it['gross_kg']),
                           qtyInt(it['min_stock_cb']),
@@ -308,7 +308,7 @@ class _SetStockDialogState extends State<SetStockDialog> {
   final note = TextEditingController();
   bool busy = false;
 
-  bool get _hasTray => (widget.item['bottles_per_tray'] as num? ?? 0) > 0;
+  bool get _hasTray => CompanyProfile.usesTrays && (widget.item['bottles_per_tray'] as num? ?? 0) > 0;
 
   Future<void> _save() async {
     setState(() => busy = true);
@@ -334,7 +334,9 @@ class _SetStockDialogState extends State<SetStockDialog> {
       content: SizedBox(
         width: 380,
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Current: ${qtyInt(widget.item['qty_cb'])} CB + ${qtyInt(widget.item['qty_trays'])} trays. Enter the exact real stock below — it replaces the current numbers.',
+          Text(_hasTray
+                  ? 'Current: ${qtyInt(widget.item['qty_cb'])} ${U.cb} + ${qtyInt(widget.item['qty_trays'])} ${U.trayLc}. Enter the exact real stock below — it replaces the current numbers.'
+                  : 'Current: ${qtyInt(widget.item['qty_cb'])} ${U.cb}. Enter the exact real stock below — it replaces the current numbers.',
               style: TextStyle(fontSize: 12.5, color: Theme.of(context).colorScheme.onSurfaceVariant)),
           const SizedBox(height: 14),
           Row(children: [
@@ -387,7 +389,7 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
   Map<String, dynamic>? get _product =>
       productId == null ? null : products.firstWhere((p) => p['id'] == productId, orElse: () => products.first);
 
-  bool get _hasTray => (_product?['bottles_per_tray'] as num? ?? 0) > 0;
+  bool get _hasTray => CompanyProfile.usesTrays && (_product?['bottles_per_tray'] as num? ?? 0) > 0;
 
   Future<void> _save() async {
     setState(() => busy = true);
@@ -436,7 +438,7 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                         padding: const EdgeInsets.only(top: 8),
                         child: Align(
                           alignment: Alignment.centerLeft,
-                          child: Text('1 tray = ${_product!['bottles_per_tray']} bottles',
+                          child: Text('1 ${U.trayLc} = ${_product!['bottles_per_tray']} ${U.piece.toLowerCase()}',
                               style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                         ),
                       ),

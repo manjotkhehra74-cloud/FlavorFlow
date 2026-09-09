@@ -11,6 +11,7 @@ import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/company.dart';
+import '../../core/industry_pack.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../core/i18n.dart';
@@ -19,8 +20,14 @@ import '../../ui/scan_page.dart';
 import '../../ui/widgets.dart';
 import 'dispatch_pdf.dart';
 
-/// Dispatch destinations — NEEMRANA & MATIALA are the standard ones.
-const kDispatchDestinations = ['NEEMRANA', 'MATIALA', 'Other'];
+/// Dispatch destinations for the ACTIVE industry (a rice mill ships to
+/// MANDI / FCI GODOWN / EXPORT CHA…, a dairy to CHILLING CENTRE / RETAIL
+/// ROUTE…). The company's own truck-master + typed destinations are merged
+/// on top; 'Other' always allows a new name.
+List<String> get kDispatchDestinations => [...IndustryPack.current.destinations, 'Other'];
+
+/// Default destination for a fresh form = the industry's first typical one.
+String get kDefaultDestination => IndustryPack.current.destinations.first;
 
 /// Dedicated Dispatch Module: entry · truck loading calculator · history · reports.
 class DispatchPage extends StatefulWidget {
@@ -148,7 +155,7 @@ class _LinesEditor extends StatelessWidget {
                     onChanged: (_) => onChanged(),
                   ),
                 ),
-                if ((_prod(products, lines[i].productId)['bottles_per_tray'] as num? ?? 0) > 0) ...[
+                if (CompanyProfile.usesTrays && (_prod(products, lines[i].productId)['bottles_per_tray'] as num? ?? 0) > 0) ...[
                   const SizedBox(width: 10),
                   Expanded(
                     child: TextField(
@@ -168,7 +175,7 @@ class _LinesEditor extends StatelessWidget {
                       textCapitalization: TextCapitalization.characters,
                       decoration: InputDecoration(
                         labelText: 'Batch code',
-                        hintText: 'e.g. SS-740-A',
+                        hintText: 'e.g. B-2603',
                         helperText: 'Stock deducts batch-wise',
                         helperMaxLines: 1,
                         // QR/barcode scan — no typing on the factory floor
@@ -194,6 +201,38 @@ class _LinesEditor extends StatelessWidget {
         ),
       TextButton.icon(onPressed: onAdd, icon: const Icon(Icons.add_rounded, size: 18), label: Text(tr('Add product line'))),
     ]);
+  }
+}
+
+/// Shown in place of the product lines when the company has no finished
+/// goods yet (fresh SaaS tenant) — tells them exactly what to do first.
+class _NoProductsHint extends StatelessWidget {
+  final VoidCallback onAdd;
+  const _NoProductsHint({required this.onAdd});
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(Icons.inventory_2_outlined, size: 18, color: scheme.primary),
+          const SizedBox(width: 8),
+          Expanded(child: Text(tr('No products yet'), style: TextStyle(fontWeight: FontWeight.w700, color: scheme.onSurface))),
+        ]),
+        const SizedBox(height: 6),
+        Text('Add your finished goods first (${IndustryPack.eg(IndustryPack.current.productExamples)}) with ${U.piece.toLowerCase()} per ${U.cb} and ${U.cb} weight — dispatch lines and weights are calculated from that.',
+            style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
+        const SizedBox(height: 10),
+        FilledButton.tonalIcon(onPressed: onAdd, icon: const Icon(Icons.add_rounded, size: 18), label: Text(tr('Add Product'))),
+      ]),
+    );
   }
 }
 
@@ -243,10 +282,10 @@ class _SummaryCard extends StatelessWidget {
             ),
           const Divider(height: 18),
         ],
-        row('Carton weight', '${qty(totals['cartonWeight'])} kg'),
-        row('Tray weight', '${qty(totals['trayWeight'])} kg'),
+        row('${U.carton} weight', '${qty(totals['cartonWeight'])} kg'),
+        if (CompanyProfile.usesTrays) row('${U.tray} weight', '${qty(totals['trayWeight'])} kg'),
         row('Total ${U.carton.toLowerCase()}', '${qtyInt(totals['totalCartons'])} ${U.cb}'),
-        row('Total ${U.trayLc}', qtyInt(totals['totalTrays'])),
+        if (CompanyProfile.usesTrays) row('Total ${U.trayLc}', qtyInt(totals['totalTrays'])),
         row('Total ${U.piece.toLowerCase()}', qtyInt(totals['totalBottles'])),
         const Divider(height: 18),
         row('Gross loaded weight', '${qty(totals['grossWeight'])} kg', strong: true),
@@ -257,6 +296,9 @@ class _SummaryCard extends StatelessWidget {
 
 mixin _CalcMixin<T extends StatefulWidget> on State<T> {
   List<Map<String, dynamic>> products = [];
+  /// true once /products answered — an empty master then shows a hint
+  /// instead of spinning forever (new companies start with zero products).
+  bool productsLoaded = false;
   final List<_Line> lines = [_Line()];
   Map<String, dynamic>? calc;
   Timer? _debounce;
@@ -264,13 +306,15 @@ mixin _CalcMixin<T extends StatefulWidget> on State<T> {
   Future<void> loadProducts() async {
     try {
       final json = await context.read<AuthController>().api.get('/products');
+      if (!mounted) return;
       setState(() {
         products = ((json as Map)['products'] as List).cast<Map<String, dynamic>>();
+        productsLoaded = true;
         for (final l in lines) { l.productId ??= products.isNotEmpty ? products.first['id'] as int : null; }
       });
-      recalc();
+      if (products.isNotEmpty) recalc();
     } catch (e) {
-      if (mounted) showErr(context, e);
+      if (mounted) { setState(() => productsLoaded = true); showErr(context, e); }
     }
   }
 
@@ -341,28 +385,34 @@ class _DateField extends StatelessWidget {
   }
 }
 
-/// Destination selector — options come from the company's own truck master +
-/// destinations they've typed before (saved on this phone). Factory default
-/// (Neemrana/Matiala) only when no company list exists on a non-SaaS server.
+/// Destination selector — options = the industry's typical destinations +
+/// the company's own truck master + destinations typed before (saved on this
+/// phone). 'Other' adds a new one.
 class _DestinationField extends StatelessWidget {
   final String value;
   final TextEditingController otherCtl;
+  /// Dropdown pick — always one of the options or 'Other'.
   final ValueChanged<String> onChanged;
+  /// Free text typed for 'Other' (already in [otherCtl]) — for rebuilds.
+  final ValueChanged<String>? onTyped;
   final List<String> options;
-  const _DestinationField({required this.value, required this.otherCtl, required this.onChanged, this.options = const []});
+  const _DestinationField({required this.value, required this.otherCtl, required this.onChanged, this.onTyped, this.options = const []});
 
   @override
   Widget build(BuildContext context) {
-    final opts = options.isNotEmpty ? [...options, 'Other'] : kDispatchDestinations;
+    final merged = <String>{...IndustryPack.current.destinations, ...options};
+    final opts = [...merged, 'Other'];
     final safeValue = opts.contains(value) ? value : 'Other';
+    String pretty(String d) => d.split(' ').map((w) => w.isEmpty ? w : '${w[0]}${w.substring(1).toLowerCase()}').join(' ');
     return Column(children: [
       DropdownButtonFormField<String>(
         key: ValueKey('dest-${opts.join(',')}'),
         initialValue: safeValue,
+        isExpanded: true,
         decoration: InputDecoration(labelText: tr('Destination *')),
         items: [
           for (final d in opts)
-            DropdownMenuItem(value: d, child: Text(d == 'Other' ? tr('Add new / other…') : '${d[0]}${d.substring(1).toLowerCase()}')),
+            DropdownMenuItem(value: d, child: Text(d == 'Other' ? tr('Add new / other…') : pretty(d), overflow: TextOverflow.ellipsis)),
         ],
         onChanged: (v) => onChanged(v ?? safeValue),
       ),
@@ -372,7 +422,7 @@ class _DestinationField extends StatelessWidget {
           controller: otherCtl,
           textCapitalization: TextCapitalization.characters,
           decoration: InputDecoration(labelText: tr('Destination name *'), hintText: 'e.g. LUDHIANA'),
-          onChanged: onChanged,
+          onChanged: (v) => onTyped?.call(v),
         ),
       ],
     ]);
@@ -392,7 +442,7 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
   final truck = TextEditingController();
   final otherDest = TextEditingController();
   final remarks = TextEditingController();
-  String destination = 'NEEMRANA';
+  String destination = kDefaultDestination;
   DateTime date = DateTime.now();
   bool saving = false;
   /// Truck master list (number + destination) — dropdown filters by the
@@ -468,7 +518,7 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
     truck.clear();
     otherDest.clear();
     remarks.clear();
-    destination = 'NEEMRANA';
+    destination = kDefaultDestination;
     date = DateTime.now();
     for (final l in lines) { l.dispose(); }
     lines
@@ -495,7 +545,7 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
     final d = _draft;
     if (d == null) return;
     truck.text = d['truck'] as String? ?? '';
-    destination = d['destination'] as String? ?? 'NEEMRANA';
+    destination = d['destination'] as String? ?? kDefaultDestination;
     otherDest.text = d['otherDest'] as String? ?? '';
     remarks.text = d['remarks'] as String? ?? '';
     date = DateTime.tryParse(d['date'] as String? ?? '') ?? DateTime.now();
@@ -691,21 +741,23 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
           ]),
           const SizedBox(height: 12),
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Expanded(child: _DestinationField(options: _destOptions, value: destination, otherCtl: otherDest, onChanged: (v) => setState(() {
-              if (kDispatchDestinations.contains(v)) {
-                destination = v;
-              } else {
-                otherDest.text = v;
-              }
-            }))),
+            Expanded(child: _DestinationField(
+              options: _destOptions,
+              value: destination,
+              otherCtl: otherDest,
+              onChanged: (v) => setState(() => destination = v),
+              onTyped: (_) => setState(() {}),
+            )),
             const SizedBox(width: 12),
             Expanded(child: TextField(controller: remarks, decoration: InputDecoration(labelText: tr('Remarks')))),
           ]),
           const SizedBox(height: 20),
-          Align(alignment: Alignment.centerLeft, child: Text(tr('Loading lines (cartons & trays)'), style: TextStyle(fontWeight: FontWeight.w700, color: scheme.onSurface))),
+          Align(alignment: Alignment.centerLeft, child: Text(CompanyProfile.usesTrays ? '${tr('Loading lines')} (${U.carton.toLowerCase()} & ${U.trayLc})' : '${tr('Loading lines')} (${U.carton.toLowerCase()})', style: TextStyle(fontWeight: FontWeight.w700, color: scheme.onSurface))),
           const SizedBox(height: 10),
           products.isEmpty
-              ? const SizedBox(height: 60, child: Center(child: CircularProgressIndicator()))
+              ? (productsLoaded
+                  ? _NoProductsHint(onAdd: () => context.go('/products'))
+                  : const SizedBox(height: 60, child: Center(child: CircularProgressIndicator())))
               : _LinesEditor(products: products, lines: lines, onAdd: addLine, onRemove: removeLine, onChanged: recalcDebounced, showBatch: true),
         ]));
         final side = SectionCard(title: 'Before you dispatch', child: Column(children: [
@@ -717,7 +769,9 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
               width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(color: scheme.surfaceContainerHighest.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(12)),
-              child: Text(tr('Add cartons or trays to see the live weight summary.'),
+              child: Text(CompanyProfile.usesTrays
+                      ? 'Add ${U.carton.toLowerCase()} or ${U.trayLc} to see the live weight summary.'
+                      : 'Add ${U.carton.toLowerCase()} to see the live weight summary.',
                   style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
             ),
           SizedBox(
@@ -753,7 +807,7 @@ class _CalculatorTabState extends State<_CalculatorTab> with _CalcMixin {
   final truck = TextEditingController();
   final otherDest = TextEditingController();
   List<String> get _savedDests => _EntryTabState._savedDests;
-  String destination = 'NEEMRANA';
+  String destination = kDefaultDestination;
   DateTime date = DateTime.now();
   bool exporting = false;
 
@@ -802,16 +856,18 @@ class _CalculatorTabState extends State<_CalculatorTab> with _CalcMixin {
             Expanded(child: _DateField(date: date, onPick: (d) => setState(() => date = d))),
           ]),
           const SizedBox(height: 12),
-          _DestinationField(options: _savedDests, value: destination, otherCtl: otherDest, onChanged: (v) => setState(() {
-            if (kDispatchDestinations.contains(v)) {
-              destination = v;
-            } else {
-              otherDest.text = v;
-            }
-          })),
+          _DestinationField(
+            options: _savedDests,
+            value: destination,
+            otherCtl: otherDest,
+            onChanged: (v) => setState(() => destination = v),
+            onTyped: (_) => setState(() {}),
+          ),
           const SizedBox(height: 16),
           products.isEmpty
-              ? const SizedBox(height: 60, child: Center(child: CircularProgressIndicator()))
+              ? (productsLoaded
+                  ? _NoProductsHint(onAdd: () => context.go('/products'))
+                  : const SizedBox(height: 60, child: Center(child: CircularProgressIndicator())))
               : _LinesEditor(products: products, lines: lines, onAdd: addLine, onRemove: removeLine, onChanged: recalcDebounced),
         ]));
         final side = SectionCard(title: 'Calculated Weights', child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -832,7 +888,9 @@ class _CalculatorTabState extends State<_CalculatorTab> with _CalcMixin {
               child: Column(children: [
                 Icon(Icons.calculate_outlined, size: 38, color: scheme.outline),
                 const SizedBox(height: 8),
-                Text(tr('Enter cartons / trays to auto-calculate\nweights, bottles and carton counts.'),
+                Text(CompanyProfile.usesTrays
+                        ? 'Enter ${U.carton.toLowerCase()} / ${U.trayLc} to auto-calculate\nweights, ${U.piece.toLowerCase()} and ${U.carton.toLowerCase()} counts.'
+                        : 'Enter ${U.carton.toLowerCase()} to auto-calculate\nweights and ${U.piece.toLowerCase()} counts.',
                     textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
               ]),
             ),
@@ -1002,7 +1060,7 @@ class _TrucksTabState extends State<_TrucksTab> {
   Future<void> _add() async {
     final number = TextEditingController();
     final otherDest = TextEditingController();
-    String dest = 'NEEMRANA';
+    String dest = kDefaultDestination;
     final saved = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -1020,8 +1078,8 @@ class _TrucksTabState extends State<_TrucksTab> {
               initialValue: dest,
               isExpanded: true,
               decoration: InputDecoration(labelText: tr('Destination *')),
-              items: [for (final d in kDispatchDestinations) DropdownMenuItem(value: d, child: Text(d))],
-              onChanged: (v) => setD(() => dest = v ?? 'NEEMRANA'),
+              items: [for (final d in kDispatchDestinations) DropdownMenuItem(value: d, child: Text(d == 'Other' ? tr('Add new / other…') : d))],
+              onChanged: (v) => setD(() => dest = v ?? kDefaultDestination),
             ),
             if (dest == 'Other') ...[
               const SizedBox(height: 12),

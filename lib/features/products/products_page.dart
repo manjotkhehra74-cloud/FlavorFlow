@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/company.dart';
+import '../../core/industry_pack.dart';
 import '../../core/format.dart';
 import '../../core/i18n.dart';
 import '../../state/auth.dart';
@@ -72,7 +73,7 @@ class _ProductsPageState extends State<ProductsPage> {
         return ListView(padding: const EdgeInsets.all(20), children: [
           Row(children: [
             Expanded(
-              child: Text('${products.length} ${tr('finished goods · carton & tray weights, bottle packing')}',
+              child: Text('${products.length} ${tr('finished goods')} · ${U.carton.toLowerCase()} ${CompanyProfile.usesTrays ? '& ${U.trayLc} ' : ''}${tr('weights')}, ${U.piece.toLowerCase()} ${tr('packing')}',
                   style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
             ),
             if (canManage)
@@ -89,7 +90,7 @@ class _ProductsPageState extends State<ProductsPage> {
           SectionCard(
             title: 'Finished Goods Master',
             child: AppDataTable(
-              columns: ['Product', 'Wt per ${U.cb} (kg)', 'Wt w/o ${U.cb} (kg)', '${U.piece} / ${U.cb}', '${U.piece} / ${U.tray}', '${U.tray} Wt (kg)', 'Min Stock (${U.cb})', 'Stock (${U.cb})', U.tray, ''],
+              columns: ['Product', 'Wt per ${U.cb} (kg)', 'Wt w/o ${U.cb} (kg)', '${U.piece} / ${U.cb}', if (CompanyProfile.usesTrays) '${U.piece} / ${U.tray}', if (CompanyProfile.usesTrays) '${U.tray} Wt (kg)', 'Min Stock (${U.cb})', 'Stock (${U.cb})', if (CompanyProfile.usesTrays) U.tray, ''],
               rows: [
                 for (var i = 0; i < products.length; i++)
                   [
@@ -97,11 +98,11 @@ class _ProductsPageState extends State<ProductsPage> {
                     qty(products[i]['weight_per_cb']),
                     qty(products[i]['weight_without_cb']),
                     qtyInt(products[i]['bottles_per_cb']),
-                    (products[i]['bottles_per_tray'] as num) > 0 ? qtyInt(products[i]['bottles_per_tray']) : '—',
-                    (products[i]['bottles_per_tray'] as num) > 0 ? qty(products[i]['tray_weight']) : '—',
+                    if (CompanyProfile.usesTrays) (products[i]['bottles_per_tray'] as num) > 0 ? qtyInt(products[i]['bottles_per_tray']) : '—',
+                    if (CompanyProfile.usesTrays) (products[i]['bottles_per_tray'] as num) > 0 ? qty(products[i]['tray_weight']) : '—',
                     qtyInt(products[i]['min_stock_cb']),
                     qtyInt(products[i]['qty_cb']),
-                    qtyInt(products[i]['qty_trays']),
+                    if (CompanyProfile.usesTrays) qtyInt(products[i]['qty_trays']),
                     if (canManage)
                       Row(mainAxisSize: MainAxisSize.min, children: [
                         IconButton(
@@ -157,8 +158,8 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
       'weightPerCb': num.tryParse(wcb.text) ?? 0,
       'weightWithoutCb': num.tryParse(wncb.text) ?? 0,
       'bottlesPerCb': int.tryParse(bpc.text) ?? 0,
-      'bottlesPerTray': int.tryParse(bpt.text) ?? 0,
-      'trayWeight': num.tryParse(trayWt.text) ?? 0,
+      'bottlesPerTray': CompanyProfile.usesTrays ? (int.tryParse(bpt.text) ?? 0) : 0,
+      'trayWeight': CompanyProfile.usesTrays ? (num.tryParse(trayWt.text) ?? 0) : 0,
       'minStockCb': int.tryParse(minStock.text) ?? 0,
     };
     try {
@@ -182,7 +183,7 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
       content: SizedBox(
         width: 460,
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          TextField(controller: name, decoration: InputDecoration(labelText: tr('Product name *'))),
+          TextField(controller: name, textCapitalization: TextCapitalization.words, decoration: InputDecoration(labelText: tr('Product name *'), hintText: IndustryPack.eg(IndustryPack.current.productExamples))),
           const SizedBox(height: 12),
           Row(children: [
             Expanded(child: TextField(controller: wcb, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('Weight per ${U.cb} (kg) *')))),
@@ -195,14 +196,16 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
             const SizedBox(width: 12),
             Expanded(child: TextField(controller: minStock, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('Min stock (${U.cb})')))),
           ]),
-          const SizedBox(height: 12),
-          Row(children: [
-            Expanded(child: TextField(controller: bpt, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('${U.piece} per ${U.trayLc} (0 = no ${U.trayLc})')))),
-            const SizedBox(width: 12),
-            Expanded(child: TextField(controller: trayWt, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('${U.tray} weight (kg)')))),
-          ]),
+          if (CompanyProfile.usesTrays) ...[
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(child: TextField(controller: bpt, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('${U.piece} per ${U.trayLc} (0 = no ${U.trayLc})')))),
+              const SizedBox(width: 12),
+              Expanded(child: TextField(controller: trayWt, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('${U.tray} weight (kg)')))),
+            ]),
+          ],
           const SizedBox(height: 8),
-          Text('Only Soya 740gm, Vinegar 610ml (white & brown), Soya 1.3kg and Vinegar 1.0 are tray-packed. Leave tray fields empty for others.',
+          Text(IndustryPack.current.productNote,
               style: TextStyle(fontSize: 11.5, color: Theme.of(context).colorScheme.onSurfaceVariant)),
         ]),
       ),

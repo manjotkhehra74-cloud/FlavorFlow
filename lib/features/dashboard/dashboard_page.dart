@@ -146,15 +146,8 @@ class _Header extends StatelessWidget {
 }
 
 /// Replace default-industry unit words in server-sent labels with the active
-/// industry's unit names (e.g. "Stock on Hand (CB)" → "... (Bale)").
-String _unitize(String label) {
-  var out = label;
-  if (U.cb != 'CB') out = out.replaceAll('(CB)', '(${U.cb})').replaceAll(' CB', ' ${U.cb}');
-  if (U.carton != 'Cartons') out = out.replaceAll('Cartons', U.carton);
-  if (U.tray != 'Trays') out = out.replaceAll('Trays', U.tray).replaceAll('trays', U.trayLc);
-  if (U.piece != 'Bottles') out = out.replaceAll('Bottles', U.piece).replaceAll('bottles', U.piece.toLowerCase());
-  return out;
-}
+/// industry's unit names (e.g. "Stock on Hand (CB)" → "... (Bag)").
+String _unitize(String label) => U.ize(label);
 
 class _KpiGrid extends StatelessWidget {
   final List<Map<String, dynamic>> items;

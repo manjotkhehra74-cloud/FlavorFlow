@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../core/i18n.dart';
@@ -101,7 +102,7 @@ class _ProductionDetailPageState extends State<ProductionDetailPage> {
               Row(children: [
                 Icon(Icons.info_outline_rounded, size: 16, color: scheme.onSurfaceVariant),
                 const SizedBox(width: 8),
-                Expanded(child: Text('Completing a batch adds produced CB directly into finished-goods inventory and notifies store and dispatch teams.',
+                Expanded(child: Text('Completing a batch adds produced ${U.cb} directly into finished-goods inventory and notifies store and dispatch teams.',
                     style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant))),
               ]),
             ]));

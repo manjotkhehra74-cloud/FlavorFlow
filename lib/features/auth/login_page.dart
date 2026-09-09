@@ -236,7 +236,7 @@ class _LoginPageState extends State<LoginPage> {
                 const SizedBox(height: 32),
                 for (final f in const [
                   'A different dashboard for every role',
-                  'Cartons & trays with automatic packing consumption',
+                  'Packing material consumed automatically per BOM',
                   'Stock adjustments with approval & audit trail',
                   'Truck loading calculator with PDF docket',
                   'Every report exports to PDF and Excel',
