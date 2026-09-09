@@ -29,6 +29,10 @@ List<String> get kDispatchDestinations => [...IndustryPack.current.destinations,
 /// Default destination for a fresh form = the industry's first typical one.
 String get kDefaultDestination => IndustryPack.current.destinations.first;
 
+/// Destinations that older builds hard-coded for the original sauce factory
+/// (purged once from other companies' phones on upgrade — see loadSavedDests).
+const kLegacyDestinations = ['NEEMRANA', 'MATIALA'];
+
 /// Dedicated Dispatch Module: entry · truck loading calculator · history · reports.
 class DispatchPage extends StatefulWidget {
   final String? tab;
@@ -464,10 +468,27 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
     return l;
   }
 
+  /// Old builds hard-coded the original sauce factory's NEEMRANA / MATIALA
+  /// as defaults, so phones of OTHER companies may have them saved without
+  /// anyone ever typing them. Purged ONCE on upgrade (food industry keeps
+  /// them — they are real depots there); after that nothing is filtered, so
+  /// a company that really ships to Neemrana can type it and keep it.
+  static bool _isLegacyDest(String d) =>
+      CompanyProfile.current.industry != 'food' && kLegacyDestinations.contains(d.trim().toUpperCase());
+
   static Future<void> loadSavedDests() async {
     try {
       final p = await SharedPreferences.getInstance();
-      _savedDests = p.getStringList('dispatch_dests') ?? [];
+      var list = p.getStringList('dispatch_dests') ?? [];
+      // purge pending until a NON-food industry is actually known (profile
+      // may still be loading on the very first launch after upgrade)
+      if (CompanyProfile.current.industry != 'food' && !(p.getBool('dispatch_dests_v2') ?? false)) {
+        final cleaned = list.where((d) => !_isLegacyDest(d)).toList();
+        if (cleaned.length != list.length) await p.setStringList('dispatch_dests', cleaned);
+        await p.setBool('dispatch_dests_v2', true);
+        list = cleaned;
+      }
+      _savedDests = list;
     } catch (_) {}
   }
 
@@ -546,6 +567,7 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
     if (d == null) return;
     truck.text = d['truck'] as String? ?? '';
     destination = d['destination'] as String? ?? kDefaultDestination;
+    if (_isLegacyDest(destination) && !_destOptions.contains(destination.toUpperCase())) destination = kDefaultDestination;
     otherDest.text = d['otherDest'] as String? ?? '';
     remarks.text = d['remarks'] as String? ?? '';
     date = DateTime.tryParse(d['date'] as String? ?? '') ?? DateTime.now();
