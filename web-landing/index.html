@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FlavorFlow — Manufacturing ERP for Every Industry</title>
+<meta name="description" content="Production batches, GPS dispatch, inventory, packing loss % and reports — a complete manufacturing ERP for Indian factories. 30-day free trial.">
+<style>
+:root{--blue:#1E6FE0;--blue2:#1556B8;--green:#16B878;--green2:#07945D;--navy:#081C33;--ink:#172334;--sub:#617083;--bg:#F4F7FB;--line:#DDE6EF}
+*{box-sizing:border-box;margin:0}
+body{font-family:Inter,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:var(--ink);background:#fff;line-height:1.5}
+.grad{background:linear-gradient(120deg,var(--blue),#258FD0,var(--green))}
+.wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+header{position:sticky;top:0;background:#fffdf;background:rgba(255,255,255,.95);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);z-index:50}
+.nav{display:flex;align-items:center;gap:12px;height:62px}
+.logo{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;color:#fff;font-weight:800;font-size:17px}
+.nav b{font-size:19px;letter-spacing:-.4px}
+.nav .cta{margin-left:auto;display:flex;gap:9px}
+.btn{display:inline-block;padding:11px 18px;border-radius:10px;font-weight:700;font-size:14px;text-decoration:none;border:0;cursor:pointer;font-family:inherit}
+.btn-p{color:#fff}
+.btn-o{color:var(--ink);border:1.5px solid var(--line);background:#fff}
+.hero{padding:64px 0 40px;text-align:center;background:radial-gradient(circle at 20% 10%,#E7F1FF 0,transparent 45%),radial-gradient(circle at 85% 20%,#E1F8EF 0,transparent 40%)}
+.hero h1{font-size:clamp(30px,6vw,50px);letter-spacing:-1.4px;line-height:1.12}
+.hero h1 span{background:linear-gradient(100deg,var(--blue),var(--green2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero p{color:var(--sub);font-size:17px;max-width:640px;margin:16px auto 26px}
+.hero .btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.trust{margin-top:26px;color:var(--sub);font-size:13px}
+.sec{padding:56px 0}
+.sec h2{font-size:clamp(22px,4vw,32px);letter-spacing:-.7px;text-align:center}
+.sec .sub{text-align:center;color:var(--sub);margin:8px auto 34px;max-width:560px}
+.feat{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.card{background:#fff;border:1px solid var(--line);border-radius:15px;padding:22px}
+.card .ic{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;font-size:20px;margin-bottom:12px}
+.card h3{font-size:16px;margin-bottom:6px}
+.card p{color:var(--sub);font-size:13.5px}
+.inds{display:flex;flex-wrap:wrap;gap:9px;justify-content:center}
+.chip{padding:9px 16px;border-radius:999px;border:1px solid var(--line);background:#fff;font-size:13.5px;font-weight:600;color:var(--ink)}
+.band{color:#fff;text-align:center;padding:54px 20px;border-radius:22px}
+.band h2{font-size:clamp(22px,4vw,30px);letter-spacing:-.6px}
+.band p{opacity:.9;margin:10px auto 22px;max-width:520px}
+.band .btn{background:#fff;color:var(--blue2)}
+.price{max-width:420px;margin:0 auto;text-align:center}
+.price .big{font-size:44px;font-weight:800;letter-spacing:-1px}
+.price ul{list-style:none;padding:0;margin:18px 0;color:var(--sub);font-size:14.5px}
+.price li{padding:7px 0;border-bottom:1px dashed var(--line)}
+footer{border-top:1px solid var(--line);padding:28px 0;color:var(--sub);font-size:13px}
+footer .wrap{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center}
+footer a{color:var(--sub)}
+/* modal */
+.mback{position:fixed;inset:0;background:rgba(8,28,51,.55);display:none;place-items:center;z-index:100;padding:16px}
+.mback.open{display:grid}
+.modal{background:#fff;border-radius:18px;padding:26px;width:min(100%,460px);max-height:92vh;overflow:auto}
+.modal h3{font-size:20px;letter-spacing:-.4px;margin-bottom:4px}
+.modal .note{color:var(--sub);font-size:13px;margin-bottom:16px}
+.modal label{display:block;font-size:12.5px;font-weight:700;margin:12px 0 5px}
+.modal input,.modal select{width:100%;padding:12px 13px;border:1.5px solid #C9D5E2;border-radius:10px;font:inherit;font-size:14px}
+.modal input:focus,.modal select:focus{outline:0;border-color:var(--blue)}
+.modal .row{display:flex;gap:10px;margin-top:18px}
+.modal .row .btn{flex:1;text-align:center}
+.msg{margin-top:12px;font-size:13px;font-weight:600;display:none}
+.msg.err{color:#C52B35;display:block}
+.msg.ok{color:var(--green2);display:block}
+.result{display:none;background:#F0FDF6;border:1px solid #B7E7CD;border-radius:12px;padding:16px;margin-top:14px;font-size:13.5px}
+.result.show{display:block}
+.result code{display:block;background:#fff;border:1px dashed #B7E7CD;padding:9px;border-radius:8px;margin:7px 0;word-break:break-all;font-size:12.5px}
+.wa{position:fixed;right:18px;bottom:18px;width:54px;height:54px;border-radius:50%;background:#25D366;display:grid;place-items:center;box-shadow:0 8px 22px rgba(0,0,0,.22);z-index:60}
+.wa svg{width:29px;height:29px;fill:#fff}
+@media(max-width:600px){.nav .btn-o{display:none}.sec{padding:40px 0}}
+</style>
+</head>
+<body>
+
+<header><div class="wrap nav">
+  <div class="logo grad">F</div><b>FlavorFlow</b>
+  <div class="cta">
+    <a class="btn btn-o" href="#" onclick="openM('demo');return false">Try Demo</a>
+    <a class="btn btn-p grad" href="#" onclick="openM('reg');return false">Start Free Trial</a>
+  </div>
+</div></header>
+
+<section class="hero"><div class="wrap">
+  <h1>Your factory, <span>fully digital.</span></h1>
+  <p>Production batches, GPS-stamped dispatch, inventory with batch codes, packing loss % and one-tap PDF reports — everything an Indian manufacturing unit needs, in one app. In 8 languages.</p>
+  <div class="btns">
+    <a class="btn btn-p grad" href="#" onclick="openM('reg');return false">Start 30-Day Free Trial</a>
+    <a class="btn btn-o" href="#" onclick="openM('demo');return false">See Live Demo First</a>
+  </div>
+  <div class="trust">No credit card needed · Your data stays in your own private database</div>
+</div></section>
+
+<section class="sec"><div class="wrap">
+  <h2>Everything on one screen</h2>
+  <p class="sub">Built inside a real factory — G.D. Foods (soya sauce & vinegar, Punjab) — then made ready for every industry.</p>
+  <div class="feat">
+    <div class="card"><div class="ic" style="background:#E7F1FF">🏭</div><h3>Production Batches</h3><p>Plan → start → complete. Batch codes, planned vs produced, auto stock-in to finished goods.</p></div>
+    <div class="card"><div class="ic" style="background:#E1F8EF">🚚</div><h3>Dispatch & Trucks</h3><p>Truck loading calculator, GPS-stamped entries, batch-wise stock deduction, PDF challans, void & re-enter.</p></div>
+    <div class="card"><div class="ic" style="background:#FFF4E0">📦</div><h3>Inventory & Raw Material</h3><p>Cartons + trays + bottles tracked separately. Raw material recipes, receipts and consumption ledger.</p></div>
+    <div class="card"><div class="ic" style="background:#FDEBEF">📉</div><h3>Packing Loss %</h3><p>BOM-based expected vs actual consumption, monthly loss sheet, month-close with closing → opening.</p></div>
+    <div class="card"><div class="ic" style="background:#EFEAFB">📊</div><h3>Reports & PDF/Excel</h3><p>Stock, dispatch register, batch-wise stock, loss sheets — share as PDF or Excel in one tap.</p></div>
+    <div class="card"><div class="ic" style="background:#E5F7FA">🔔</div><h3>Roles & Alerts</h3><p>Role-based permissions, low-stock and approval alerts, phone notifications, daily-entry reminders.</p></div>
+    <div class="card"><div class="ic" style="background:#E7F1FF">🗣️</div><h3>8 Languages</h3><p>English, ਪੰਜਾਬੀ, हिन्दी, ગુજરાતી, मराठी, বাংলা, தமிழ், తెలుగు — your team works in their language.</p></div>
+    <div class="card"><div class="ic" style="background:#E1F8EF">🔒</div><h3>Private & Secure</h3><p>Every company gets its own separate database. Biometric login and 2FA built in.</p></div>
+  </div>
+</div></section>
+
+<section class="sec" style="background:var(--bg)"><div class="wrap">
+  <h2>Made for your industry</h2>
+  <p class="sub">Pick your industry at setup — units, features and screens adapt automatically.</p>
+  <div class="inds">
+    <span class="chip">Food & Beverage</span><span class="chip">Dairy</span><span class="chip">Edible Oil</span><span class="chip">Bakery & Snacks</span><span class="chip">Beverages / Water</span><span class="chip">Soap & Detergent</span><span class="chip">Cosmetics</span><span class="chip">Paint & Lubricants</span><span class="chip">Agro-chemicals</span><span class="chip">Pharma / Ayurvedic</span><span class="chip">Textile / Hosiery</span><span class="chip">Rice / Flour / Feed Mill</span><span class="chip">Footwear</span><span class="chip">Plastic & Packaging</span><span class="chip">Utensils & Hardware</span><span class="chip">General Manufacturing</span>
+  </div>
+</div></section>
+
+<section class="sec"><div class="wrap price">
+  <h2>Simple pricing</h2>
+  <div style="margin-top:22px" class="card">
+    <div style="color:var(--sub);font-weight:700;font-size:13px">FIRST 30 DAYS</div>
+    <div class="big">Free</div>
+    <ul>
+      <li>Full ERP — nothing locked</li>
+      <li>Your own private database</li>
+      <li>Unlimited users & products</li>
+      <li>WhatsApp support</li>
+    </ul>
+    <div style="color:var(--sub);font-size:13px;margin-bottom:14px">After trial: simple monthly plan — we'll talk on WhatsApp before your trial ends. No auto-charges.</div>
+    <a class="btn btn-p grad" href="#" onclick="openM('reg');return false" style="width:100%">Start Free Trial</a>
+  </div>
+</div></section>
+
+<section class="sec"><div class="wrap"><div class="band grad">
+  <h2>Get the app</h2>
+  <p>FlavorFlow ERP for Android — Play Store listing coming soon. Register now and we'll WhatsApp you the download link.</p>
+  <a class="btn" href="https://wa.me/919501606877?text=Hi%2C%20I%20want%20the%20FlavorFlow%20ERP%20app" target="_blank" rel="noopener">WhatsApp Us</a>
+</div></div></section>
+
+<footer><div class="wrap">
+  <div>© 2026 FlavorFlow · Made in Punjab, India 🇮🇳</div>
+  <div><a href="https://wa.me/919501606877">Contact: +91 95016 06877 (WhatsApp)</a> · <a href="/privacy.html">Privacy Policy</a></div>
+</div></footer>
+
+<a class="wa" href="https://wa.me/919501606877?text=Hi%2C%20I%20have%20a%20question%20about%20FlavorFlow%20ERP" target="_blank" rel="noopener" aria-label="WhatsApp">
+<svg viewBox="0 0 32 32"><path d="M16 3C9.4 3 4 8.4 4 15c0 2.1.6 4.2 1.7 6L4 29l8.2-1.6c1.2.6 2.5.9 3.8.9 6.6 0 12-5.4 12-12S22.6 3 16 3zm6.6 16.9c-.3.8-1.6 1.5-2.2 1.6-.6.1-1.3.2-3.7-.8-3.1-1.3-5.1-4.4-5.3-4.6-.2-.2-1.3-1.7-1.3-3.2s.8-2.3 1.1-2.6c.3-.3.6-.4.8-.4h.6c.2 0 .5-.1.7.5l1 2.5c.1.2.1.4 0 .6l-.4.7-.6.6c-.2.2-.4.4-.2.7.2.4 1 1.6 2.1 2.6 1.5 1.3 2.7 1.7 3.1 1.9.4.2.6.2.8-.1.2-.2 1-1.1 1.2-1.5.2-.4.5-.3.8-.2l2.5 1.2c.4.2.6.3.7.4.1.3.1 1-.2 1.8z"/></svg>
+</a>
+
+<!-- DEMO modal -->
+<div class="mback" id="m-demo" onclick="if(event.target===this)closeM('demo')">
+  <form class="modal" onsubmit="return doDemo(event)">
+    <h3>See FlavorFlow live</h3>
+    <div class="note">Fill your details — the live demo opens right after (dummy factory data, resets nightly).</div>
+    <label>Your name *</label><input id="d-name" required minlength="2" placeholder="e.g. Gurpreet Singh">
+    <label>Company name *</label><input id="d-co" required minlength="2" placeholder="e.g. Khalsa Foods">
+    <label>WhatsApp number *</label><input id="d-ph" required pattern="[0-9+ ]{10,15}" placeholder="e.g. 98765 43210">
+    <label>Industry</label>
+    <select id="d-ind"><option>Food & Beverage</option><option>Dairy</option><option>Edible Oil</option><option>Bakery & Snacks</option><option>Beverages / Water</option><option>Soap & Detergent</option><option>Cosmetics & Personal Care</option><option>Paint & Lubricants</option><option>Agro-chemicals & Fertilizer</option><option>Pharma / Ayurvedic</option><option>Textile / Hosiery</option><option>Rice / Flour / Feed Mill</option><option>Footwear</option><option>Plastic & Packaging</option><option>Utensils & Hardware</option><option>General Manufacturing</option></select>
+    <div class="msg" id="d-msg"></div>
+    <div class="row">
+      <button type="button" class="btn btn-o" onclick="closeM('demo')">Cancel</button>
+      <button class="btn btn-p grad" id="d-go">Open Live Demo →</button>
+    </div>
+  </form>
+</div>
+
+<!-- REGISTER modal -->
+<div class="mback" id="m-reg" onclick="if(event.target===this)closeM('reg')">
+  <form class="modal" onsubmit="return doReg(event)">
+    <h3>Start your 30-day free trial</h3>
+    <div class="note">Your company gets its own private database. You are the admin.</div>
+    <label>Company name *</label><input id="r-co" required minlength="3" placeholder="e.g. Khalsa Foods Pvt. Ltd.">
+    <label>Industry *</label>
+    <select id="r-ind"><option>Food & Beverage</option><option>Dairy</option><option>Edible Oil</option><option>Bakery & Snacks</option><option>Beverages / Water</option><option>Soap & Detergent</option><option>Cosmetics & Personal Care</option><option>Paint & Lubricants</option><option>Agro-chemicals & Fertilizer</option><option>Pharma / Ayurvedic</option><option>Textile / Hosiery</option><option>Rice / Flour / Feed Mill</option><option>Footwear</option><option>Plastic & Packaging</option><option>Utensils & Hardware</option><option>General Manufacturing</option></select>
+    <label>Your name *</label><input id="r-name" required minlength="2">
+    <label>WhatsApp number *</label><input id="r-ph" required pattern="[0-9+ ]{10,15}" placeholder="e.g. 98765 43210">
+    <label>Admin email * <span style="color:var(--sub);font-weight:500">(this will be your login)</span></label><input id="r-em" type="email" required>
+    <label>Admin password * <span style="color:var(--sub);font-weight:500">(min 8 characters)</span></label><input id="r-pw" type="password" required minlength="8">
+    <div class="msg" id="r-msg"></div>
+    <div class="result" id="r-res">
+      <b>🎉 Company created!</b><br><br>
+      <b>Company code:</b><code id="r-code"></code>
+      <b>Server address (paste in the app):</b><code id="r-url"></code>
+      <b>Login:</b> your email + the password you chose.<br><br>
+      1. Download FlavorFlow ERP (we'll WhatsApp you the link)<br>
+      2. On the login screen tap the ✏️ next to the server address<br>
+      3. Paste the server address above → Sign in<br><br>
+      <b>Trial ends:</b> <span id="r-trial"></span> — save a screenshot of this box!
+    </div>
+    <div class="row" id="r-btns">
+      <button type="button" class="btn btn-o" onclick="closeM('reg')">Cancel</button>
+      <button class="btn btn-p grad" id="r-go">Create My Company →</button>
+    </div>
+  </form>
+</div>
+
+<script>
+function openM(x){document.getElementById('m-'+x).classList.add('open')}
+function closeM(x){document.getElementById('m-'+x).classList.remove('open')}
+async function lead(kind,data){try{await fetch('/api/saas/lead',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,...data})})}catch(e){}}
+async function doDemo(e){
+  e.preventDefault();
+  const b=document.getElementById('d-go');b.disabled=true;b.textContent='Opening…';
+  const data={name:d_v('d-name'),company:d_v('d-co'),phone:d_v('d-ph'),industry:d_v('d-ind')};
+  await lead('demo',data);
+  window.location.href='/demo.html';
+  return false;
+}
+function d_v(id){return document.getElementById(id).value.trim()}
+async function doReg(e){
+  e.preventDefault();
+  const b=document.getElementById('r-go'),m=document.getElementById('r-msg');
+  b.disabled=true;b.textContent='Creating…';m.className='msg';
+  const body={company:d_v('r-co'),industry:d_v('r-ind'),adminName:d_v('r-name'),adminEmail:d_v('r-em'),adminPassword:document.getElementById('r-pw').value};
+  await lead('register',{name:body.adminName,company:body.company,phone:d_v('r-ph'),industry:body.industry});
+  try{
+    const r=await fetch('/api/saas/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();
+    if(!r.ok){m.textContent=d.error||'Something went wrong — try again.';m.className='msg err';b.disabled=false;b.textContent='Create My Company →';return false}
+    document.getElementById('r-code').textContent=d.companyCode;
+    document.getElementById('r-url').textContent=d.serverUrl;
+    document.getElementById('r-trial').textContent=d.trialEnds;
+    document.getElementById('r-res').classList.add('show');
+    document.getElementById('r-btns').style.display='none';
+  }catch(x){m.textContent='Network error — check your internet and try again.';m.className='msg err';b.disabled=false;b.textContent='Create My Company →'}
+  return false;
+}
+</script>
+</body>
+</html>
