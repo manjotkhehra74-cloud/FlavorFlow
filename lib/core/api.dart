@@ -16,16 +16,17 @@ class ApiException implements Exception {
 /// Thin REST client. The server is the authority — every call is re-authorized.
 class ApiClient {
   /// API base URL resolution order:
-  /// 1. `--dart-define=API_BASE=...` (dev / emulator).
-  /// 2. The address SAVED by the user (native apps need it once — persisted).
-  /// 3. Same origin as the page (web builds served by the ERP itself — works
-  ///    for localhost PCs, 192.168.x.x LAN and https cloud domains).
+  /// 1. The address SAVED by the user (login-screen ✏️) — must WIN so a user
+  ///    can point the app at any server (SaaS tenants), even in release
+  ///    builds that bake in a default via --dart-define.
+  /// 2. `--dart-define=API_BASE=...` (release default / dev emulator).
+  /// 3. Same origin as the page (web builds served by the ERP itself).
   /// 4. localhost:4000 convenience when the page itself is on localhost.
   /// 5. null → the login screen asks the user to set the server address.
   String? get baseUrl {
+    if (_savedBase != null && _savedBase!.isNotEmpty) return _savedBase;
     const fromEnv = String.fromEnvironment('API_BASE');
     if (fromEnv.isNotEmpty) return fromEnv;
-    if (_savedBase != null && _savedBase!.isNotEmpty) return _savedBase;
     try {
       final b = Uri.base;
       if ((b.scheme == 'http' || b.scheme == 'https') && b.host.isNotEmpty) {
