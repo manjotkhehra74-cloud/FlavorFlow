@@ -71,7 +71,7 @@ footer a{color:var(--sub)}
 <body>
 
 <header><div class="wrap nav">
-  <div class="logo grad">F</div><b>FlavorFlow</b>
+  <img src="/app-icon.png" alt="FlavorFlow" style="width:34px;height:34px;border-radius:9px;border:1px solid #DDE6EF"><b>FlavorFlow</b>
   <div class="cta">
     <a class="btn btn-o" href="#" onclick="openM('demo');return false">Try Demo</a>
     <a class="btn btn-p grad" href="#" onclick="openM('reg');return false">Start Free Trial</a>
@@ -82,7 +82,7 @@ footer a{color:var(--sub)}
   <h1>Your factory, <span>fully digital.</span></h1>
   <p>Production batches, GPS-stamped dispatch, inventory with batch codes, packing loss % and one-tap PDF reports — everything an Indian manufacturing unit needs, in one app. In 8 languages.</p>
   <div class="btns">
-    <a class="btn btn-p grad" href="#" onclick="openM('reg');return false">Start 30-Day Free Trial</a>
+    <a class="btn btn-p grad" href="#" onclick="openM('reg');return false">Start 10-Day Free Trial</a>
     <a class="btn btn-o" href="#" onclick="openM('demo');return false">See Live Demo First</a>
   </div>
   <div class="trust">No credit card needed · Your data stays in your own private database</div>
@@ -114,7 +114,7 @@ footer a{color:var(--sub)}
 <section class="sec"><div class="wrap price">
   <h2>Simple pricing</h2>
   <div style="margin-top:22px" class="card">
-    <div style="color:var(--sub);font-weight:700;font-size:13px">FIRST 30 DAYS</div>
+    <div style="color:var(--sub);font-weight:700;font-size:13px">FIRST 10 DAYS</div>
     <div class="big">Free</div>
     <ul>
       <li>Full ERP — nothing locked</li>
@@ -163,7 +163,7 @@ footer a{color:var(--sub)}
 <!-- REGISTER modal -->
 <div class="mback" id="m-reg" onclick="if(event.target===this)closeM('reg')">
   <form class="modal" onsubmit="return doReg(event)">
-    <h3>Start your 30-day free trial</h3>
+    <h3>Start your 10-day free trial</h3>
     <div class="note">Your company gets its own private database. You are the admin.</div>
     <label>Company name *</label><input id="r-co" required minlength="3" placeholder="e.g. Khalsa Foods Pvt. Ltd.">
     <label>Industry *</label>
@@ -199,6 +199,9 @@ async function doDemo(e){
   const b=document.getElementById('d-go');b.disabled=true;b.textContent='Opening…';
   const data={name:d_v('d-name'),company:d_v('d-co'),phone:d_v('d-ph'),industry:d_v('d-ind')};
   await lead('demo',data);
+  // demo page + WhatsApp message with their details prefilled — one tap sends
+  const txt=encodeURIComponent('Hi FlavorFlow! Demo request:\nName: '+data.name+'\nCompany: '+data.company+'\nIndustry: '+data.industry+'\nWhatsApp: '+data.phone+'\nPlease send me the app link.');
+  try{window.open('https://wa.me/919501606877?text='+txt,'_blank')}catch(e){}
   window.location.href='/demo.html';
   return false;
 }

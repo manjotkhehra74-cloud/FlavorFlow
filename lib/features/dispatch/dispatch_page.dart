@@ -341,26 +341,32 @@ class _DateField extends StatelessWidget {
   }
 }
 
-/// Destination selector: NEEMRANA / MATIALA / Other (free text).
+/// Destination selector — options come from the company's own truck master +
+/// destinations they've typed before (saved on this phone). Factory default
+/// (Neemrana/Matiala) only when no company list exists on a non-SaaS server.
 class _DestinationField extends StatelessWidget {
   final String value;
   final TextEditingController otherCtl;
   final ValueChanged<String> onChanged;
-  const _DestinationField({required this.value, required this.otherCtl, required this.onChanged});
+  final List<String> options;
+  const _DestinationField({required this.value, required this.otherCtl, required this.onChanged, this.options = const []});
 
   @override
   Widget build(BuildContext context) {
+    final opts = options.isNotEmpty ? [...options, 'Other'] : kDispatchDestinations;
+    final safeValue = opts.contains(value) ? value : 'Other';
     return Column(children: [
       DropdownButtonFormField<String>(
-        initialValue: value,
+        key: ValueKey('dest-${opts.join(',')}'),
+        initialValue: safeValue,
         decoration: InputDecoration(labelText: tr('Destination *')),
         items: [
-          for (final d in kDispatchDestinations)
-            DropdownMenuItem(value: d, child: Text(d == 'Other' ? 'Other (type below)' : '${d[0]}${d.substring(1).toLowerCase()}')),
+          for (final d in opts)
+            DropdownMenuItem(value: d, child: Text(d == 'Other' ? tr('Add new / other…') : '${d[0]}${d.substring(1).toLowerCase()}')),
         ],
-        onChanged: (v) => onChanged(v ?? 'NEEMRANA'),
+        onChanged: (v) => onChanged(v ?? safeValue),
       ),
-      if (value == 'Other') ...[
+      if (safeValue == 'Other') ...[
         const SizedBox(height: 12),
         TextField(
           controller: otherCtl,
@@ -392,6 +398,35 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
   /// Truck master list (number + destination) — dropdown filters by the
   /// selected destination; 'Other/new' falls back to free typing.
   List<Map<String, dynamic>> _trucks = [];
+
+  /// Company's own destination list: truck-master destinations + ones typed
+  /// before on this phone (persisted). Falls back to factory defaults inside
+  /// _DestinationField only when both are empty.
+  static List<String> _savedDests = [];
+  List<String> get _destOptions {
+    final set = <String>{};
+    for (final t in _trucks) {
+      final d = '${t['destination'] ?? ''}'.trim().toUpperCase();
+      if (d.isNotEmpty) set.add(d);
+    }
+    set.addAll(_savedDests);
+    final l = set.toList()..sort();
+    return l;
+  }
+
+  static Future<void> loadSavedDests() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      _savedDests = p.getStringList('dispatch_dests') ?? [];
+    } catch (_) {}
+  }
+
+  Future<void> _rememberDest(String d) async {
+    d = d.trim().toUpperCase();
+    if (d.isEmpty || d == 'OTHER' || _savedDests.contains(d)) return;
+    _savedDests = [..._savedDests, d]..sort();
+    try { (await SharedPreferences.getInstance()).setStringList('dispatch_dests', _savedDests); } catch (_) {}
+  }
 
   /// DRAFT: the half-filled entry survives leaving this screen (e.g. going
   /// to Production to create the missing batch) — restored on return,
@@ -484,6 +519,7 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
     _restoreDraft();
     _hasDraft = _draft != null;
     _restorePersistedDraft(); // app-restart case (async)
+    loadSavedDests().then((_) { if (mounted) setState(() {}); });
     if (!widget.readOnly) {
       loadProducts();
       _loadTrucks();
@@ -553,6 +589,7 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
       });
       if (!mounted) return;
       final id = (json as Map)['id'];
+      _rememberDest(_destination); // company's own list grows automatically
       _clearDraft(); // success — draft is no longer needed (memory + disk)
       _hasDraft = false;
       for (final l in lines) { l.cartons.clear(); l.trays.clear(); l.batchCode.clear(); }
@@ -654,7 +691,7 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
           ]),
           const SizedBox(height: 12),
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Expanded(child: _DestinationField(value: destination, otherCtl: otherDest, onChanged: (v) => setState(() {
+            Expanded(child: _DestinationField(options: _destOptions, value: destination, otherCtl: otherDest, onChanged: (v) => setState(() {
               if (kDispatchDestinations.contains(v)) {
                 destination = v;
               } else {
@@ -715,6 +752,7 @@ class _CalculatorTab extends StatefulWidget {
 class _CalculatorTabState extends State<_CalculatorTab> with _CalcMixin {
   final truck = TextEditingController();
   final otherDest = TextEditingController();
+  List<String> get _savedDests => _EntryTabState._savedDests;
   String destination = 'NEEMRANA';
   DateTime date = DateTime.now();
   bool exporting = false;
@@ -764,7 +802,7 @@ class _CalculatorTabState extends State<_CalculatorTab> with _CalcMixin {
             Expanded(child: _DateField(date: date, onPick: (d) => setState(() => date = d))),
           ]),
           const SizedBox(height: 12),
-          _DestinationField(value: destination, otherCtl: otherDest, onChanged: (v) => setState(() {
+          _DestinationField(options: _savedDests, value: destination, otherCtl: otherDest, onChanged: (v) => setState(() {
             if (kDispatchDestinations.contains(v)) {
               destination = v;
             } else {

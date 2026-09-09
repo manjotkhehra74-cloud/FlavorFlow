@@ -16,6 +16,7 @@ mkdir -p "$BASE/web"
 for f in index.html privacy.html demo.html; do
   curl -fsS "$RAW/$f" -o "$BASE/web/$f" || { echo "FATAL: $f download fail"; exit 1; }
 done
+curl -fsS "https://raw.githubusercontent.com/manjotkhehra74-cloud/FlavorFlow/arena/01a003d0-flavorflow/assets/icon/app_icon.png" -o "$BASE/web/app-icon.png" || echo "icon download fail (page fer vi chalegi)"
 echo "landing pages ✓ ($(ls -la $BASE/web/*.html | wc -l) files)"
 
 # 2) gateway: lead route (insert before the register route line)
