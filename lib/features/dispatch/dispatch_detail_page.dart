@@ -133,8 +133,10 @@ class _DispatchDetailPageState extends State<DispatchDetailPage> {
                 const SizedBox(height: 10),
                 Row(children: [
                   Expanded(child: _BigStat(label: '${U.carton} Weight', value: '${qty(d['carton_weight'])} kg', tint: AppColors.blue, small: true)),
-                  const SizedBox(width: 10),
-                  Expanded(child: _BigStat(label: 'Tray Weight', value: '${qty(d['tray_weight'])} kg', tint: AppColors.teal, small: true)),
+                  if (CompanyProfile.usesTrays) ...[
+                    const SizedBox(width: 10),
+                    Expanded(child: _BigStat(label: '${U.tray} Weight', value: '${qty(d['tray_weight'])} kg', tint: AppColors.teal, small: true)),
+                  ],
                 ]),
                 const SizedBox(height: 10),
                 Row(children: [

@@ -94,7 +94,7 @@ class _InventoryPageState extends State<InventoryPage> {
               mainAxisSpacing: 12, crossAxisSpacing: 12, childAspectRatio: ratio,
               children: [
                 KpiCard(label: 'Stock on Hand (${U.cb})', value: qtyInt(s['total_cb']), icon: Icons.warehouse_rounded, tint: AppColors.cyan),
-                KpiCard(label: '${U.tray} on Hand', value: qtyInt(s['total_trays']), icon: Icons.dinner_dining_rounded, tint: AppColors.teal),
+                if (CompanyProfile.usesTrays) KpiCard(label: '${U.tray} on Hand', value: qtyInt(s['total_trays']), icon: Icons.dinner_dining_rounded, tint: AppColors.teal),
                 KpiCard(label: 'Total ${U.piece}', value: qtyInt(s['total_bottles']), icon: Icons.liquor_rounded, tint: AppColors.blue),
                 KpiCard(label: 'Low Stock Items', value: qtyInt(s['low_count']), icon: Icons.warning_amber_rounded, tint: AppColors.red),
               ],
@@ -208,11 +208,15 @@ class _BatchStockSectionState extends State<_BatchStockSection> {
     try {
       final date = todayYmd();
       if (pdf) {
+        final (pcols, prows) = U.table(
+          (data['columns'] as List).cast<String>(),
+          (data['rows'] as List).map((r) => (r as List).cast<dynamic>()).toList(),
+        );
         final bytes = await ReportPdf.build(
-          title: data['title'] as String? ?? 'Batch-wise Stock',
-          desc: data['desc'] as String? ?? '',
-          columns: (data['columns'] as List).cast<String>(),
-          rows: (data['rows'] as List).map((r) => (r as List).cast<dynamic>()).toList(),
+          title: U.ize(data['title'] as String? ?? 'Batch-wise Stock'),
+          desc: U.ize(data['desc'] as String? ?? ''),
+          columns: pcols,
+          rows: prows,
         );
         await Printing.sharePdf(bytes: bytes, filename: 'flavorflow-batch-stock-$date.pdf');
       } else {
@@ -246,8 +250,12 @@ class _BatchStockSectionState extends State<_BatchStockSection> {
           );
         }
         final data = snap.data!;
-        final columns = (data['columns'] as List).cast<String>();
-        final rows = (data['rows'] as List).map((r) => (r as List).cast<dynamic>()).toList();
+        // Server table is written for the default industry (CB / Trays) —
+        // drop the tray column for industries without it, unitize headers.
+        final (columns, rows) = U.table(
+          (data['columns'] as List).cast<String>(),
+          (data['rows'] as List).map((r) => (r as List).cast<dynamic>()).toList(),
+        );
         return SectionCard(
           title: 'Batch-wise Stock',
           stackTrailingOnNarrow: true,

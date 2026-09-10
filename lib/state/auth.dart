@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/api.dart';
 import '../core/biometric.dart';
+import '../core/company.dart';
 
 class UserSession {
   final int id;
@@ -100,6 +101,10 @@ class AuthController extends ChangeNotifier {
       session = UserSession.fromJson(map);
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('token', api.token!);
+      // Company/industry of THIS tenant (units, categories, destinations)
+      // — refreshed on every login so a device that last opened a food
+      // company shows mill units the moment a rice mill signs in.
+      try { await CompanyProfile.load(api); } catch (_) {/* server route optional */}
       return null;
     } on ApiException catch (e) {
       return e.message;

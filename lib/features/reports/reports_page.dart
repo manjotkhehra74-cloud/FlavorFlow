@@ -50,7 +50,7 @@ class _ReportsPageState extends State<ReportsPage> {
     });
   }
 
-  List<String> get _columns => (_data?['columns'] as List? ?? const []).cast<String>().map(U.ize).toList();
+  List<String> get _columns => U.table((_data?['columns'] as List? ?? const []).cast<String>(), const []).$1;
 
   /// Empty-state text that tells a NEW company what feeds each report.
   String _emptyHint(String id) {
@@ -62,8 +62,10 @@ class _ReportsPageState extends State<ReportsPage> {
     if (id.contains('low')) return 'Nothing below minimum stock 🎉';
     return 'No data yet — add products in Products and receive opening stock; it appears here as you start working.';
   }
-  List<List<dynamic>> get _rows =>
-      ((_data?['rows'] as List? ?? const [])).map((r) => (r as List).cast<dynamic>()).toList();
+  List<List<dynamic>> get _rows => U.table(
+        (_data?['columns'] as List? ?? const []).cast<String>(),
+        ((_data?['rows'] as List? ?? const [])).map((r) => (r as List).cast<dynamic>()).toList(),
+      ).$2;
 
   Future<void> _exportExcel() async {
     if (_selected == null || _exporting) return;
@@ -217,9 +219,14 @@ class _ReportsPageState extends State<ReportsPage> {
           builder: (context, rsnap) {
             if (rsnap.hasError) return ErrorState(rsnap.error!, onRetry: () => setState(() => _select(_selected!)));
             if (!rsnap.hasData) return const Padding(padding: EdgeInsets.all(30), child: Center(child: CircularProgressIndicator()));
-            final columns = (rsnap.data!['columns'] as List).cast<String>().map(U.ize).toList();
-            final rows = (rsnap.data!['rows'] as List).map((r) => (r as List).cast<dynamic>()).toList();
-            final moneyCols = <int>{for (final i in (rsnap.data!['moneyColumns'] as List? ?? const [])) i as int};
+            final rawCols = (rsnap.data!['columns'] as List).cast<String>();
+            final (columns, rows) = U.table(rawCols, (rsnap.data!['rows'] as List).map((r) => (r as List).cast<dynamic>()).toList());
+            // money-column indexes shift when tray columns are dropped
+            final dropped = U.trayColumns(rawCols);
+            final moneyCols = <int>{
+              for (final m in (rsnap.data!['moneyColumns'] as List? ?? const []).cast<int>())
+                if (!dropped.contains(m)) m - dropped.where((d) => d < m).length,
+            };
             if (rows.isEmpty) {
               return EmptyState(_emptyHint(_selected!['id'] as String? ?? ''), icon: Icons.table_rows_outlined);
             }

@@ -310,6 +310,45 @@ class U {
     return out;
   }
 
+  /// Server-built tables (reports, dashboard widgets, batch-stock register)
+  /// are written for the default industry and always carry a Trays column.
+  /// For industries without a secondary unit the column is dropped from the
+  /// headers AND every row, and the remaining headers get the active unit
+  /// names — so a rice mill sees "BAGS" and never a "TRAYS" column.
+  static (List<String>, List<List<dynamic>>) table(List<String> columns, List<List<dynamic>> rows) {
+    var cols = columns;
+    var data = rows;
+    if (!CompanyProfile.usesTrays) {
+      final drop = <int>{
+        for (var i = 0; i < cols.length; i++)
+          if (_isTrayHeader(cols[i])) i,
+      };
+      if (drop.isNotEmpty) {
+        cols = [for (var i = 0; i < cols.length; i++) if (!drop.contains(i)) cols[i]];
+        data = [
+          for (final r in rows) [for (var i = 0; i < r.length; i++) if (!drop.contains(i)) r[i]],
+        ];
+      }
+    }
+    return ([for (final c in cols) ize(c)], data);
+  }
+
+  /// Indexes of tray columns removed by [table] — lets callers re-map
+  /// column-based options (money columns etc.) after the drop.
+  static List<int> trayColumns(List<String> columns) => [
+        for (var i = 0; i < columns.length; i++)
+          if (!CompanyProfile.usesTrays && _isTrayHeader(columns[i])) i,
+      ];
+
+  /// "Trays", "Trays Left", "Tray Wt", "Total Trays", "Bottles / Tray"…
+  /// (whole-word match only — a material column like "Tray Caps" is kept).
+  static bool _isTrayHeader(String h) {
+    final v = h.trim().toLowerCase();
+    if (v == 'trays' || v == 'tray') return true;
+    if (v.startsWith('trays ') || v.startsWith('trays(') || v.endsWith(' trays') || v.endsWith(' tray')) return true;
+    return v.startsWith('tray ') && (v.contains('wt') || v.contains('weight') || v.contains('left') || v.contains('(nos'));
+  }
+
   static String _singular(String plural) {
     if (plural == 'KG' || plural.toUpperCase() == plural) return plural; // KG, CB…
     if (plural.endsWith('ies')) return '${plural.substring(0, plural.length - 3)}y';

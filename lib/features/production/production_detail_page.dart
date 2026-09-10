@@ -82,7 +82,7 @@ class _ProductionDetailPageState extends State<ProductionDetailPage> {
               _row('Product', b['product_name'] as String),
               _row('Planned quantity', '${qtyInt(b['planned_cb'])} CB (${qty((b['planned_cb'] as num) * (b['weight_per_cb'] as num))} kg)'),
               _row('Produced quantity', (b['produced_trays'] as num? ?? 0) > 0
-                  ? '${qtyInt(b['produced_cb'])} CB + ${qtyInt(b['produced_trays'])} trays'
+                  ? '${qtyInt(b['produced_cb'])} ${U.cb} + ${qtyInt(b['produced_trays'])} ${U.trayLc}'
                   : '${qtyInt(b['produced_cb'])} CB'),
               _row('Planned date', b['planned_date'] == null ? '—' : fmtDateWithDay(b['planned_date'])),
               if ((b['remarks'] as String?)?.isNotEmpty ?? false) _row('Remarks', b['remarks'] as String),

@@ -74,7 +74,7 @@ class _ProductionPageState extends State<ProductionPage> {
             child: rows.isEmpty
                 ? const EmptyState('No batches')
                 : AppDataTable(
-                    columns: ['Batch', 'Product', 'Planned ${U.cb}', 'Produced ${U.cb}', U.tray, 'Gross kg (planned)', 'Planned Date', 'Status', 'Actions'],
+                    columns: ['Batch', 'Product', 'Planned ${U.cb}', 'Produced ${U.cb}', if (CompanyProfile.usesTrays) U.tray, 'Gross kg (planned)', 'Planned Date', 'Status', 'Actions'],
                     rows: [
                       for (final b in rows)
                         [
@@ -82,7 +82,7 @@ class _ProductionPageState extends State<ProductionPage> {
                           b['product_name'],
                           qtyInt(b['planned_cb']),
                           qtyInt(b['produced_cb']),
-                          qtyInt(b['produced_trays'] ?? 0),
+                          if (CompanyProfile.usesTrays) qtyInt(b['produced_trays'] ?? 0),
                           qty((b['planned_cb'] as num) * (b['weight_per_cb'] as num)),
                           fmtDate(b['planned_date']),
                           StatusChip(b['status'] as String),

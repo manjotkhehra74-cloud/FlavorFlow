@@ -963,7 +963,7 @@ class _HistoryTabState extends State<_HistoryTab> {
           SectionCard(
             title: 'Dispatch History',
             child: AppDataTable(
-              columns: ['Code', 'Date', 'Day', 'Truck', 'Destination', U.carton, U.tray, U.piece, 'Gross kg', 'By'],
+              columns: ['Code', 'Date', 'Day', 'Truck', 'Destination', U.carton, if (CompanyProfile.usesTrays) U.tray, U.piece, 'Gross kg', 'By'],
               rows: [
                 for (final d in rows)
                   [
@@ -985,7 +985,7 @@ class _HistoryTabState extends State<_HistoryTab> {
                     d['truck_number'],
                     Text(d['destination'] as String? ?? '—', style: const TextStyle(fontWeight: FontWeight.w600)),
                     qtyInt(d['total_cartons']),
-                    qtyInt(d['total_trays'] ?? 0),
+                    if (CompanyProfile.usesTrays) qtyInt(d['total_trays'] ?? 0),
                     qtyInt(d['total_bottles']),
                     qty(d['gross_weight']),
                     d['created_by_name'] ?? '—',
@@ -1039,11 +1039,13 @@ class _EmbeddedReportState extends State<_EmbeddedReport> {
           return ErrorState('${snap.error!}\n\nThe dispatch report is available to Dispatch Manager, Store Manager, Admin, Super Admin and Director.', onRetry: () => setState(() => _future = _load()));
         }
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        final columns = (snap.data!['columns'] as List).cast<String>();
-        final rows = (snap.data!['rows'] as List).map((r) => (r as List).cast<dynamic>()).toList();
+        final (columns, rows) = U.table(
+          (snap.data!['columns'] as List).cast<String>(),
+          (snap.data!['rows'] as List).map((r) => (r as List).cast<dynamic>()).toList(),
+        );
         return ListView(padding: const EdgeInsets.all(20), children: [
           SectionCard(
-            title: snap.data!['title'] as String,
+            title: U.ize(snap.data!['title'] as String),
             child: rows.isEmpty ? const EmptyState('No data') : AppDataTable(columns: columns, rows: rows),
           ),
         ]);

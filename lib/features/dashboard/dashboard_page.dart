@@ -66,14 +66,14 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget _buildWidget(Map<String, dynamic> w) {
     switch (w['type']) {
       case 'kpi': return _KpiGrid(items: (w['items'] as List).cast<Map<String, dynamic>>());
-      case 'line': return SectionCard(title: w['title'] as String, child: _Line(w));
-      case 'bar': return SectionCard(title: w['title'] as String, child: _Bar(w));
-      case 'pie': return SectionCard(title: w['title'] as String, child: _Pie(w));
-      case 'alerts': return SectionCard(title: w['title'] as String, child: _Alerts(w));
+      case 'line': return SectionCard(title: U.ize(w['title'] as String), child: _Line(w));
+      case 'bar': return SectionCard(title: U.ize(w['title'] as String), child: _Bar(w));
+      case 'pie': return SectionCard(title: U.ize(w['title'] as String), child: _Pie(w));
+      case 'alerts': return SectionCard(title: U.ize(w['title'] as String), child: _Alerts(w));
       case 'table':
         final route = w['route'] as String?;
         return SectionCard(
-          title: w['title'] as String,
+          title: U.ize(w['title'] as String),
           trailing: route == null
               ? null
               : TextButton.icon(
@@ -83,7 +83,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 ),
           child: _ServerTable(w),
         );
-      case 'actions': return SectionCard(title: w['title'] as String, child: _Actions(w));
+      case 'actions': return SectionCard(title: U.ize(w['title'] as String), child: _Actions(w));
       default: return const SizedBox.shrink();
     }
   }
@@ -419,8 +419,11 @@ class _ServerTable extends StatelessWidget {
   const _ServerTable(this.w);
   @override
   Widget build(BuildContext context) {
-    final columns = (w['columns'] as List).cast<String>();
-    final rows = (w['rows'] as List).map((r) => (r as List).cast<dynamic>()).toList();
+    // Server tables use the default industry's units — filter/relabel them.
+    final (columns, rows) = U.table(
+      (w['columns'] as List).cast<String>(),
+      (w['rows'] as List).map((r) => (r as List).cast<dynamic>()).toList(),
+    );
     final moneyCols = <int>{for (var i = 0; i < columns.length; i++) if (columns[i].contains('₹')) i};
     if (rows.isEmpty) return const EmptyState('No records yet');
     return AppDataTable(columns: columns, rows: rows, moneyColumns: moneyCols);
