@@ -10,6 +10,8 @@
 #           → preset id ('mill'); admin ne app ton badli hove ta override NAHI
 #        c) POST/PUT /api/packing/materials te body.unit save (hook —
 #           route andar kuch vi hove, unit column update ho janda)
+#        d) ROUTE ORDER fix: settings route 404 catch-all ton PEHLA mount (nahi ta
+#           har tenant te {"error":"Not found"} — app industry kade nahi vekhdi)
 #   3) routes/dispatch.js: truck default 'NEEMRANA' hataya — destination
 #      hun required (industry-wise defaults app bhejdi hai)
 #   SaaS core te vi chaldi hai, factory server te vi (auto-detect).
@@ -172,6 +174,68 @@ try {
     if (!/app\.listen\(/.test(src)) { console.log('CORE: app.listen anchor nahi labhya (seed)'); failed = true; }
     else { src = src.replace(/app\.listen\(/, SEED + '\napp.listen('); touched = true; console.log('CORE: industry boot-seed added'); }
   } else console.log('CORE: industry boot-seed present ✓');
+
+  // 2d) ROUTE ORDER — ff-setfix block was inserted right before app.listen(; if the
+  //     server's 404 catch-all (res.status(404)…'Not found') sits above it, Express never
+  //     reaches GET/PUT /api/settings/company → app gets {"error":"Not found"} and silently
+  //     falls back to phone-local settings (industry never arrives from the server).
+  //     Fix: drop the old block, re-insert a v2 block BEFORE the first /api mount
+  //     (own express.json() + authRequired, so position no longer matters).
+  {
+    const START = '// --- ff-setfix: shared company settings';
+    const END = '// --- end ff-setfix ---';
+    const V2 = '// --- ff-setfix v2 (early mount): shared company settings ---';
+    const firstApi = src.match(/^[ \t]*app\.use\(\s*['"]\/api(?:\/|['"])/m);
+    const has404 = /404/.test(src);
+    if (src.includes(V2)) console.log('CORE: settings route early-mounted ✓');
+    else if (!firstApi) console.log('CORE: koi app.use(\'/api/…\') mount nahi labhya — route order unchanged (agar 404 aave ta server.js bhejo)');
+    else {
+      const si = src.indexOf(START), ei = src.indexOf(END);
+      if (si >= 0 && ei > si) {
+        // cut old block (whole lines)
+        const ls = src.lastIndexOf('\n', si) + 1;
+        const le = src.indexOf('\n', ei); const cutEnd = le < 0 ? src.length : le + 1;
+        src = src.slice(0, ls) + src.slice(cutEnd);
+        console.log('CORE: old settings block removed (was ' + (has404 ? 'below the 404 handler' : 'late') + ')');
+      }
+      const ROUTE = `
+${V2}
+try {
+  const _sdb = require('./db');
+  _sdb.prepare("CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)").run();
+  const _getSet = () => { try { return JSON.parse((_sdb.prepare("SELECT value FROM app_settings WHERE key='company'").get() || {}).value || '{}'); } catch (_) { return {}; } };
+  const _mw = (() => { try { return require('./middleware'); } catch (_) { return {}; } })();
+  const _auth = typeof _mw.authRequired === 'function' ? _mw.authRequired : ((req, res, next) => next());
+  app.get('/api/settings/company', (req, res) => { res.json(_getSet()); });
+  app.put('/api/settings/company', require('express').json({ limit: '50kb' }), _auth, (req, res) => {
+    const u = req.user;
+    if (!u || (u.role !== 'super_admin' && u.role !== 'admin')) { res.status(403).json({ error: 'Only Admin/Super Admin can change company settings.' }); return; }
+    const b = req.body || {};
+    const prev = _getSet();
+    const val = {
+      name: String(b.name || prev.name || '').slice(0, 120),
+      address: String(b.address || '').slice(0, 200),
+      taxLine: String(b.taxLine || '').slice(0, 200),
+      industry: String(b.industry || prev.industry || 'general').slice(0, 40),
+      cartonLabel: String(b.cartonLabel || 'Cartons').slice(0, 30),
+      cartonShort: String(b.cartonShort || 'CB').slice(0, 12),
+      trayLabel: String(b.trayLabel || 'Trays').slice(0, 30),
+      pieceLabel: String(b.pieceLabel || 'Bottles').slice(0, 30),
+      industryConfirmed: true,
+    };
+    _sdb.prepare("INSERT INTO app_settings (key, value) VALUES ('company', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify(val));
+    res.json({ ok: true });
+  });
+  console.log('[ff-setfix] /api/settings/company mounted (early)');
+} catch (e) { console.log('[ff-setfix] settings route error: ' + e.message); }
+// --- end ff-setfix v2 ---
+`;
+      const m2 = src.match(/^[ \t]*app\.use\(\s*['"]\/api(?:\/|['"])/m);   // re-match after the cut
+      src = src.slice(0, m2.index) + ROUTE + '\n' + src.slice(m2.index);
+      touched = true;
+      console.log('CORE: settings route re-mounted BEFORE first /api mount ✓ (404 shadow fixed)');
+    }
+  }
 
   // 2c) materials unit hook — saves body.unit on POST/PUT /api/packing/materials
   if (!src.includes('/* ffMaterialUnit */')) {
