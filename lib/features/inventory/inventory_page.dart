@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/download.dart';
 import '../../core/company.dart';
+import '../../core/industry_pack.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../core/i18n.dart';
@@ -239,14 +240,14 @@ class _BatchStockSectionState extends State<_BatchStockSection> {
       builder: (context, snap) {
         if (snap.hasError) {
           return SectionCard(
-            title: 'Batch-wise Stock',
+            title: IndustryPack.current.runStockTitle,
             child: ErrorState(snap.error!, onRetry: () => setState(() => _future = _load())),
           );
         }
         if (!snap.hasData) {
-          return const SectionCard(
-            title: 'Batch-wise Stock',
-            child: SizedBox(height: 70, child: Center(child: CircularProgressIndicator())),
+          return SectionCard(
+            title: IndustryPack.current.runStockTitle,
+            child: const SizedBox(height: 70, child: Center(child: CircularProgressIndicator())),
           );
         }
         final data = snap.data!;
@@ -257,7 +258,7 @@ class _BatchStockSectionState extends State<_BatchStockSection> {
           (data['rows'] as List).map((r) => (r as List).cast<dynamic>()).toList(),
         );
         return SectionCard(
-          title: 'Batch-wise Stock',
+          title: IndustryPack.current.runStockTitle,
           stackTrailingOnNarrow: true,
           trailing: Wrap(spacing: 8, runSpacing: 8, children: [
             OutlinedButton.icon(
@@ -282,7 +283,7 @@ class _BatchStockSectionState extends State<_BatchStockSection> {
             ),
           ]),
           child: rows.isEmpty
-              ? const EmptyState('No completed batches with remaining stock')
+              ? EmptyState(U.ize('No completed batches with remaining stock'))
               : AppDataTable(
                   columns: columns,
                   rows: [

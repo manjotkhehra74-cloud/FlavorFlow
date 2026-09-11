@@ -145,7 +145,7 @@ class _PendingList extends StatelessWidget {
                       ]),
                     ),
                     Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                      Text('${qtyInt(a['qty_cb'])} CB',
+                      Text('${qtyInt(a['qty_cb'])} ${U.cb}',
                           style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
                       Text(fmtAgo(a['requested_at']), style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
                     ]),
@@ -201,7 +201,7 @@ Future<void> _approve(BuildContext context, Map<String, dynamic> a, VoidCallback
     builder: (dialogCtx) => AlertDialog(
       title: Text('Approve ${a['code']}?'),
       content: SizedBox(width: 380, child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Text('${a['product_name']} — ${a['adj_type']} ${qtyInt(a['qty_cb'])} CB. Stock will be updated immediately.'),
+        Text('${a['product_name']} — ${a['adj_type']} ${qtyInt(a['qty_cb'])} ${U.cb}. Stock will be updated immediately.'),
         const SizedBox(height: 14),
         TextField(controller: remarks, maxLines: 2, decoration: InputDecoration(labelText: tr('Remarks (optional)'))),
       ])),
@@ -234,7 +234,7 @@ Future<void> _reject(BuildContext context, Map<String, dynamic> a, VoidCallback 
     builder: (dialogCtx) => AlertDialog(
       title: Text('Reject ${a['code']}?'),
       content: SizedBox(width: 380, child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Text('${a['product_name']} — ${a['adj_type']} ${qtyInt(a['qty_cb'])} CB. The stock will NOT change and the requester will be notified.'),
+        Text('${a['product_name']} — ${a['adj_type']} ${qtyInt(a['qty_cb'])} ${U.cb}. The stock will NOT change and the requester will be notified.'),
         const SizedBox(height: 14),
         TextField(controller: reason, maxLines: 2, decoration: InputDecoration(labelText: tr('Reason for rejection *'))),
         const SizedBox(height: 12),

@@ -52,6 +52,15 @@ class IndustryPack {
   final List<String> destinations;
   /// Consumption hint shown on batch-complete dialog.
   final String consumeNote;
+  /// What a production run is called on the floor: 'Batch' (process
+  /// industries), 'Lot' (mills / plastic / hardware), 'Job' (textile /
+  /// footwear job-work). Drives menu labels, table headers and PDFs.
+  final String runNoun;
+  /// Finished-goods master title as the trade calls it.
+  final String productsTitle;
+  /// Stock register title ("Batch-wise Stock" for food, "Lot-wise Stock"
+  /// for mills, "Job-wise Stock" for garments).
+  String get runStockTitle => '$runNoun-wise Stock';
 
   const IndustryPack({
     required this.id,
@@ -63,6 +72,8 @@ class IndustryPack {
     required this.productNote,
     required this.destinations,
     required this.consumeNote,
+    this.runNoun = 'Batch',
+    this.productsTitle = 'Finished Goods Master',
   });
 
   /// Pack for the ACTIVE company industry.
@@ -85,6 +96,8 @@ class IndustryPack {
       productNote: 'Enter pieces per carton and the gross carton weight. Use the tray fields only for products that ship in trays.',
       destinations: ['DEPOT', 'DISTRIBUTOR', 'C&F AGENT'],
       consumeNote: 'Bottles, caps, labels, cartons & trays are consumed automatically as per BOM',
+      runNoun: 'Batch',
+      productsTitle: 'Finished Goods Master',
     ),
     'dairy': IndustryPack(
       id: 'dairy',
@@ -96,6 +109,8 @@ class IndustryPack {
       productNote: 'Enter packets per crate and crate weight. Use tray fields for cup / tub products packed in trays.',
       destinations: ['CHILLING CENTRE', 'DISTRIBUTOR', 'RETAIL ROUTE', 'PARLOUR'],
       consumeNote: 'Pouch film, cups, lids, tins & crates are consumed automatically as per BOM',
+      runNoun: 'Batch',
+      productsTitle: 'Products Master (SKU)',
     ),
     'oil': IndustryPack(
       id: 'oil',
@@ -107,6 +122,8 @@ class IndustryPack {
       productNote: 'Enter bottles / tins per carton and gross carton weight. Loose tins: 1 tin = 1 carton.',
       destinations: ['DEPOT', 'DISTRIBUTOR', 'MANDI', 'C&F AGENT'],
       consumeNote: 'Tins, bottles, caps, labels & cartons are consumed automatically as per BOM',
+      runNoun: 'Batch',
+      productsTitle: 'Finished Goods Master',
     ),
     'bakery': IndustryPack(
       id: 'bakery',
@@ -118,6 +135,8 @@ class IndustryPack {
       productNote: 'Enter packets per carton and gross carton weight. Use tray fields for products packed on trays inside the carton.',
       destinations: ['DEPOT', 'DISTRIBUTOR', 'SUPER STOCKIST', 'RETAIL ROUTE'],
       consumeNote: 'Pouches, wrappers, trays & cartons are consumed automatically as per BOM',
+      runNoun: 'Batch',
+      productsTitle: 'Finished Goods Master',
     ),
     'water': IndustryPack(
       id: 'water',
@@ -129,6 +148,8 @@ class IndustryPack {
       productNote: 'Enter bottles per case / shrink pack and gross case weight. Use shell fields for crate-packed glass bottles.',
       destinations: ['DISTRIBUTOR', 'RETAIL ROUTE', 'DEPOT', 'INSTITUTION'],
       consumeNote: 'Preforms, caps, labels, shrink film & crates are consumed automatically as per BOM',
+      runNoun: 'Batch',
+      productsTitle: 'SKU Master',
     ),
     'soap': IndustryPack(
       id: 'soap',
@@ -140,6 +161,8 @@ class IndustryPack {
       productNote: 'Enter pieces per carton and the gross carton weight (e.g. 48 × 125gm).',
       destinations: ['DEPOT', 'DISTRIBUTOR', 'SUPER STOCKIST'],
       consumeNote: 'Wrappers, pouches, bottles & cartons are consumed automatically as per BOM',
+      runNoun: 'Batch',
+      productsTitle: 'Finished Goods Master',
     ),
     'cosmetics': IndustryPack(
       id: 'cosmetics',
@@ -151,6 +174,8 @@ class IndustryPack {
       productNote: 'Enter units per shipper carton and the gross shipper weight (mono carton is part of the BOM, not a unit).',
       destinations: ['DEPOT', 'DISTRIBUTOR', 'E-COMMERCE WAREHOUSE', 'C&F AGENT'],
       consumeNote: 'Bottles, tubes, caps, mono cartons & shippers are consumed automatically as per BOM',
+      runNoun: 'Batch',
+      productsTitle: 'SKU Master',
     ),
     'paint': IndustryPack(
       id: 'paint',
@@ -162,6 +187,8 @@ class IndustryPack {
       productNote: 'Enter tins per carton and the gross carton weight. Loose buckets / drums: 1 pack = 1 carton.',
       destinations: ['DEPOT', 'DEALER', 'DISTRIBUTOR', 'PROJECT SITE'],
       consumeNote: 'Tins, lids, labels & cartons are consumed automatically as per BOM',
+      runNoun: 'Batch',
+      productsTitle: 'Finished Goods Master',
     ),
     'agro': IndustryPack(
       id: 'agro',
@@ -173,6 +200,8 @@ class IndustryPack {
       productNote: 'Enter bottles / pouches per carton and the gross carton weight. Bag products: 1 bag = 1 carton.',
       destinations: ['DEPOT', 'DEALER', 'DISTRIBUTOR', 'MANDI'],
       consumeNote: 'Bottles, pouches, caps, leaflets & cartons are consumed automatically as per BOM',
+      runNoun: 'Batch',
+      productsTitle: 'Finished Goods Master',
     ),
     'pharma': IndustryPack(
       id: 'pharma',
@@ -184,6 +213,8 @@ class IndustryPack {
       productNote: 'Enter boxes per shipper and gross shipper weight. Use strip fields for strips per box.',
       destinations: ['DEPOT', 'C&F AGENT', 'STOCKIST', 'HOSPITAL SUPPLY'],
       consumeNote: 'Foil, bottles, caps, leaflets, mono cartons & shippers are consumed automatically as per BOM',
+      runNoun: 'Batch',
+      productsTitle: 'Product Master (SKU)',
     ),
     'textile': IndustryPack(
       id: 'textile',
@@ -195,6 +226,8 @@ class IndustryPack {
       productNote: 'Enter pieces per bale / carton and gross weight. Use roll fields for fabric rolls.',
       destinations: ['WHOLESALER', 'BRAND WAREHOUSE', 'EXPORT CHA', 'SHOWROOM'],
       consumeNote: 'Poly bags, hangers, tags & cartons are consumed automatically as per BOM',
+      runNoun: 'Lot',
+      productsTitle: 'Style / Article Master',
     ),
     'mill': IndustryPack(
       id: 'mill',
@@ -206,6 +239,8 @@ class IndustryPack {
       productNote: 'Enter KG per bag (e.g. 25 or 50) and the gross bag weight including the bag. Stock and dispatch are counted in bags.',
       destinations: ['MANDI', 'FCI GODOWN', 'EXPORT CHA', 'DISTRIBUTOR', 'WHOLESALER'],
       consumeNote: 'Bags, liners, thread & tags are consumed automatically as per BOM',
+      runNoun: 'Lot',
+      productsTitle: 'Grade & Pack Master',
     ),
     'footwear': IndustryPack(
       id: 'footwear',
@@ -217,6 +252,8 @@ class IndustryPack {
       productNote: 'Enter pairs per master carton and the gross carton weight (e.g. 12 pairs).',
       destinations: ['WHOLESALER', 'SHOWROOM', 'DISTRIBUTOR', 'BRAND WAREHOUSE'],
       consumeNote: 'Shoe boxes, poly bags, tissue & cartons are consumed automatically as per BOM',
+      runNoun: 'Lot',
+      productsTitle: 'Article Master',
     ),
     'plastic': IndustryPack(
       id: 'plastic',
@@ -228,6 +265,8 @@ class IndustryPack {
       productNote: 'Enter pieces per carton / bundle and the gross weight. Weight per piece drives the loading calculator.',
       destinations: ['CUSTOMER FACTORY', 'DEALER', 'WHOLESALER', 'DEPOT'],
       consumeNote: 'Cartons, poly bags, film & labels are consumed automatically as per BOM',
+      runNoun: 'Lot',
+      productsTitle: 'Item Master',
     ),
     'hardware': IndustryPack(
       id: 'hardware',
@@ -239,6 +278,8 @@ class IndustryPack {
       productNote: 'Enter pieces per carton and the gross carton weight. Heavy items: 1 piece = 1 carton is fine.',
       destinations: ['DEALER', 'WHOLESALER', 'DISTRIBUTOR', 'EXPORT CHA'],
       consumeNote: 'Cartons, sheets, poly bags & labels are consumed automatically as per BOM',
+      runNoun: 'Lot',
+      productsTitle: 'Item Master',
     ),
     'general': IndustryPack(
       id: 'general',
@@ -250,9 +291,25 @@ class IndustryPack {
       productNote: 'Enter pieces per carton and gross carton weight. Use tray fields only for tray-packed products.',
       destinations: ['DEPOT', 'DISTRIBUTOR', 'DEALER', 'WHOLESALER'],
       consumeNote: 'Packing material is consumed automatically as per BOM',
+      runNoun: 'Batch',
+      productsTitle: 'Finished Goods Master',
     ),
   };
 
   /// Example text for "e.g. …" hints (first two examples joined).
   static String eg(List<String> items, [int n = 2]) => 'e.g. ${items.take(n).join(' / ')}';
+
+  /// Rewrite production-run wording ("Batch", "batches", "Batch Code"…)
+  /// into the active industry's noun (Lot / Job). Unit words are handled
+  /// by [U.ize]; call both on server-sent text.
+  static String noun(String text) {
+    final n = current.runNoun;
+    if (n == 'Batch' || text.isEmpty) return text;
+    final lc = n.toLowerCase();
+    return text
+        .replaceAll(RegExp(r'\bBatches\b'), '${n}s')
+        .replaceAll(RegExp(r'\bbatches\b'), '${lc}s')
+        .replaceAll(RegExp(r'\bBatch\b'), n)
+        .replaceAll(RegExp(r'\bbatch\b'), lc);
+  }
 }

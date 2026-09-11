@@ -64,17 +64,17 @@ class _ProductionPageState extends State<ProductionPage> {
                     if (saved == true) _reload();
                   },
                   icon: const Icon(Icons.add_rounded),
-                  label: Text(tr('New Batch')),
+                  label: Text(U.ize(tr('New Batch'))),
                 ),
               ),
           ]),
           const SizedBox(height: 16),
           SectionCard(
-            title: 'Production Batches',
+            title: U.ize('Production Batches'),
             child: rows.isEmpty
-                ? const EmptyState('No batches')
+                ? EmptyState(U.ize('No batches yet'))
                 : AppDataTable(
-                    columns: ['Batch', 'Product', 'Planned ${U.cb}', 'Produced ${U.cb}', if (CompanyProfile.usesTrays) U.tray, 'Gross kg (planned)', 'Planned Date', 'Status', 'Actions'],
+                    columns: [U.ize('Batch'), 'Product', 'Planned ${U.cb}', 'Produced ${U.cb}', if (CompanyProfile.usesTrays) U.tray, 'Gross kg (planned)', 'Planned Date', 'Status', 'Actions'],
                     rows: [
                       for (final b in rows)
                         [
@@ -88,7 +88,7 @@ class _ProductionPageState extends State<ProductionPage> {
                           StatusChip(b['status'] as String),
                           Row(mainAxisSize: MainAxisSize.min, children: [
                             IconButton(
-                              tooltip: 'View batch',
+                              tooltip: U.ize('View batch'),
                               icon: const Icon(Icons.visibility_outlined, size: 19),
                               onPressed: () async {
                                 await context.push('/production/batches/${b['id']}');
@@ -97,7 +97,7 @@ class _ProductionPageState extends State<ProductionPage> {
                             ),
                             if (auth.can('production.manage') && b['status'] != 'IN_PROGRESS')
                               IconButton(
-                                tooltip: 'Edit batch',
+                                tooltip: U.ize('Edit batch'),
                                 icon: const Icon(Icons.edit_outlined, size: 19),
                                 onPressed: () async {
                                   final saved = await showFastDialog<bool>(context, (_) => BatchFormDialog(batch: b));
@@ -106,7 +106,7 @@ class _ProductionPageState extends State<ProductionPage> {
                               ),
                             if (auth.can('production.manage'))
                               IconButton(
-                                tooltip: 'Delete batch',
+                                tooltip: U.ize('Delete batch'),
                                 icon: Icon(Icons.delete_outline_rounded, size: 19, color: Theme.of(context).colorScheme.error),
                                 onPressed: () => _delete(context, b),
                               ),
@@ -291,7 +291,7 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(editing ? 'Edit Batch ${widget.batch!['code']}' : 'Plan Production Batch'),
+      title: Text(U.ize(editing ? 'Edit Batch ${widget.batch!['code']}' : 'Plan Production Batch')),
       content: SizedBox(
         width: 440,
         child: products.isEmpty
@@ -304,7 +304,7 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
                   controller: code,
                   textCapitalization: TextCapitalization.characters,
                   decoration: InputDecoration(
-                    labelText: 'Batch code',
+                    labelText: U.ize('Batch code'),
                     hintText: autoCode.isEmpty ? 'Leave blank for auto code' : 'Leave blank for auto ($autoCode)',
                     helperText: editing
                         ? 'Same code is allowed again on a different date'
@@ -402,7 +402,7 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
                     if (mounted) setState(() => busy = false);
                   }
                 },
-          child: Text(busy ? 'Saving…' : (editing ? 'Save Changes' : 'Create Batch')),
+          child: Text(busy ? 'Saving…' : (editing ? 'Save Changes' : U.ize('Create Batch'))),
         ),
       ],
     );

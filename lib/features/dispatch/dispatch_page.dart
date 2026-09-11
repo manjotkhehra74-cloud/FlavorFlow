@@ -178,16 +178,16 @@ class _LinesEditor extends StatelessWidget {
                       controller: lines[i].batchCode,
                       textCapitalization: TextCapitalization.characters,
                       decoration: InputDecoration(
-                        labelText: 'Batch code',
+                        labelText: U.ize('Batch code'),
                         hintText: 'e.g. B-2603',
-                        helperText: 'Stock deducts batch-wise',
+                        helperText: U.ize('Stock deducts batch-wise'),
                         helperMaxLines: 1,
                         // QR/barcode scan — no typing on the factory floor
                         suffixIcon: IconButton(
-                          tooltip: 'Scan batch code',
+                          tooltip: U.ize('Scan batch code'),
                           icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
                           onPressed: () async {
-                            final v = await ScanPage.scan(context, title: 'Scan batch code');
+                            final v = await ScanPage.scan(context, title: U.ize('Scan batch code'));
                             if (v != null) {
                               lines[i].batchCode.text = v.toUpperCase();
                               onChanged();

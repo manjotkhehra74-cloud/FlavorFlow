@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../core/i18n.dart';
 import '../../core/notifier.dart';
@@ -135,12 +136,12 @@ class _NotifTile extends StatelessWidget {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
                   Expanded(
-                    child: Text(n['title'] as String, style: TextStyle(fontWeight: unread ? FontWeight.w800 : FontWeight.w600, fontSize: 14)),
+                    child: Text(U.ize(n['title'] as String), style: TextStyle(fontWeight: unread ? FontWeight.w800 : FontWeight.w600, fontSize: 14)),
                   ),
                   Text(fmtAgo(n['created_at']), style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
                 ]),
                 const SizedBox(height: 3),
-                Text(n['body'] as String, style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant)),
+                Text(U.ize(n['body'] as String), style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant)),
                 const SizedBox(height: 7),
                 Row(children: [
                   Container(

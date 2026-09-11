@@ -188,9 +188,10 @@ class _AppShellState extends State<AppShell> {
       final at = ri != -1 ? ri + 1 : nav.length;
       nav.insert(at, {'path': '/loss', 'label': 'Packing Loss %', 'icon': 'percent', 'group': ri != -1 ? nav[ri]['group'] : 'Operations'});
     }
-    // Industry gating: server nav may carry /loss for everyone — drop it
-    // where the industry doesn't track a packing Loss % sheet.
-    if (!CompanyProfile.usesLossPct) nav.removeWhere((e) => e['path'] == '/loss');
+    // Industry gating: the server nav is the same for every company — drop
+    // every section this industry never uses (Loss % sheet for mills /
+    // textile / hardware…, production for trading-only profiles).
+    nav.removeWhere((e) => !CompanyProfile.sectionVisible(e['path'] as String));
     // Settings entry at the end of the menu for every user.
     if (!nav.any((e) => e['path'] == '/settings')) {
       nav.add({'path': '/settings', 'label': 'Settings', 'icon': 'settings', 'group': nav.isNotEmpty ? (nav.last['group'] ?? 'System') : 'System'});
@@ -219,6 +220,11 @@ class _AppShellState extends State<AppShell> {
     );
 
     final topBar = _TopBar(title: title, unread: _unread, session: session, onLogout: _logout);
+
+    if (!CompanyProfile.sectionVisible(GoRouterState.of(context).uri.path)) {
+      // Route hidden for this industry (old bookmark / notification link).
+      WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) context.go('/dashboard'); });
+    }
 
     if (wide) {
       return Scaffold(
@@ -793,6 +799,20 @@ class _CompanyProfileDialogState extends State<CompanyProfileDialog> {
   @override
   void dispose() { name.dispose(); address.dispose(); tax.dispose(); super.dispose(); }
 
+  /// Sections this industry hides (shown in the preview so the admin knows
+  /// what changes app-wide before pressing Save).
+  static String _hiddenFor(String id) {
+    final f = CompanyProfile.industryFeatures[id] ?? const {};
+    final hidden = <String>[
+      if (f['lossPct'] == false) 'Loss %',
+      if (f['recipes'] == false) 'Recipes',
+      if (f['trays'] == false) 'Tray columns',
+      if (f['production'] == false) 'Production',
+      if (f['bom'] == false) 'BOM',
+    ];
+    return hidden.isEmpty ? 'all sections on' : 'hides ${hidden.join(', ')}';
+  }
+
   List<String> get _row => CompanyProfile.presetFor(industry);
 
   Future<void> _save() async {
@@ -883,6 +903,8 @@ class _CompanyProfileDialogState extends State<CompanyProfileDialog> {
                 Text('Raw: ${IndustryPack.forIndustry(industry).rawExamples.take(4).join(', ')}…',
                     style: TextStyle(fontSize: 12, color: sub)),
                 Text('Ships to: ${IndustryPack.forIndustry(industry).destinations.take(3).join(', ')}…',
+                    style: TextStyle(fontSize: 12, color: sub)),
+                Text('Runs: ${IndustryPack.forIndustry(industry).runNoun}-wise · ${_hiddenFor(industry)}',
                     style: TextStyle(fontSize: 12, color: sub)),
               ]),
             ),

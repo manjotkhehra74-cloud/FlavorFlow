@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api.dart';
+import 'industry_pack.dart';
 
 /// Editable company identity printed on every exported PDF (packing slips,
 /// stock reports, registers) + configurable industry unit labels that make
@@ -71,23 +72,34 @@ class CompanyProfile {
   /// Production, Dispatch, Adjustments, Reports, Users, Audit) are the
   /// universal backbone — every industry keeps them.
   static const Map<String, Map<String, bool>> industryFeatures = {
-    'food':      {'recipes': true,  'lossPct': true,  'trays': true},
-    'dairy':     {'recipes': true,  'lossPct': true,  'trays': true},
-    'oil':       {'recipes': true,  'lossPct': true,  'trays': true},
-    'bakery':    {'recipes': true,  'lossPct': true,  'trays': true},
-    'water':     {'recipes': true,  'lossPct': true,  'trays': true},
-    'soap':      {'recipes': true,  'lossPct': true,  'trays': false},
-    'cosmetics': {'recipes': true,  'lossPct': true,  'trays': false},
-    'paint':     {'recipes': true,  'lossPct': true,  'trays': false},
-    'agro':      {'recipes': true,  'lossPct': true,  'trays': false},
-    'pharma':    {'recipes': true,  'lossPct': true,  'trays': true},
-    'textile':   {'recipes': false, 'lossPct': false, 'trays': true},
-    'mill':      {'recipes': false, 'lossPct': false, 'trays': false},
-    'footwear':  {'recipes': false, 'lossPct': false, 'trays': false},
-    'plastic':   {'recipes': false, 'lossPct': true,  'trays': false},
-    'hardware':  {'recipes': false, 'lossPct': false, 'trays': false},
-    'general':   {'recipes': true,  'lossPct': true,  'trays': true},
+    //              recipes  lossPct  trays   production  bom
+    'food':      {'recipes': true,  'lossPct': true,  'trays': true,  'production': true, 'bom': true},
+    'dairy':     {'recipes': true,  'lossPct': true,  'trays': true,  'production': true, 'bom': true},
+    'oil':       {'recipes': true,  'lossPct': true,  'trays': true,  'production': true, 'bom': true},
+    'bakery':    {'recipes': true,  'lossPct': true,  'trays': true,  'production': true, 'bom': true},
+    'water':     {'recipes': true,  'lossPct': true,  'trays': true,  'production': true, 'bom': true},
+    'soap':      {'recipes': true,  'lossPct': true,  'trays': false, 'production': true, 'bom': true},
+    'cosmetics': {'recipes': true,  'lossPct': true,  'trays': false, 'production': true, 'bom': true},
+    'paint':     {'recipes': true,  'lossPct': true,  'trays': false, 'production': true, 'bom': true},
+    'agro':      {'recipes': true,  'lossPct': true,  'trays': false, 'production': true, 'bom': true},
+    'pharma':    {'recipes': true,  'lossPct': true,  'trays': true,  'production': true, 'bom': true},
+    'textile':   {'recipes': false, 'lossPct': false, 'trays': true,  'production': true, 'bom': true},
+    'mill':      {'recipes': false, 'lossPct': false, 'trays': false, 'production': true, 'bom': true},
+    'footwear':  {'recipes': false, 'lossPct': false, 'trays': false, 'production': true, 'bom': true},
+    'plastic':   {'recipes': false, 'lossPct': true,  'trays': false, 'production': true, 'bom': true},
+    'hardware':  {'recipes': false, 'lossPct': false, 'trays': false, 'production': true, 'bom': true},
+    'general':   {'recipes': true,  'lossPct': true,  'trays': true,  'production': true, 'bom': true},
   };
+
+  /// Menu sections an industry never needs (hidden from nav, bottom bar,
+  /// dashboard shortcuts and deep links). Paths are the app routes.
+  static List<String> get hiddenSections => [
+        if (!usesLossPct) '/loss',
+        if (!usesProduction) '/production',
+      ];
+
+  /// Is this route/section available for the active industry?
+  static bool sectionVisible(String path) => !hiddenSections.any((h) => path == h || path.startsWith('$h/'));
 
   /// Does the active industry use recipe-based raw material consumption?
   static bool get usesRecipes => industryFeatures[current.industry]?['recipes'] ?? true;
@@ -97,6 +109,13 @@ class CompanyProfile {
 
   /// Does the active industry use the secondary tray/roll/strip unit?
   static bool get usesTrays => industryFeatures[current.industry]?['trays'] ?? true;
+
+  /// Does the active industry run production batches (all do today; the
+  /// flag exists so a pure trading / job-work profile can switch it off).
+  static bool get usesProduction => industryFeatures[current.industry]?['production'] ?? true;
+
+  /// Does the active industry maintain a packing BOM per product?
+  static bool get usesBom => industryFeatures[current.industry]?['bom'] ?? true;
 
   /// Preset row for an industry id (falls back to 'general').
   static List<String> presetFor(String id) =>
@@ -270,7 +289,7 @@ class U {
   /// "Bales / Rolls / Pieces" without any server change.
   static String ize(String text) {
     if (text.isEmpty) return text;
-    var out = text;
+    var out = IndustryPack.noun(text); // Batch → Lot / Job where the trade says so
     if (cb != 'CB') {
       out = out.replaceAll(RegExp(r'\bCB\b'), cb);
     }
@@ -342,6 +361,8 @@ class U {
 
   /// "Trays", "Trays Left", "Tray Wt", "Total Trays", "Bottles / Tray"…
   /// (whole-word match only — a material column like "Tray Caps" is kept).
+  static bool isTrayLabel(String h) => _isTrayHeader(h);
+
   static bool _isTrayHeader(String h) {
     final v = h.trim().toLowerCase();
     if (v == 'trays' || v == 'tray') return true;

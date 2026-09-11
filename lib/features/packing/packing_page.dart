@@ -27,7 +27,7 @@ class _PackingPageState extends State<PackingPage> with SingleTickerProviderStat
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 3, vsync: this);
+    _tab = TabController(length: CompanyProfile.usesBom ? 3 : 2, vsync: this);
   }
 
   @override
@@ -49,7 +49,7 @@ class _PackingPageState extends State<PackingPage> with SingleTickerProviderStat
             tabAlignment: TabAlignment.start,
             tabs: [
               Tab(text: tr('Packing Stock')),
-              Tab(text: tr('Packing per Product (BOM)')),
+              if (CompanyProfile.usesBom) Tab(text: tr('Packing per Product (BOM)')),
               Tab(text: tr('Ledger')),
             ],
           ),
@@ -58,7 +58,7 @@ class _PackingPageState extends State<PackingPage> with SingleTickerProviderStat
       Expanded(
         child: TabBarView(controller: _tab, children: [
           _StockTab(lowOnly: widget.lowOnly),
-          const _BomTab(),
+          if (CompanyProfile.usesBom) const _BomTab(),
           const _LedgerTab(),
         ]),
       ),
@@ -550,7 +550,7 @@ class _LedgerTabState extends State<_LedgerTab> {
             child: rows.isEmpty
                 ? const EmptyState('No entries yet')
                 : AppDataTable(
-                    columns: const ['Date', 'Material', 'Type', 'Qty', 'Reference', 'Batch', 'By'],
+                    columns: ['Date', 'Material', 'Type', 'Qty', 'Reference', U.ize('Batch'), 'By'],
                     rows: [
                       for (final t in rows)
                         [

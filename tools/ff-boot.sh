@@ -10,10 +10,12 @@
 #   → 2-3 min baad result browser vich:  https://flavorflow.co.in/download/boot-status.txt
 #   (poora log: VM → "Serial port 1 (console)" ya /var/log/ff-boot.log)
 #
-# Steps (arg naal chuno, default sab):  fixssh industry apk
+# Steps (arg naal chuno, default sab):  fixssh industry demo web apk
 #   fixssh   — memory/OOM/swap snapshot, swap ensure, google-guest-agent + sshd restart
 #              (SSH-in-browser "Connection failed… retrying" aksar guest-agent/RAM karke)
 #   industry — tools/ff-saasindustry.sh (idempotent) + tenant /api/settings/company verify
+#   demo     — tools/ff-saasdemo.sh (16 demo-<industry> tenants, same demo login)
+#   web      — web-landing/*.html (is branch ton) → /opt/flavorflow-saas/web
 #   apk      — tools/ff-apkpublish.sh ci (CircleCI di navi successful APK → website)
 # SSH ton vi:  curl -fsSL .../ff-boot.sh | sudo bash -s apk
 # Har boot te dubara chalna safe hai (sab idempotent). Startup script baad vich
@@ -25,7 +27,7 @@ main() {
   WEB="${FF_WEB:-/opt/flavorflow-saas/web}"
   LOG=/var/log/ff-boot.log
   STATUS="$WEB/download/boot-status.txt"
-  STEPS="${*:-fixssh industry apk}"
+  STEPS="${*:-fixssh industry demo web apk}"
   mkdir -p "$WEB/download"
   exec > >(tee -a "$LOG") 2>&1
   : > "$STATUS"; chmod 644 "$STATUS"
@@ -81,6 +83,32 @@ main() {
         st "[verify] /t/$code/api/settings/company → $(echo "$OUT" | grep -o '\[[0-9]*\]$') $(echo "$OUT" | grep -o '"industry":"[^"]*"' | head -1) $(echo "$OUT" | grep -o '"error":"[^"]*"' | head -1)"
       done
     else st "[industry] /opt/flavorflow-saas/core/server.js nahi — eh SaaS VM nahi? skip"; fi
+  fi
+
+  # ---------- demo ----------
+  if [[ " $STEPS " == *" demo "* ]]; then
+    if [ -f /opt/flavorflow-saas/data/registry.json ]; then
+      OUT=""; RC=1
+      if fetch "$RAW/ff-saasdemo.sh" /tmp/ff-saasdemo.sh; then OUT=$(bash /tmp/ff-saasdemo.sh </dev/null 2>&1); RC=$?; fi
+      if [ -z "$OUT" ]; then st "[demo] script download FAIL (GitHub reach nahi hoya?)"; else
+        echo "$OUT"
+        echo "$OUT" | grep -E '^(OK|FAIL|demo tenants|WARN|SAASDEMO|FATAL|SEED SUMMARY|\[seed )' | cut -c1-220 | sed 's/^/[demo] /' | tee -a "$STATUS"
+      fi
+      st "[demo] rc=$RC"
+    else st "[demo] registry nahi — skip"; fi
+  fi
+
+  # ---------- web (landing pages from THIS branch) ----------
+  if [[ " $STEPS " == *" web "* ]]; then
+    if [ -d /opt/flavorflow-saas/web ]; then
+      WRAW="${RAW%/tools}/web-landing"; n=0
+      for f in index.html privacy.html demo.html; do
+        if curl -fsSL -m 40 --retry 3 "$WRAW/$f" -o "/tmp/ff-$f" </dev/null && grep -qi '<html' "/tmp/ff-$f"; then
+          cp -f "/tmp/ff-$f" "/opt/flavorflow-saas/web/$f" && n=$((n+1))
+        else st "[web] $f download FAIL"; fi
+      done
+      st "[web] landing pages updated: $n/3 (demo codes: $(grep -o 'demo-mill' /opt/flavorflow-saas/web/demo.html | head -1))"
+    else st "[web] /opt/flavorflow-saas/web nahi — skip"; fi
   fi
 
   # ---------- apk ----------

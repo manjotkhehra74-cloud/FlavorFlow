@@ -65,7 +65,7 @@ class _ProductionDetailPageState extends State<ProductionDetailPage> {
                   } catch (e) { if (context.mounted) showErr(context, e); }
                 },
                 icon: const Icon(Icons.play_arrow_rounded, size: 18),
-                label: Text(tr('Start Batch')),
+                label: Text(U.ize(tr('Start Batch'))),
               ),
             if (auth.can('production.execute') && b['status'] == 'IN_PROGRESS')
               FilledButton.icon(
@@ -78,12 +78,12 @@ class _ProductionDetailPageState extends State<ProductionDetailPage> {
           const SizedBox(height: 18),
           LayoutBuilder(builder: (context, c) {
             final wide = c.maxWidth > 860;
-            final left = SectionCard(title: 'Batch', child: Column(children: [
+            final left = SectionCard(title: U.ize('Batch'), child: Column(children: [
               _row('Product', b['product_name'] as String),
-              _row('Planned quantity', '${qtyInt(b['planned_cb'])} CB (${qty((b['planned_cb'] as num) * (b['weight_per_cb'] as num))} kg)'),
+              _row('Planned quantity', '${qtyInt(b['planned_cb'])} ${U.cb} (${qty((b['planned_cb'] as num) * (b['weight_per_cb'] as num))} kg)'),
               _row('Produced quantity', (b['produced_trays'] as num? ?? 0) > 0
                   ? '${qtyInt(b['produced_cb'])} ${U.cb} + ${qtyInt(b['produced_trays'])} ${U.trayLc}'
-                  : '${qtyInt(b['produced_cb'])} CB'),
+                  : '${qtyInt(b['produced_cb'])} ${U.cb}'),
               _row('Planned date', b['planned_date'] == null ? '—' : fmtDateWithDay(b['planned_date'])),
               if ((b['remarks'] as String?)?.isNotEmpty ?? false) _row('Remarks', b['remarks'] as String),
               const SizedBox(height: 8),

@@ -319,7 +319,7 @@ class _LoginPageState extends State<LoginPage> {
                 textCapitalization: TextCapitalization.none,
                 decoration: InputDecoration(
                   labelText: tr('Company code'),
-                  hintText: 'e.g. khehrafoods-e998',
+                  hintText: 'e.g. demo-mill · demo-dairy · yourco-1234',
                   helperText: tr('Given at registration — sets your company server. Leave blank for own server.'),
                   helperMaxLines: 2,
                   prefixIcon: const Icon(Icons.business_rounded, size: 19),

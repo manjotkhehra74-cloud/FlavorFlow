@@ -43,7 +43,12 @@ class _DashboardPageState extends State<DashboardPage> {
         if (snap.hasError) return ErrorState(snap.error!, onRetry: _reload);
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
         final data = snap.data!;
-        final widgets = (data['widgets'] as List).cast<Map<String, dynamic>>();
+        // Industry gating: drop server widgets that belong to hidden sections
+        // (e.g. a Loss % tile for a rice mill) and shortcuts/alerts pointing there.
+        final widgets = [
+          for (final w in (data['widgets'] as List).cast<Map<String, dynamic>>())
+            if (CompanyProfile.sectionVisible((w['route'] as String?) ?? '/')) _gateWidget(w),
+        ];
         return RefreshIndicator(
           onRefresh: () async => _reload(),
           child: ListView(
@@ -61,6 +66,21 @@ class _DashboardPageState extends State<DashboardPage> {
         );
       },
     );
+  }
+
+  /// Remove items that link into sections hidden for this industry.
+  static Map<String, dynamic> _gateWidget(Map<String, dynamic> w) {
+    final items = w['items'];
+    if (items is! List) return w;
+    return {
+      ...w,
+      'items': [
+        for (final it in items)
+          if (it is! Map ||
+              (CompanyProfile.sectionVisible((it['route'] as String?) ?? '/') &&
+                  (CompanyProfile.usesTrays || !U.isTrayLabel((it['label'] as String?) ?? '')))) it,
+      ],
+    };
   }
 
   Widget _buildWidget(Map<String, dynamic> w) {

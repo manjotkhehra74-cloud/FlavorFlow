@@ -88,7 +88,7 @@ class _ProductsPageState extends State<ProductsPage> {
           ]),
           const SizedBox(height: 16),
           SectionCard(
-            title: 'Finished Goods Master',
+            title: IndustryPack.current.productsTitle,
             child: AppDataTable(
               columns: ['Product', 'Wt per ${U.cb} (kg)', 'Wt w/o ${U.cb} (kg)', '${U.piece} / ${U.cb}', if (CompanyProfile.usesTrays) '${U.piece} / ${U.tray}', if (CompanyProfile.usesTrays) '${U.tray} Wt (kg)', 'Min Stock (${U.cb})', 'Stock (${U.cb})', if (CompanyProfile.usesTrays) U.tray, ''],
               rows: [
