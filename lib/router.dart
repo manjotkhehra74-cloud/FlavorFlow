@@ -9,6 +9,8 @@ import 'features/auth/setup_page.dart';
 import 'features/billing/billing_page.dart';
 import 'features/billing/invoice_detail_page.dart';
 import 'features/billing/invoice_form.dart';
+import 'features/billing/purchase_detail_page.dart';
+import 'features/billing/purchase_form.dart';
 import 'features/billing/subscription_page.dart';
 import 'features/dashboard/dashboard_page.dart';
 import 'features/dispatch/dispatch_detail_page.dart';
@@ -117,6 +119,15 @@ GoRouter buildRouter(AuthController auth) {
               GoRoute(
                 path: 'new',
                 builder: (c, s) => InvoiceFormPage(dispatchId: int.tryParse(s.uri.queryParameters['dispatch'] ?? '')),
+              ),
+              // Inward (supplier bills) — declared before ':id' so 'purchases' is not read as an invoice id.
+              GoRoute(
+                path: 'purchases/new',
+                builder: (c, s) => PurchaseFormPage(item: s.uri.queryParameters['item']),
+              ),
+              GoRoute(
+                path: 'purchases/:pid',
+                builder: (c, s) => PurchaseDetailPage(id: int.tryParse(s.pathParameters['pid'] ?? '') ?? 0),
               ),
               GoRoute(
                 path: ':id',

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 
@@ -10,6 +11,7 @@ import '../../core/theme.dart';
 import '../../core/i18n.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
+import '../billing/item_history_page.dart' show showItemHistory;
 import '../reports/report_pdf.dart';
 import 'stock_pdf.dart';
 
@@ -126,6 +128,15 @@ class _InventoryPageState extends State<InventoryPage> {
                   label: Text(tr('Receive Stock')),
                 ),
               ),
+            if (auth.canManageBilling)
+              OutlinedButton.icon(
+                onPressed: () async {
+                  await context.push('/billing/purchases/new');
+                  _reload();
+                },
+                icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                label: Text(tr('Enter Supplier Bill')),
+              ),
             OutlinedButton.icon(
               onPressed: _exporting ? null : _exportPdf,
               icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
@@ -156,17 +167,23 @@ class _InventoryPageState extends State<InventoryPage> {
                           (it['low'] as int) == 1
                               ? const StatusChip('LOW')
                               : const StatusChip('IN STOCK'),
-                          if (auth.can('inventory.manage'))
-                            IconButton(
-                              tooltip: 'Set exact stock',
-                              icon: const Icon(Icons.edit_outlined, size: 18),
-                              onPressed: () async {
-                                final saved = await showDialog<bool>(context: context, builder: (_) => SetStockDialog(item: it));
-                                if (saved == true) _reload();
-                              },
-                            )
-                          else
-                            const SizedBox.shrink(),
+                          Row(mainAxisSize: MainAxisSize.min, children: [
+                            if (auth.canViewBilling)
+                              IconButton(
+                                tooltip: tr('In / Out history'),
+                                icon: const Icon(Icons.history_rounded, size: 18),
+                                onPressed: () => showItemHistory(context, type: 'product', id: it['product_id'] as int, name: it['name'] as String),
+                              ),
+                            if (auth.can('inventory.manage'))
+                              IconButton(
+                                tooltip: 'Set exact stock',
+                                icon: const Icon(Icons.edit_outlined, size: 18),
+                                onPressed: () async {
+                                  final saved = await showDialog<bool>(context: context, builder: (_) => SetStockDialog(item: it));
+                                  if (saved == true) _reload();
+                                },
+                              ),
+                          ]),
                         ],
                     ],
                   ),

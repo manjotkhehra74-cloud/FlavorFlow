@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
-# FlavorFlow ERP — SALES BILLING module (server side, every tenant + factory):
-#   GST tax invoices, party (customer) master, receipts/outstanding, GST register.
+# FlavorFlow ERP — BILLING module (server side, every tenant + factory):
+#   OUTWARD: GST tax invoices, party (customer) master, receipts/outstanding, GST register.
+#   INWARD:  supplier bills (purchases) with the supplier's invoice number → stock in, payables, purchase register.
 #   1) routes/billing.js (new)  — /api/billing/* : settings, parties, products+rates,
 #      invoices (create from dispatch or direct, cancel), payments, receivables,
 #      summary, GSTR-1 style register (+CSV). Own tables, created at boot:
-#      parties, invoices, invoice_items, invoice_payments, invoice_seq;
-#      products += hsn_code / gst_rate / sale_rate / rate_per.
+#      parties, invoices, invoice_items, invoice_payments, invoice_seq,
+#      purchases, purchase_items, purchase_payments, purchase_seq (INWARD: supplier bills);
+#      products += hsn_code / gst_rate / sale_rate / rate_per / purchase_rate;
+#      packing_materials += hsn_code / gst_rate / purchase_rate.
+#      Inward: /purchases (supplier invoice no → stock IN for products / raw / packing material),
+#      /payables, /purchase-summary, /purchase-register[.csv], /items, /ledger?type=&id= (IN/OUT history).
 #   2) rbac.js — billing.view / billing.manage (mirrors dispatch perms) + NAV /billing
 #   3) server.js — mount BEFORE the first /api mount (so the 404 catch-all never shadows it)
 #   4) users with CUSTOM permission lists get billing.* backfilled from dispatch.*
@@ -98,8 +103,37 @@ CREATE INDEX IF NOT EXISTS idx_inv_date ON invoices(invoice_date);
 CREATE INDEX IF NOT EXISTS idx_inv_party ON invoices(party_id);
 CREATE INDEX IF NOT EXISTS idx_invitem_inv ON invoice_items(invoice_id);
 CREATE INDEX IF NOT EXISTS idx_invpay_inv ON invoice_payments(invoice_id);`);
-for (const [c, t] of [['hsn_code', 'TEXT'], ['gst_rate', 'REAL'], ['sale_rate', 'REAL'], ['rate_per', 'TEXT']]) {
+for (const [c, t] of [['hsn_code', 'TEXT'], ['gst_rate', 'REAL'], ['sale_rate', 'REAL'], ['rate_per', 'TEXT'], ['purchase_rate', 'REAL']]) {
   try { db.exec('ALTER TABLE products ADD COLUMN ' + c + ' ' + t); } catch (_) {}
+}
+// ---- INWARD side: supplier bills (purchases) → stock in ----
+db.exec(`CREATE TABLE IF NOT EXISTS purchase_seq (fy TEXT PRIMARY KEY, seq INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS purchases (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, entry_no TEXT NOT NULL UNIQUE, fy TEXT NOT NULL, bill_no TEXT NOT NULL, bill_date TEXT NOT NULL, received_date TEXT DEFAULT '',
+  party_id INTEGER, party_name TEXT NOT NULL, party_gstin TEXT DEFAULT '', party_address TEXT DEFAULT '', party_state_code TEXT DEFAULT '',
+  supply_type TEXT NOT NULL DEFAULT 'intra', subtotal REAL NOT NULL DEFAULT 0, discount REAL NOT NULL DEFAULT 0, taxable REAL NOT NULL DEFAULT 0,
+  cgst REAL NOT NULL DEFAULT 0, sgst REAL NOT NULL DEFAULT 0, igst REAL NOT NULL DEFAULT 0, round_off REAL NOT NULL DEFAULT 0,
+  total REAL NOT NULL DEFAULT 0, paid_amount REAL NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'RECEIVED',
+  due_date TEXT DEFAULT '', remarks TEXT DEFAULT '', stock_added INTEGER DEFAULT 1,
+  created_by INTEGER, created_by_name TEXT DEFAULT '', created_at TEXT NOT NULL, cancelled_at TEXT, cancel_reason TEXT DEFAULT '');
+CREATE TABLE IF NOT EXISTS purchase_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, purchase_id INTEGER NOT NULL, item_type TEXT NOT NULL DEFAULT 'material', item_id INTEGER,
+  description TEXT NOT NULL, hsn_code TEXT DEFAULT '', qty REAL NOT NULL, unit TEXT DEFAULT '', rate REAL NOT NULL, discount_pct REAL DEFAULT 0,
+  gross REAL NOT NULL, discount_amt REAL DEFAULT 0, taxable REAL NOT NULL, gst_rate REAL DEFAULT 0, cgst REAL DEFAULT 0, sgst REAL DEFAULT 0, igst REAL DEFAULT 0,
+  total REAL NOT NULL, batch_code TEXT DEFAULT '', txn_id INTEGER);
+CREATE TABLE IF NOT EXISTS purchase_payments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, purchase_id INTEGER NOT NULL, amount REAL NOT NULL, mode TEXT NOT NULL DEFAULT 'cheque',
+  ref_no TEXT DEFAULT '', bank TEXT DEFAULT '', paid_on TEXT NOT NULL, note TEXT DEFAULT '', created_by INTEGER, created_by_name TEXT DEFAULT '', created_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_pur_date ON purchases(bill_date);
+CREATE INDEX IF NOT EXISTS idx_pur_party ON purchases(party_id);
+CREATE INDEX IF NOT EXISTS idx_puritem_pur ON purchase_items(purchase_id);
+CREATE INDEX IF NOT EXISTS idx_puritem_item ON purchase_items(item_type, item_id);
+CREATE INDEX IF NOT EXISTS idx_purpay_pur ON purchase_payments(purchase_id);`);
+for (const [c, t] of [['hsn_code', 'TEXT'], ['gst_rate', 'REAL'], ['purchase_rate', 'REAL']]) {
+  try { db.exec('ALTER TABLE packing_materials ADD COLUMN ' + c + ' ' + t); } catch (_) {}
+}
+for (const [c, t] of [['is_customer', 'INTEGER DEFAULT 1'], ['is_supplier', 'INTEGER DEFAULT 0']]) {
+  try { db.exec('ALTER TABLE parties ADD COLUMN ' + c + ' ' + t); } catch (_) {}
 }
 
 // ---------- helpers ----------
@@ -196,7 +230,10 @@ router.put('/settings', perm(PERM_MANAGE), (req, res) => {
     gstin, stateCode: str(b.stateCode, 2) || (gstin ? gstin.slice(0, 2) : ''),
     legalName: str(b.legalName, 120), address: str(b.address, 300), phone: str(b.phone, 20), email: str(b.email, 80),
     bankName: str(b.bankName, 80), accountNo: str(b.accountNo, 30), ifsc: str(b.ifsc, 11).toUpperCase(), upiId: str(b.upiId, 60),
-    terms: str(b.terms, 600), defaultGstRate: Math.max(0, num(b.defaultGstRate)), roundOff: b.roundOff !== false, creditDays: Math.max(0, Math.round(num(b.creditDays))),
+    terms: b.terms == null ? prev.terms : str(b.terms, 600),
+    defaultGstRate: b.defaultGstRate == null || b.defaultGstRate === '' ? prev.defaultGstRate : Math.max(0, num(b.defaultGstRate)),
+    roundOff: b.roundOff == null ? prev.roundOff !== false : b.roundOff !== false,
+    creditDays: b.creditDays == null || b.creditDays === '' ? (prev.creditDays || 0) : Math.max(0, Math.round(num(b.creditDays))),
   };
   putSet('billing', v);
   audit(db, req.user, 'UPDATE', 'billing', 0, 'Billing settings updated');
@@ -204,32 +241,45 @@ router.put('/settings', perm(PERM_MANAGE), (req, res) => {
 });
 
 // ---------- parties (customers) ----------
+// kind=customer | supplier | (blank = all). A party can be both (e.g. a trader you buy from and sell to).
 router.get('/parties', perm(PERM_VIEW), (req, res) => {
   const q = '%' + str(req.query.q, 60).toLowerCase() + '%';
   const all = req.query.all === '1';
-  const rows = db.prepare('SELECT p.*, (SELECT COALESCE(SUM(total - paid_amount), 0) FROM invoices i WHERE i.party_id = p.id AND i.status != \'CANCELLED\') outstanding, (SELECT COUNT(*) FROM invoices i WHERE i.party_id = p.id AND i.status != \'CANCELLED\') invoices FROM parties p WHERE (? OR p.active = 1) AND (LOWER(p.name) LIKE ? OR LOWER(p.gstin) LIKE ? OR p.phone LIKE ?) ORDER BY p.name').all(all ? 1 : 0, q, q, q);
-  res.json({ parties: rows.map((r) => Object.assign(r, { outstanding: r2(r.outstanding) })) });
+  const kind = req.query.kind === 'supplier' ? 'supplier' : req.query.kind === 'customer' ? 'customer' : '';
+  const kw = kind === 'supplier' ? ' AND COALESCE(p.is_supplier, 0) = 1' : kind === 'customer' ? ' AND COALESCE(p.is_customer, 1) = 1' : '';
+  const rows = db.prepare('SELECT p.*, (SELECT COALESCE(SUM(total - paid_amount), 0) FROM invoices i WHERE i.party_id = p.id AND i.status != \'CANCELLED\') outstanding, (SELECT COUNT(*) FROM invoices i WHERE i.party_id = p.id AND i.status != \'CANCELLED\') invoices, (SELECT COALESCE(SUM(total - paid_amount), 0) FROM purchases u WHERE u.party_id = p.id AND u.status != \'CANCELLED\') payable, (SELECT COUNT(*) FROM purchases u WHERE u.party_id = p.id AND u.status != \'CANCELLED\') purchases FROM parties p WHERE (? OR p.active = 1)' + kw + ' AND (LOWER(p.name) LIKE ? OR LOWER(p.gstin) LIKE ? OR p.phone LIKE ?) ORDER BY p.name').all(all ? 1 : 0, q, q, q);
+  res.json({ parties: rows.map((r) => Object.assign(r, { outstanding: r2(r.outstanding), payable: r2(r.payable), is_customer: r.is_customer == null ? 1 : r.is_customer, is_supplier: r.is_supplier || 0 })) });
 });
 function partyBody(b) {
   const gstin = str(b.gstin, 15).toUpperCase();
-  return { name: str(b.name, 120), gstin, address: str(b.address, 300), state_code: str(b.stateCode, 2) || (gstin ? gstin.slice(0, 2) : ''), phone: str(b.phone, 20), email: str(b.email, 80), credit_days: Math.max(0, Math.round(num(b.creditDays))) };
+  const flag = (v) => v === true || v === 1 || v === '1' || v === 'true';
+  // Old app versions send neither flag: POST → plain customer, PUT → flags left unchanged (noFlags).
+  const noFlags = b.isCustomer == null && b.isSupplier == null;
+  const isSupplier = flag(b.isSupplier);
+  const isCustomer = b.isCustomer == null ? !isSupplier : flag(b.isCustomer);
+  return { name: str(b.name, 120), gstin, address: str(b.address, 300), state_code: str(b.stateCode, 2) || (gstin ? gstin.slice(0, 2) : ''), phone: str(b.phone, 20), email: str(b.email, 80), credit_days: Math.max(0, Math.round(num(b.creditDays))),
+    is_customer: isCustomer ? 1 : 0, is_supplier: isSupplier ? 1 : 0, noFlags };
 }
 router.post('/parties', perm(PERM_MANAGE), (req, res) => {
   const p = partyBody(req.body || {});
   if (p.name.length < 2) return bad(res, 'Party name is required.');
   if (p.gstin && !GSTIN_RE.test(p.gstin)) return bad(res, 'GSTIN format is invalid.');
+  if (!p.is_customer && !p.is_supplier) return bad(res, 'Tick Customer and/or Supplier.');
   const dup = db.prepare('SELECT id FROM parties WHERE LOWER(name) = LOWER(?) AND active = 1').get(p.name);
   if (dup) return bad(res, 'A party with this name already exists.');
-  const r = db.prepare('INSERT INTO parties (name, gstin, address, state_code, phone, email, credit_days, active, created_at) VALUES (?,?,?,?,?,?,?,1,?)').run(p.name, p.gstin, p.address, p.state_code, p.phone, p.email, p.credit_days, nowIso());
-  audit(db, req.user, 'CREATE', 'billing', Number(r.lastInsertRowid), 'Party "' + p.name + '" added');
+  const r = db.prepare('INSERT INTO parties (name, gstin, address, state_code, phone, email, credit_days, is_customer, is_supplier, active, created_at) VALUES (?,?,?,?,?,?,?,?,?,1,?)').run(p.name, p.gstin, p.address, p.state_code, p.phone, p.email, p.credit_days, p.is_customer, p.is_supplier, nowIso());
+  audit(db, req.user, 'CREATE', 'billing', Number(r.lastInsertRowid), 'Party "' + p.name + '" added' + (p.is_supplier ? ' (supplier)' : ''));
   res.status(201).json({ ok: true, id: Number(r.lastInsertRowid) });
 });
 router.put('/parties/:id', perm(PERM_MANAGE), (req, res) => {
   const id = Number(req.params.id), p = partyBody(req.body || {});
-  if (!db.prepare('SELECT id FROM parties WHERE id = ?').get(id)) return bad(res, 'Party not found.', 404);
+  const cur = db.prepare('SELECT * FROM parties WHERE id = ?').get(id);
+  if (!cur) return bad(res, 'Party not found.', 404);
   if (p.name.length < 2) return bad(res, 'Party name is required.');
   if (p.gstin && !GSTIN_RE.test(p.gstin)) return bad(res, 'GSTIN format is invalid.');
-  db.prepare('UPDATE parties SET name = ?, gstin = ?, address = ?, state_code = ?, phone = ?, email = ?, credit_days = ?, active = 1 WHERE id = ?').run(p.name, p.gstin, p.address, p.state_code, p.phone, p.email, p.credit_days, id);
+  if (p.noFlags) { p.is_customer = cur.is_customer == null ? 1 : cur.is_customer; p.is_supplier = cur.is_supplier || 0; }
+  if (!p.is_customer && !p.is_supplier) return bad(res, 'Tick Customer and/or Supplier.');
+  db.prepare('UPDATE parties SET name = ?, gstin = ?, address = ?, state_code = ?, phone = ?, email = ?, credit_days = ?, is_customer = ?, is_supplier = ?, active = 1 WHERE id = ?').run(p.name, p.gstin, p.address, p.state_code, p.phone, p.email, p.credit_days, p.is_customer, p.is_supplier, id);
   audit(db, req.user, 'UPDATE', 'billing', id, 'Party "' + p.name + '" updated');
   res.json({ ok: true });
 });
@@ -470,6 +520,309 @@ router.get('/register.csv', perm(PERM_VIEW), (req, res) => {
   res.send('\ufeff' + lines.join('\r\n'));
 });
 
+// =====================================================================
+// INWARD SIDE — purchases (supplier bills). Whatever comes in (raw material,
+// packing material, finished / trading goods) is entered against the
+// SUPPLIER'S invoice number; stock goes up, the bill sits in payables and the
+// item ledger shows it as IN. Cancelling reverses the stock.
+// =====================================================================
+const safeAll = (sql, args) => { try { return db.prepare(sql).all(...(args || [])); } catch (_) { return []; } };
+const safeGet = (sql, args) => { try { return db.prepare(sql).get(...(args || [])); } catch (_) { return null; } };
+function nextPurchaseNumber(dateYmd) {
+  const fy = fyOf(dateYmd);
+  const row = db.prepare('SELECT seq FROM purchase_seq WHERE fy = ?').get(fy);
+  const seq = (row ? row.seq : 0) + 1;
+  return { fy, seq, number: 'PUR/' + fy + '/' + String(seq).padStart(4, '0') };
+}
+function materialRows() {
+  return safeAll('SELECT id, name, unit, category, COALESCE(stock, 0) stock, COALESCE(min_stock, 0) min_stock, hsn_code, gst_rate, purchase_rate FROM packing_materials ORDER BY category, name');
+}
+function purchaseStatus(p) {
+  if (p.status === 'CANCELLED') return 'CANCELLED';
+  if (p.paid_amount >= p.total - 0.005) return 'PAID';
+  if (p.paid_amount > 0) return 'PARTIAL';
+  return 'RECEIVED';
+}
+/** sign +1 = goods received (stock up, RECEIVED txn for materials); -1 = bill cancelled (stock back down, txn removed). */
+function applyPurchaseStock(items, sign, meta) {
+  for (const it of items) {
+    const q = num(it.qty) * sign;
+    if (!q || !it.item_id) continue;
+    if (it.item_type === 'product') {
+      const inv = db.prepare('SELECT product_id FROM inventory WHERE product_id = ?').get(it.item_id);
+      if (inv) db.prepare('UPDATE inventory SET qty_cb = qty_cb + ? WHERE product_id = ?').run(q, it.item_id);
+      else { try { db.prepare('INSERT INTO inventory (product_id, qty_cb, qty_trays) VALUES (?,?,0)').run(it.item_id, q); } catch (_) {} }
+    } else if (it.item_type === 'material') {
+      try { db.prepare('UPDATE packing_materials SET stock = COALESCE(stock, 0) + ? WHERE id = ?').run(q, it.item_id); } catch (_) {}
+      if (sign > 0) {
+        try {
+          const r = db.prepare("INSERT INTO packing_txns (material_id, txn_type, qty, txn_date, reference, remark, created_by, created_at) VALUES (?, 'RECEIVED', ?, ?, ?, ?, ?, ?)")
+            .run(it.item_id, num(it.qty), meta.date, meta.reference, meta.remark || '', meta.userId, nowIso());
+          if (it.id) db.prepare('UPDATE purchase_items SET txn_id = ? WHERE id = ?').run(Number(r.lastInsertRowid), it.id);
+        } catch (_) {}
+      } else if (it.txn_id) {
+        try { db.prepare('DELETE FROM packing_txns WHERE id = ?').run(it.txn_id); } catch (_) {}
+      }
+    }
+  }
+}
+/** Remember the last purchase rate (+ HSN / GST% when the master had none) so the next bill prefills. */
+function rememberRates(items) {
+  for (const it of items) {
+    const t = it.item_type === 'product' ? 'products' : it.item_type === 'material' ? 'packing_materials' : '';
+    if (!t || !it.item_id) continue;
+    try {
+      db.prepare('UPDATE ' + t + " SET purchase_rate = ?, hsn_code = CASE WHEN COALESCE(hsn_code, '') = '' THEN ? ELSE hsn_code END, gst_rate = COALESCE(gst_rate, ?) WHERE id = ?")
+        .run(num(it.rate), it.hsn_code || '', it.gst_rate == null ? null : num(it.gst_rate), it.item_id);
+    } catch (_) {}
+  }
+}
+
+// items picker for the purchase form: finished products + raw / packing materials with current stock
+router.get('/items', perm(PERM_VIEW), (req, res) => {
+  const s = settings();
+  const pr = {}; for (const r of safeAll('SELECT id, purchase_rate FROM products')) pr[r.id] = num(r.purchase_rate);
+  const products = productRows().map((p) => ({ id: p.id, name: p.name, unit: 'pack', hsn_code: p.hsn_code || '', gst_rate: p.gst_rate == null ? s.defaultGstRate : num(p.gst_rate), purchase_rate: pr[p.id] || 0, stock: num(p.qty_cb) }));
+  const materials = materialRows().map((m) => ({ id: m.id, name: m.name, unit: m.unit || '', category: m.category || '', hsn_code: m.hsn_code || '', gst_rate: m.gst_rate == null ? s.defaultGstRate : num(m.gst_rate), purchase_rate: num(m.purchase_rate), stock: num(m.stock), min_stock: num(m.min_stock) }));
+  res.json({ products, materials, defaultGstRate: s.defaultGstRate });
+});
+router.get('/purchases/next-number', perm(PERM_VIEW), (req, res) => {
+  const d = isYmd(req.query.date) ? String(req.query.date) : todayIst();
+  res.json(nextPurchaseNumber(d));
+});
+router.get('/purchases', perm(PERM_VIEW), (req, res) => {
+  const w = ['1=1'], a = [];
+  if (isYmd(req.query.from)) { w.push('bill_date >= ?'); a.push(String(req.query.from)); }
+  if (isYmd(req.query.to)) { w.push('bill_date <= ?'); a.push(String(req.query.to)); }
+  if (req.query.partyId) { w.push('party_id = ?'); a.push(Number(req.query.partyId)); }
+  if (req.query.status) { w.push('status = ?'); a.push(str(req.query.status, 12).toUpperCase()); }
+  if (req.query.q) { const q = '%' + str(req.query.q, 60).toLowerCase() + '%'; w.push('(LOWER(bill_no) LIKE ? OR LOWER(party_name) LIKE ? OR LOWER(entry_no) LIKE ?)'); a.push(q, q, q); }
+  const rows = db.prepare('SELECT id, entry_no, bill_no, bill_date, party_id, party_name, party_gstin, supply_type, taxable, cgst, sgst, igst, total, paid_amount, status, due_date, stock_added, created_by_name, created_at, (SELECT COUNT(*) FROM purchase_items pi WHERE pi.purchase_id = purchases.id) lines FROM purchases WHERE ' + w.join(' AND ') + ' ORDER BY bill_date DESC, id DESC LIMIT 500').all(...a);
+  res.json({ purchases: rows.map((r) => Object.assign(r, { balance: r2(r.total - r.paid_amount) })) });
+});
+router.get('/purchases/:id', perm(PERM_VIEW), (req, res) => {
+  const p = db.prepare('SELECT * FROM purchases WHERE id = ?').get(Number(req.params.id));
+  if (!p) return bad(res, 'Purchase bill not found.', 404);
+  const items = db.prepare('SELECT * FROM purchase_items WHERE purchase_id = ? ORDER BY id').all(p.id);
+  const payments = db.prepare('SELECT * FROM purchase_payments WHERE purchase_id = ? ORDER BY paid_on, id').all(p.id);
+  res.json({ purchase: Object.assign(p, { balance: r2(p.total - p.paid_amount) }), items, payments });
+});
+router.post('/purchases', perm(PERM_MANAGE), (req, res) => {
+  const b = req.body || {}, s = settings();
+  const billNo = str(b.billNo, 40).toUpperCase();
+  if (!billNo) return bad(res, "Supplier's invoice / bill number is required.");
+  const date = isYmd(b.billDate) ? String(b.billDate) : todayIst();
+  const recv = isYmd(b.receivedDate) ? String(b.receivedDate) : date;
+  const partyId = Number(b.partyId) || 0;
+  const party = partyId ? db.prepare('SELECT * FROM parties WHERE id = ?').get(partyId) : null;
+  const pName = party ? party.name : str(b.partyName, 120);
+  if (!pName) return bad(res, 'Select a supplier or type the supplier name.');
+  const pGstin = party ? (party.gstin || '') : str(b.partyGstin, 15).toUpperCase();
+  if (pGstin && !GSTIN_RE.test(pGstin)) return bad(res, 'Supplier GSTIN format is invalid.');
+  const pAddr = party ? (party.address || '') : str(b.partyAddress, 300);
+  const pState = (party ? (party.state_code || '') : str(b.partyStateCode, 2)) || (pGstin ? pGstin.slice(0, 2) : '');
+  const myState = companyStateCode(s);
+  const intra = b.supplyType === 'inter' ? false : b.supplyType === 'intra' ? true : (!myState || !pState || myState === pState);
+  const dup = db.prepare("SELECT entry_no FROM purchases WHERE UPPER(bill_no) = ? AND LOWER(party_name) = LOWER(?) AND status != 'CANCELLED'").get(billNo, pName);
+  if (dup) return bad(res, 'Bill ' + billNo + ' of ' + pName + ' is already entered (' + dup.entry_no + ').');
+  const rawLines = Array.isArray(b.items) ? b.items : [];
+  if (!rawLines.length) return bad(res, 'Add at least one item.');
+  const prods = {}; for (const p of productRows()) prods[p.id] = p;
+  const mats = {}; for (const m of materialRows()) mats[m.id] = m;
+  const lines = [];
+  for (const l of rawLines) {
+    const qty = num(l.qty);
+    if (qty <= 0) continue;
+    const type = l.itemType === 'product' ? 'product' : l.itemType === 'material' ? 'material' : 'other';
+    const id = Number(l.itemId) || 0;
+    const master = type === 'product' ? prods[id] : type === 'material' ? mats[id] : null;
+    if (type !== 'other' && !master) return bad(res, 'Item not found: ' + (l.description || ('#' + id)) + ' — pick it from the list again.');
+    const rate = num(l.rate);
+    if (rate < 0) return bad(res, 'Rate cannot be negative.');
+    const desc = str(l.description, 160) || (master ? master.name : '');
+    if (!desc) return bad(res, 'Item description is required.');
+    lines.push({
+      itemType: type, itemId: master ? master.id : null, description: desc,
+      hsnCode: str(l.hsnCode, 8).replace(/[^0-9]/g, '') || (master && master.hsn_code) || '',
+      qty, unit: str(l.unit, 12) || (type === 'material' && master ? (master.unit || '') : type === 'product' ? 'pack' : ''),
+      rate, discountPct: num(l.discountPct),
+      gstRate: l.gstRate == null || l.gstRate === '' ? (master && master.gst_rate != null ? num(master.gst_rate) : s.defaultGstRate) : num(l.gstRate),
+      batchCode: str(l.batchCode, 40).toUpperCase(),
+    });
+  }
+  if (!lines.length) return bad(res, 'Every item needs a quantity above zero.');
+  const addStock = b.addStock !== false;
+  const c = calc(lines, intra, s.roundOff !== false);
+  const creditDays = Math.max(0, Math.round(num(b.creditDays != null && b.creditDays !== '' ? b.creditDays : (party && party.credit_days) || 0)));
+  const due = creditDays ? new Date(new Date(date + 'T00:00:00Z').getTime() + creditDays * 864e5).toISOString().slice(0, 10) : date;
+  const remarks = str(b.remarks, 300);
+  const out = runTx(() => {
+    const n = nextPurchaseNumber(date);
+    db.prepare('INSERT INTO purchase_seq (fy, seq) VALUES (?, ?) ON CONFLICT(fy) DO UPDATE SET seq = excluded.seq').run(n.fy, n.seq);
+    const r = db.prepare(`INSERT INTO purchases (entry_no, fy, bill_no, bill_date, received_date, party_id, party_name, party_gstin, party_address, party_state_code, supply_type,
+      subtotal, discount, taxable, cgst, sgst, igst, round_off, total, paid_amount, status, due_date, remarks, stock_added, created_by, created_by_name, created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,'RECEIVED',?,?,?,?,?,?)`)
+      .run(n.number, n.fy, billNo, date, recv, party ? party.id : null, pName, pGstin, pAddr, pState, intra ? 'intra' : 'inter',
+        c.subtotal, c.discount, c.taxable, c.cgst, c.sgst, c.igst, c.roundOff, c.total, due, remarks, addStock ? 1 : 0, userId(req), userName(req), nowIso());
+    const id = Number(r.lastInsertRowid);
+    const ins = db.prepare(`INSERT INTO purchase_items (purchase_id, item_type, item_id, description, hsn_code, qty, unit, rate, discount_pct, gross, discount_amt, taxable, gst_rate, cgst, sgst, igst, total, batch_code)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+    const saved = [];
+    for (const it of c.items) {
+      const rr = ins.run(id, it.itemType, it.itemId, it.description, it.hsnCode, it.qty, it.unit, it.rate, it.discountPct, it.gross, it.discountAmt, it.taxable, it.gstRate, it.cgst, it.sgst, it.igst, it.total, it.batchCode);
+      saved.push({ id: Number(rr.lastInsertRowid), item_type: it.itemType, item_id: it.itemId, qty: it.qty, rate: it.rate, hsn_code: it.hsnCode, gst_rate: it.gstRate });
+    }
+    if (addStock) applyPurchaseStock(saved, +1, { date: recv, reference: 'Bill ' + billNo + ' · ' + pName, remark: remarks, userId: userId(req) });
+    rememberRates(saved);
+    audit(db, req.user, 'CREATE', 'billing', id, 'Purchase ' + n.number + ' ← ' + pName + ' bill ' + billNo + ' ₹' + c.total + (addStock ? ' (stock added)' : ''));
+    return { id, number: n.number };
+  });
+  res.status(201).json({ ok: true, id: out.id, number: out.number, total: c.total, supplyType: intra ? 'intra' : 'inter' });
+});
+router.post('/purchases/:id/cancel', perm(PERM_MANAGE), (req, res) => {
+  const p = db.prepare('SELECT * FROM purchases WHERE id = ?').get(Number(req.params.id));
+  if (!p) return bad(res, 'Purchase bill not found.', 404);
+  if (p.status === 'CANCELLED') return bad(res, 'Already cancelled.');
+  if (p.paid_amount > 0) return bad(res, 'Payments are recorded against this bill — delete them first.');
+  const items = db.prepare('SELECT * FROM purchase_items WHERE purchase_id = ?').all(p.id);
+  runTx(() => {
+    db.prepare("UPDATE purchases SET status = 'CANCELLED', cancelled_at = ?, cancel_reason = ? WHERE id = ?").run(nowIso(), str((req.body || {}).reason, 200), p.id);
+    if (p.stock_added) applyPurchaseStock(items, -1, {});
+  });
+  audit(db, req.user, 'CANCEL', 'billing', p.id, 'Purchase ' + p.entry_no + ' (bill ' + p.bill_no + ') cancelled' + (p.stock_added ? ' (stock reversed)' : ''));
+  res.json({ ok: true });
+});
+router.post('/purchases/:id/payments', perm(PERM_MANAGE), (req, res) => {
+  const p = db.prepare('SELECT * FROM purchases WHERE id = ?').get(Number(req.params.id));
+  if (!p) return bad(res, 'Purchase bill not found.', 404);
+  if (p.status === 'CANCELLED') return bad(res, 'Bill is cancelled.');
+  const b = req.body || {}, amount = r2(num(b.amount));
+  if (amount <= 0) return bad(res, 'Amount must be above zero.');
+  const balance = r2(p.total - p.paid_amount);
+  if (amount > balance + 0.5) return bad(res, 'Amount exceeds the balance (₹' + balance + ').');
+  const mode = ['cash', 'cheque', 'neft', 'rtgs', 'upi', 'card', 'other'].includes(String(b.mode || '').toLowerCase()) ? String(b.mode).toLowerCase() : 'cheque';
+  const paidOn = isYmd(b.paidOn) ? String(b.paidOn) : todayIst();
+  const out = runTx(() => {
+    const r = db.prepare('INSERT INTO purchase_payments (purchase_id, amount, mode, ref_no, bank, paid_on, note, created_by, created_by_name, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)')
+      .run(p.id, amount, mode, str(b.refNo, 40), str(b.bank, 60), paidOn, str(b.note, 200), userId(req), userName(req), nowIso());
+    const paid = r2(p.paid_amount + amount);
+    const st = purchaseStatus(Object.assign({}, p, { paid_amount: paid }));
+    db.prepare('UPDATE purchases SET paid_amount = ?, status = ? WHERE id = ?').run(paid, st, p.id);
+    return { id: Number(r.lastInsertRowid), paid, status: st };
+  });
+  audit(db, req.user, 'PAYMENT', 'billing', p.id, 'Paid ₹' + amount + ' (' + mode + ') against bill ' + p.bill_no + ' of ' + p.party_name);
+  res.status(201).json(Object.assign({ ok: true }, out));
+});
+router.delete('/purchases/:id/payments/:pid', perm(PERM_MANAGE), (req, res) => {
+  const p = db.prepare('SELECT * FROM purchases WHERE id = ?').get(Number(req.params.id));
+  const pay = p && db.prepare('SELECT * FROM purchase_payments WHERE id = ? AND purchase_id = ?').get(Number(req.params.pid), p.id);
+  if (!p || !pay) return bad(res, 'Payment not found.', 404);
+  runTx(() => {
+    db.prepare('DELETE FROM purchase_payments WHERE id = ?').run(pay.id);
+    const paid = r2(Math.max(0, p.paid_amount - pay.amount));
+    db.prepare('UPDATE purchases SET paid_amount = ?, status = ? WHERE id = ?').run(paid, purchaseStatus(Object.assign({}, p, { paid_amount: paid })), p.id);
+  });
+  audit(db, req.user, 'DELETE', 'billing', p.id, 'Payment ₹' + pay.amount + ' removed from bill ' + p.bill_no);
+  res.json({ ok: true });
+});
+router.get('/payables', perm(PERM_VIEW), (req, res) => {
+  const today = todayIst();
+  const rows = db.prepare("SELECT id, entry_no, bill_no, bill_date, due_date, party_id, party_name, total, paid_amount, status FROM purchases WHERE status IN ('RECEIVED','PARTIAL') ORDER BY bill_date").all();
+  const out = rows.map((r) => {
+    const days = Math.floor((new Date(today + 'T00:00:00Z') - new Date(r.bill_date + 'T00:00:00Z')) / 864e5);
+    const overdue = r.due_date && r.due_date < today;
+    return Object.assign(r, { balance: r2(r.total - r.paid_amount), days, overdue, bucket: days <= 30 ? '0-30' : days <= 60 ? '31-60' : days <= 90 ? '61-90' : '90+' });
+  });
+  const byParty = {};
+  for (const r of out) { const k = r.party_name; byParty[k] = byParty[k] || { party: k, partyId: r.party_id, balance: 0, bills: 0, oldest: r.bill_date }; byParty[k].balance = r2(byParty[k].balance + r.balance); byParty[k].bills++; }
+  const buckets = { '0-30': 0, '31-60': 0, '61-90': 0, '90+': 0 };
+  for (const r of out) buckets[r.bucket] = r2(buckets[r.bucket] + r.balance);
+  res.json({ payables: out, total: r2(out.reduce((s, r) => s + r.balance, 0)), byParty: Object.values(byParty).sort((a, b) => b.balance - a.balance), buckets });
+});
+router.get('/purchase-summary', perm(PERM_VIEW), (req, res) => {
+  const { from, to } = range(req);
+  const t = db.prepare("SELECT COUNT(*) n, COALESCE(SUM(taxable),0) taxable, COALESCE(SUM(cgst+sgst+igst),0) tax, COALESCE(SUM(total),0) total, COALESCE(SUM(paid_amount),0) paid FROM purchases WHERE status != 'CANCELLED' AND bill_date BETWEEN ? AND ?").get(from, to);
+  const byParty = db.prepare("SELECT party_name party, COUNT(*) bills, COALESCE(SUM(total),0) total, COALESCE(SUM(total - paid_amount),0) balance FROM purchases WHERE status != 'CANCELLED' AND bill_date BETWEEN ? AND ? GROUP BY party_name ORDER BY total DESC LIMIT 15").all(from, to);
+  const byItem = db.prepare("SELECT pi.description item, pi.item_type type, SUM(pi.qty) qty, COALESCE(SUM(pi.taxable),0) taxable FROM purchase_items pi JOIN purchases p ON p.id = pi.purchase_id WHERE p.status != 'CANCELLED' AND p.bill_date BETWEEN ? AND ? GROUP BY pi.description, pi.item_type ORDER BY taxable DESC LIMIT 15").all(from, to);
+  const byMonth = db.prepare("SELECT substr(bill_date,1,7) month, COUNT(*) bills, COALESCE(SUM(taxable),0) taxable, COALESCE(SUM(cgst+sgst+igst),0) tax, COALESCE(SUM(total),0) total FROM purchases WHERE status != 'CANCELLED' AND bill_date >= date(?, '-11 months') AND bill_date <= ? GROUP BY month ORDER BY month").all(to, to);
+  const pay = db.prepare("SELECT COALESCE(SUM(total - paid_amount),0) v FROM purchases WHERE status IN ('RECEIVED','PARTIAL')").get();
+  res.json({ from, to, bills: t.n, taxable: r2(t.taxable), tax: r2(t.tax), total: r2(t.total), paid: r2(t.paid), payable: r2(pay.v), byParty, byItem, byMonth });
+});
+function purchaseRegisterRows(from, to) {
+  return db.prepare(`SELECT p.entry_no, p.bill_no number, p.bill_date invoice_date, p.party_name, p.party_gstin, p.party_state_code place_of_supply, p.supply_type, p.status, p.total invoice_total,
+      pi.hsn_code, pi.gst_rate, SUM(pi.taxable) taxable, SUM(pi.cgst) cgst, SUM(pi.sgst) sgst, SUM(pi.igst) igst, SUM(pi.qty) qty
+    FROM purchases p JOIN purchase_items pi ON pi.purchase_id = p.id
+    WHERE p.bill_date BETWEEN ? AND ?
+    GROUP BY p.id, pi.hsn_code, pi.gst_rate ORDER BY p.bill_date, p.id, pi.gst_rate`).all(from, to)
+    .map((r) => Object.assign(r, { taxable: r2(r.taxable), cgst: r2(r.cgst), sgst: r2(r.sgst), igst: r2(r.igst), kind: r.party_gstin ? 'B2B' : 'URD' }));
+}
+router.get('/purchase-register', perm(PERM_VIEW), (req, res) => {
+  const { from, to } = range(req);
+  const rows = purchaseRegisterRows(from, to);
+  const live = rows.filter((r) => r.status !== 'CANCELLED');
+  const byRate = {};
+  for (const r of live) { const k = String(r.gst_rate); byRate[k] = byRate[k] || { rate: r.gst_rate, taxable: 0, cgst: 0, sgst: 0, igst: 0 }; byRate[k].taxable = r2(byRate[k].taxable + r.taxable); byRate[k].cgst = r2(byRate[k].cgst + r.cgst); byRate[k].sgst = r2(byRate[k].sgst + r.sgst); byRate[k].igst = r2(byRate[k].igst + r.igst); }
+  res.json({ from, to, rows, byRate: Object.values(byRate).sort((a, b) => a.rate - b.rate),
+    totals: { taxable: r2(live.reduce((s, r) => s + r.taxable, 0)), cgst: r2(live.reduce((s, r) => s + r.cgst, 0)), sgst: r2(live.reduce((s, r) => s + r.sgst, 0)), igst: r2(live.reduce((s, r) => s + r.igst, 0)) } });
+});
+router.get('/purchase-register.csv', perm(PERM_VIEW), (req, res) => {
+  const { from, to } = range(req);
+  const esc = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const head = ['Entry No', 'Supplier Bill No', 'Bill Date', 'Supplier', 'GSTIN', 'Type', 'Supplier State', 'Supply', 'HSN', 'Qty', 'GST %', 'Taxable', 'CGST', 'SGST', 'IGST', 'Bill Total', 'Status'];
+  const lines = [head.join(',')];
+  for (const r of purchaseRegisterRows(from, to)) lines.push([r.entry_no, r.number, r.invoice_date, r.party_name, r.party_gstin, r.kind, r.place_of_supply, r.supply_type, r.hsn_code, r.qty, r.gst_rate, r.taxable, r.cgst, r.sgst, r.igst, r.invoice_total, r.status].map(esc).join(','));
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="purchase-register-' + from + '-to-' + to + '.csv"');
+  res.send('\ufeff' + lines.join('\r\n'));
+});
+
+// ---------- per-item IN / OUT history (product or material) ----------
+// Products: purchases + completed production IN; dispatches + stock-deducting invoices OUT.
+// Materials: every packing_txns row (purchase bills, manual receipts, recipe / BOM / extra consumption).
+// A balancing "OPENING" line makes the running balance end exactly at today's stock.
+router.get('/ledger', perm(PERM_VIEW), (req, res) => {
+  const type = req.query.type === 'material' ? 'material' : 'product';
+  const id = Number(req.query.id) || 0;
+  if (!id) return bad(res, 'id is required.');
+  const rows = [];
+  let name = '', unit = '', stock = 0;
+  if (type === 'product') {
+    const p = safeGet('SELECT p.id, p.name, COALESCE(i.qty_cb, 0) stock FROM products p LEFT JOIN inventory i ON i.product_id = p.id WHERE p.id = ?', [id]);
+    if (!p) return bad(res, 'Product not found.', 404);
+    name = p.name; unit = 'pack'; stock = num(p.stock);
+    for (const r of safeAll("SELECT pi.qty, pi.batch_code, pu.id pid, pu.entry_no, pu.bill_no, COALESCE(NULLIF(pu.received_date, ''), pu.bill_date) bill_date, pu.party_name, pu.created_by_name, pu.created_at FROM purchase_items pi JOIN purchases pu ON pu.id = pi.purchase_id WHERE pi.item_type = 'product' AND pi.item_id = ? AND pu.status != 'CANCELLED' AND pu.stock_added = 1", [id]))
+      rows.push({ date: r.bill_date, at: r.created_at || '', kind: 'PURCHASE', dir: 'in', qty: num(r.qty), ref: r.bill_no, party: r.party_name, note: r.entry_no + (r.batch_code ? ' · ' + r.batch_code : ''), by: r.created_by_name || '', link: '/billing/purchases/' + r.pid });
+    for (const r of safeAll("SELECT b.id bid, b.code, b.produced_cb, b.completed_at, b.planned_date FROM batches b WHERE b.product_id = ? AND UPPER(b.status) = 'COMPLETED' AND COALESCE(b.produced_cb, 0) > 0", [id]))
+      rows.push({ date: String(r.completed_at || r.planned_date || '').slice(0, 10), at: r.completed_at || '', kind: 'PRODUCTION', dir: 'in', qty: num(r.produced_cb), ref: r.code || '', party: '', note: '', by: '', link: '/production/batches/' + r.bid });
+    for (const r of safeAll("SELECT di.cartons, di.batch_code, d.id did, d.code, d.dispatch_date, d.destination, d.truck_number, d.created_at FROM dispatch_items di JOIN dispatches d ON d.id = di.dispatch_id WHERE di.product_id = ? AND UPPER(COALESCE(d.status, '')) != 'VOID'", [id]))
+      rows.push({ date: r.dispatch_date, at: r.created_at || '', kind: 'DISPATCH', dir: 'out', qty: num(r.cartons), ref: r.code || '', party: r.destination || '', note: [r.truck_number, r.batch_code].filter(Boolean).join(' · '), by: '', link: '/dispatch/' + r.did });
+    for (const r of safeAll("SELECT ii.qty, ii.batch_code, i.id iid, i.number, i.invoice_date, i.party_name, i.created_by_name, i.created_at FROM invoice_items ii JOIN invoices i ON i.id = ii.invoice_id WHERE ii.product_id = ? AND i.status != 'CANCELLED' AND i.stock_deducted = 1", [id]))
+      rows.push({ date: r.invoice_date, at: r.created_at || '', kind: 'SALE', dir: 'out', qty: num(r.qty), ref: r.number, party: r.party_name, note: r.batch_code || '', by: r.created_by_name || '', link: '/billing/' + r.iid });
+  } else {
+    const m = safeGet('SELECT id, name, unit, COALESCE(stock, 0) stock FROM packing_materials WHERE id = ?', [id]);
+    if (!m) return bad(res, 'Material not found.', 404);
+    name = m.name; unit = m.unit || ''; stock = num(m.stock);
+    const purByTxn = {};
+    for (const r of safeAll("SELECT pi.txn_id, pu.id pid, pu.bill_no, pu.party_name FROM purchase_items pi JOIN purchases pu ON pu.id = pi.purchase_id WHERE pi.item_type = 'material' AND pi.item_id = ? AND pi.txn_id IS NOT NULL", [id])) purByTxn[r.txn_id] = r;
+    let txns = safeAll('SELECT t.id, t.txn_type, t.qty, t.txn_date, t.reference, t.remark, t.created_at, u.name by_name FROM packing_txns t LEFT JOIN users u ON u.id = t.created_by WHERE t.material_id = ?', [id]);
+    if (!txns.length) txns = safeAll('SELECT t.id, t.txn_type, t.qty, t.txn_date, t.reference, t.remark, t.created_at FROM packing_txns t WHERE t.material_id = ?', [id]);
+    for (const r of txns) {
+      const p = purByTxn[r.id];
+      const isIn = String(r.txn_type).toUpperCase() === 'RECEIVED';
+      rows.push({ date: String(r.txn_date || '').slice(0, 10), at: r.created_at || '', kind: p ? 'PURCHASE' : (isIn ? 'RECEIVED' : 'CONSUMED'), dir: isIn ? 'in' : 'out', qty: num(r.qty), ref: p ? p.bill_no : (r.reference || ''), party: p ? p.party_name : '', note: r.remark || '', by: r.by_name || '', link: p ? '/billing/purchases/' + p.pid : '' });
+    }
+  }
+  rows.sort((a, b) => (a.date + '|' + a.at).localeCompare(b.date + '|' + b.at));
+  const inSum = rows.filter((r) => r.dir === 'in').reduce((s, r) => s + r.qty, 0);
+  const outSum = rows.filter((r) => r.dir === 'out').reduce((s, r) => s + r.qty, 0);
+  const opening = r2(stock - inSum + outSum);
+  if (Math.abs(opening) > 0.0005) rows.unshift({ date: rows.length ? rows[0].date : todayIst(), at: '', kind: 'OPENING', dir: opening >= 0 ? 'in' : 'out', qty: Math.abs(opening), ref: '', party: '', note: 'Opening stock / manual adjustments (balancing figure)', by: '', link: '' });
+  let bal = 0;
+  for (const r of rows) { bal = r2(bal + (r.dir === 'in' ? r.qty : -r.qty)); r.balance = bal; }
+  rows.reverse();
+  res.json({ type, id, name, unit, stock: r2(stock), totalIn: r2(inSum), totalOut: r2(outSum), rows: rows.slice(0, 1500) });
+});
+
 module.exports = router;
 JSFILE
 sed -i "s/__PV__/$PV/; s/__PM__/$PM/" "$DIR/routes/billing.js"
@@ -531,4 +884,4 @@ if [ "$MODE" = "saas" ]; then
 else
   curl -s -m 8 -o /dev/null -w "FACTORY /api/billing/settings (no token) -> %{http_code}  (401 = route live)\n" http://127.0.0.1:4000/api/billing/settings
 fi
-echo "BILLING DONE ✓ — app: Billing section (invoices, parties, receipts, GST register); Products: HSN / GST % / sale rate"
+echo "BILLING DONE ✓ — app: Billing → Sales (invoices, receipts, GST register) + Purchases (supplier bills → stock in, payables, purchase register) + per-item IN/OUT history"

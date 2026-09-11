@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 
@@ -10,6 +11,7 @@ import '../../core/theme.dart';
 import '../../core/i18n.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
+import '../billing/item_history_page.dart' show showItemHistory;
 import '../reports/report_pdf.dart';
 
 /// Packing Material — stock of bottles, caps, labels, cartons, trays etc.
@@ -303,6 +305,15 @@ class _StockTabState extends State<_StockTab> {
                   label: Text(tr('Receive Stock')),
                 ),
               ),
+              if (auth.canManageBilling)
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    await context.push('/billing/purchases/new');
+                    _reload();
+                  },
+                  icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                  label: Text(tr('Enter Supplier Bill')),
+                ),
               OutlinedButton.icon(
                 onPressed: () async {
                   final saved = await showFastDialog<bool>(context, (_) => _TxnDialog(kind: 'consume', rawOnly: widget.rawOnly));
@@ -382,8 +393,15 @@ class _StockTabState extends State<_StockTab> {
                           m['unit'],
                           qtyInt(m['min_stock']),
                           (m['low'] as int) == 1 ? const StatusChip('LOW') : const StatusChip('IN STOCK'),
-                          if (canManage)
+                          if (canManage || auth.canViewBilling)
                             Row(mainAxisSize: MainAxisSize.min, children: [
+                              if (auth.canViewBilling)
+                                IconButton(
+                                  tooltip: tr('In / Out history'),
+                                  icon: const Icon(Icons.history_rounded, size: 18),
+                                  onPressed: () => showItemHistory(context, type: 'material', id: m['id'] as int, name: m['name'] as String),
+                                ),
+                              if (canManage)
                               IconButton(
                                 tooltip: 'Edit material & stock',
                                 icon: const Icon(Icons.edit_outlined, size: 18),
@@ -392,6 +410,7 @@ class _StockTabState extends State<_StockTab> {
                                   if (saved == true) _reload();
                                 },
                               ),
+                              if (canManage)
                               IconButton(
                                 tooltip: 'Delete material',
                                 icon: Icon(Icons.delete_outline_rounded, size: 18, color: Theme.of(context).colorScheme.error),
@@ -559,7 +578,9 @@ class _LedgerTabState extends State<_LedgerTab> {
                           StatusChip(t['txn_type'] == 'RECEIVED' ? 'IN' : 'OUT'),
                           Text('${t['txn_type'] == 'RECEIVED' ? '+' : '−'}${qtyInt(t['qty'])}',
                               style: TextStyle(fontWeight: FontWeight.w700, color: t['txn_type'] == 'RECEIVED' ? AppColors.green : AppColors.red)),
-                          (t['reference'] as String? ?? '').isEmpty ? ((t['remark'] as String? ?? '').isEmpty ? '—' : t['remark']) : t['reference'],
+                          (t['reference'] as String? ?? '').isEmpty
+                              ? ((t['remark'] as String? ?? '').isEmpty ? '—' : t['remark'])
+                              : Text(t['reference'] as String, style: TextStyle(fontWeight: (t['reference'] as String).startsWith('Bill ') ? FontWeight.w700 : FontWeight.w400)),
                           t['batch_code'] ?? '—',
                           t['created_by_name'] ?? '—',
                         ],
@@ -753,7 +774,7 @@ class _TxnDialogState extends State<_TxnDialog> {
                     TextField(controller: qty, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${tr('Quantity')} (${_material?['unit'] ?? 'pcs'}) *')),
                     const SizedBox(height: 12),
                     if (isReceive)
-                      TextField(controller: reference, decoration: InputDecoration(labelText: tr('Reference (PO no. / supplier)'), hintText: 'e.g. PO-1187 / supplier name'))
+                      TextField(controller: reference, decoration: InputDecoration(labelText: tr('Supplier bill no / reference'), hintText: 'e.g. ASM/1187 · Ambala Sugar Mills', helperText: tr('Tip: "Enter Supplier Bill" records the full bill with GST and adds stock for all items at once.'), helperMaxLines: 2))
                     else
                       TextField(controller: reference, decoration: InputDecoration(labelText: tr('Reference (batch / purpose)'), hintText: 'e.g. batch B-2603 / QC samples')),
                     const SizedBox(height: 12),

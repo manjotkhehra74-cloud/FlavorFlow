@@ -7,6 +7,7 @@ import '../../core/format.dart';
 import '../../core/i18n.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
+import '../billing/item_history_page.dart' show showItemHistory;
 
 /// Product Master — Finished Goods with exact spec data (carton & tray packing).
 class ProductsPage extends StatefulWidget {
@@ -115,8 +116,15 @@ class _ProductsPageState extends State<ProductsPage> {
                     qtyInt(products[i]['min_stock_cb']),
                     qtyInt(products[i]['qty_cb']),
                     if (CompanyProfile.usesTrays) qtyInt(products[i]['qty_trays']),
-                    if (canManage)
+                    if (canManage || auth.canViewBilling)
                       Row(mainAxisSize: MainAxisSize.min, children: [
+                        if (auth.canViewBilling)
+                          IconButton(
+                            icon: const Icon(Icons.history_rounded, size: 19),
+                            tooltip: tr('In / Out history'),
+                            onPressed: () => showItemHistory(context, type: 'product', id: products[i]['id'] as int, name: products[i]['name'] as String),
+                          ),
+                        if (canManage)
                         IconButton(
                           icon: const Icon(Icons.edit_outlined, size: 19),
                           tooltip: 'Edit',
@@ -125,6 +133,7 @@ class _ProductsPageState extends State<ProductsPage> {
                             if (saved == true) _reload();
                           },
                         ),
+                        if (canManage)
                         IconButton(
                           icon: Icon(Icons.delete_outline_rounded, size: 19, color: Theme.of(context).colorScheme.error),
                           tooltip: 'Delete',

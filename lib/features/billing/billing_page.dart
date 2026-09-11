@@ -10,9 +10,11 @@ import '../../core/theme.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 
-/// Sales Billing — GST tax invoices, parties (customers), receipts and the
-/// GST register. Works for every industry: a "pack" is whatever the company
-/// ships (carton / bag / crate / bale) and rates can be per pack or per piece.
+/// Billing — OUTWARD (GST tax invoices, receipts, receivables) and INWARD
+/// (supplier bills entered with the supplier's invoice number → stock in,
+/// payables), plus parties, GST registers and setup. Works for every
+/// industry: a "pack" is whatever the company ships (carton / bag / crate /
+/// bale) and rates can be per pack or per piece.
 class BillingPage extends StatefulWidget {
   final String? tab;
   const BillingPage({super.key, this.tab});
@@ -22,7 +24,7 @@ class BillingPage extends StatefulWidget {
 
 class _BillingPageState extends State<BillingPage> with SingleTickerProviderStateMixin {
   late final TabController _tab;
-  static const _tabs = ['invoices', 'receivables', 'parties', 'register', 'settings'];
+  static const _tabs = ['invoices', 'receivables', 'purchases', 'payables', 'parties', 'register', 'settings'];
 
   @override
   void initState() {
@@ -46,8 +48,10 @@ class _BillingPageState extends State<BillingPage> with SingleTickerProviderStat
             isScrollable: true,
             tabAlignment: TabAlignment.start,
             tabs: [
-              Tab(text: tr('Invoices')),
-              Tab(text: tr('Outstanding')),
+              Tab(text: tr('Sales Invoices')),
+              Tab(text: tr('Receivable')),
+              Tab(text: tr('Purchases (Inward)')),
+              Tab(text: tr('Payable')),
               Tab(text: tr('Parties')),
               Tab(text: tr('GST Register')),
               Tab(text: tr('Billing Setup')),
@@ -59,6 +63,8 @@ class _BillingPageState extends State<BillingPage> with SingleTickerProviderStat
         child: TabBarView(controller: _tab, children: const [
           _InvoicesTab(),
           _ReceivablesTab(),
+          _PurchasesTab(),
+          _PayablesTab(),
           _PartiesTab(),
           _RegisterTab(),
           _SettingsTab(),
@@ -264,6 +270,219 @@ class _ReceivablesTabState extends State<_ReceivablesTab> {
   }
 }
 
+// ───────────────────────── Purchases (inward) ─────────────────────────
+class _PurchasesTab extends StatefulWidget {
+  const _PurchasesTab();
+  @override
+  State<_PurchasesTab> createState() => _PurchasesTabState();
+}
+
+class _PurchasesTabState extends State<_PurchasesTab> {
+  late Future<Map<String, dynamic>> _future;
+  final _q = TextEditingController();
+  String _status = '';
+
+  @override
+  void initState() { super.initState(); _future = _load(); }
+  @override
+  void dispose() { _q.dispose(); super.dispose(); }
+
+  Future<Map<String, dynamic>> _load() async {
+    final api = context.read<AuthController>().api;
+    final params = <String>[
+      if (_q.text.trim().isNotEmpty) 'q=${Uri.encodeQueryComponent(_q.text.trim())}',
+      if (_status.isNotEmpty) 'status=$_status',
+    ];
+    final list = await api.get('/billing/purchases${params.isEmpty ? '' : '?${params.join('&')}'}');
+    final sum = await api.get('/billing/purchase-summary');
+    return {'purchases': ((list as Map)['purchases'] as List).cast<Map<String, dynamic>>(), 'summary': (sum as Map).cast<String, dynamic>()};
+  }
+
+  void _reload() => setState(() => _future = _load());
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthController>();
+    final canManage = auth.canManageBilling;
+    final sub = Theme.of(context).colorScheme.onSurfaceVariant;
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.hasError) return ErrorState(snap.error!, onRetry: _reload);
+        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        final rows = snap.data!['purchases'] as List<Map<String, dynamic>>;
+        final s = snap.data!['summary'] as Map<String, dynamic>;
+        final byItem = ((s['byItem'] as List?) ?? const []).cast<Map<String, dynamic>>();
+        return RefreshIndicator(
+          onRefresh: () async => _reload(),
+          child: ListView(physics: const AlwaysScrollableScrollPhysics(), padding: const EdgeInsets.all(20), children: [
+            Wrap(spacing: 12, runSpacing: 12, children: [
+              SizedBox(width: 200, child: KpiCard(label: tr('This month purchases'), value: inr(s['total'], decimals: false), icon: Icons.south_west_rounded, tint: AppColors.blue, sub: '${s['bills']} ${tr('bills')}')),
+              SizedBox(width: 200, child: KpiCard(label: tr('GST paid (ITC)'), value: inr(s['tax'], decimals: false), icon: Icons.account_balance_rounded, tint: AppColors.teal, sub: tr('this month'))),
+              SizedBox(width: 200, child: KpiCard(label: tr('Paid to suppliers'), value: inr(s['paid'], decimals: false), icon: Icons.payments_rounded, tint: AppColors.green, sub: tr('this month'))),
+              SizedBox(width: 200, child: KpiCard(label: tr('Payable'), value: inr(s['payable'], decimals: false), icon: Icons.hourglass_bottom_rounded, tint: AppColors.orange, sub: tr('all bills'))),
+            ]),
+            const SizedBox(height: 8),
+            Text(tr('Inward: enter every supplier bill here — raw material, packing material or finished goods. Stock goes up automatically and the bill number shows in the item history.'), style: TextStyle(fontSize: 12.5, color: sub)),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(
+                child: TextField(
+                  controller: _q,
+                  decoration: InputDecoration(
+                    hintText: tr('Search bill no / supplier / entry no'),
+                    prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                    isDense: true,
+                    suffixIcon: _q.text.isEmpty ? null : IconButton(icon: const Icon(Icons.clear_rounded, size: 18), onPressed: () { _q.clear(); _reload(); }),
+                  ),
+                  onSubmitted: (_) => _reload(),
+                ),
+              ),
+              const SizedBox(width: 10),
+              DropdownButton<String>(
+                value: _status,
+                underline: const SizedBox.shrink(),
+                items: [
+                  DropdownMenuItem(value: '', child: Text(tr('All'))),
+                  DropdownMenuItem(value: 'RECEIVED', child: Text(tr('Unpaid'))),
+                  DropdownMenuItem(value: 'PARTIAL', child: Text(tr('Partly paid'))),
+                  DropdownMenuItem(value: 'PAID', child: Text(tr('Paid'))),
+                  DropdownMenuItem(value: 'CANCELLED', child: Text(tr('Cancelled'))),
+                ],
+                onChanged: (v) { _status = v ?? ''; _reload(); },
+              ),
+              const SizedBox(width: 10),
+              if (canManage)
+                FilledButton.icon(
+                  onPressed: () async {
+                    await context.push('/billing/purchases/new');
+                    _reload();
+                  },
+                  icon: const Icon(Icons.add_rounded),
+                  label: Text(tr('Enter Supplier Bill')),
+                ),
+            ]),
+            const SizedBox(height: 16),
+            SectionCard(
+              title: tr('Supplier Bills'),
+              child: rows.isEmpty
+                  ? EmptyState(tr('No purchase bills yet — tap "Enter Supplier Bill" when goods arrive with the supplier\'s invoice.'), icon: Icons.move_to_inbox_outlined)
+                  : AppDataTable(
+                      columns: [tr('Bill no'), tr('Date'), tr('Supplier'), tr('Lines'), tr('Taxable'), 'GST', tr('Total'), tr('Balance'), tr('Status'), tr('Stock'), tr('Entry')],
+                      moneyColumns: const {4, 5, 6, 7},
+                      onRowTap: (i) async {
+                        await context.push('/billing/purchases/${rows[i]['id']}');
+                        _reload();
+                      },
+                      rows: [
+                        for (final r in rows)
+                          [
+                            Text(r['bill_no'] as String, style: const TextStyle(fontWeight: FontWeight.w700)),
+                            fmtDate(r['bill_date']),
+                            r['party_name'],
+                            qtyInt(r['lines']),
+                            r['taxable'],
+                            ((r['cgst'] as num) + (r['sgst'] as num) + (r['igst'] as num)),
+                            r['total'],
+                            r['balance'],
+                            StatusChip(r['status'] as String),
+                            r['stock_added'] == 1 ? const StatusChip('IN') : Text('—', style: TextStyle(color: sub)),
+                            Text(r['entry_no'] as String, style: TextStyle(fontSize: 12, color: sub)),
+                          ],
+                      ],
+                    ),
+            ),
+            if (byItem.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              SectionCard(
+                title: tr('Top items bought this month'),
+                child: AppDataTable(
+                  columns: [tr('Item'), tr('Type'), tr('Qty'), tr('Taxable')],
+                  moneyColumns: const {3},
+                  rows: [for (final it in byItem) [it['item'], it['type'] == 'product' ? tr('Finished goods') : it['type'] == 'material' ? tr('Material') : tr('Other / service'), it['qty'], it['taxable']]],
+                ),
+              ),
+            ],
+          ]),
+        );
+      },
+    );
+  }
+}
+
+// ───────────────────────── Payables ─────────────────────────
+class _PayablesTab extends StatefulWidget {
+  const _PayablesTab();
+  @override
+  State<_PayablesTab> createState() => _PayablesTabState();
+}
+
+class _PayablesTabState extends State<_PayablesTab> {
+  late Future<Map<String, dynamic>> _future;
+  @override
+  void initState() { super.initState(); _future = _load(); }
+  Future<Map<String, dynamic>> _load() async => ((await context.read<AuthController>().api.get('/billing/payables')) as Map).cast<String, dynamic>();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.hasError) return ErrorState(snap.error!, onRetry: () => setState(() => _future = _load()));
+        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        final d = snap.data!;
+        final rows = (d['payables'] as List).cast<Map<String, dynamic>>();
+        final byParty = (d['byParty'] as List).cast<Map<String, dynamic>>();
+        final b = (d['buckets'] as Map).cast<String, dynamic>();
+        return ListView(padding: const EdgeInsets.all(20), children: [
+          Wrap(spacing: 12, runSpacing: 12, children: [
+            SizedBox(width: 200, child: KpiCard(label: tr('Total payable'), value: inr(d['total'], decimals: false), icon: Icons.account_balance_wallet_rounded, tint: AppColors.orange, sub: '${rows.length} ${tr('open bills')}')),
+            SizedBox(width: 160, child: KpiCard(label: '0–30 ${tr('days')}', value: inr(b['0-30'], decimals: false), icon: Icons.timelapse_rounded, tint: AppColors.green)),
+            SizedBox(width: 160, child: KpiCard(label: '31–60 ${tr('days')}', value: inr(b['31-60'], decimals: false), icon: Icons.timelapse_rounded, tint: AppColors.amber)),
+            SizedBox(width: 160, child: KpiCard(label: '61–90 ${tr('days')}', value: inr(b['61-90'], decimals: false), icon: Icons.timelapse_rounded, tint: AppColors.orange)),
+            SizedBox(width: 160, child: KpiCard(label: '90+ ${tr('days')}', value: inr(b['90+'], decimals: false), icon: Icons.warning_amber_rounded, tint: AppColors.red)),
+          ]),
+          const SizedBox(height: 16),
+          SectionCard(
+            title: tr('Supplier-wise payable'),
+            child: byParty.isEmpty
+                ? EmptyState(tr('Nothing to pay — all supplier bills are settled 🎉'), icon: Icons.check_circle_outline_rounded)
+                : AppDataTable(
+                    columns: [tr('Supplier'), tr('Bills'), tr('Balance'), tr('Oldest')],
+                    moneyColumns: const {2},
+                    rows: [for (final p in byParty) [Text(p['party'] as String, style: const TextStyle(fontWeight: FontWeight.w600)), qtyInt(p['bills']), p['balance'], fmtDate(p['oldest'])]],
+                  ),
+          ),
+          const SizedBox(height: 16),
+          SectionCard(
+            title: tr('Open supplier bills'),
+            child: rows.isEmpty
+                ? const SizedBox.shrink()
+                : AppDataTable(
+                    columns: [tr('Bill no'), tr('Date'), tr('Due'), tr('Supplier'), tr('Total'), tr('Balance'), tr('Days')],
+                    moneyColumns: const {4, 5},
+                    highlight: (i) => rows[i]['overdue'] == true,
+                    onRowTap: (i) async { await context.push('/billing/purchases/${rows[i]['id']}'); if (mounted) setState(() => _future = _load()); },
+                    rows: [
+                      for (final r in rows)
+                        [
+                          Text(r['bill_no'] as String, style: const TextStyle(fontWeight: FontWeight.w700)),
+                          fmtDate(r['bill_date']),
+                          Text(fmtDate(r['due_date']), style: TextStyle(color: r['overdue'] == true ? AppColors.red : null, fontWeight: r['overdue'] == true ? FontWeight.w700 : null)),
+                          r['party_name'],
+                          r['total'],
+                          r['balance'],
+                          '${r['days']}',
+                        ],
+                    ],
+                  ),
+          ),
+        ]);
+      },
+    );
+  }
+}
+
 // ───────────────────────── Parties ─────────────────────────
 class _PartiesTab extends StatefulWidget {
   const _PartiesTab();
@@ -314,8 +533,17 @@ class _PartiesTabState extends State<_PartiesTab> {
         final rows = snap.data!;
         return ListView(padding: const EdgeInsets.all(20), children: [
           Row(children: [
-            Expanded(child: Text('${rows.length} ${tr('parties')} · ${tr('customers, distributors, dealers — GSTIN, address, credit days')}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant))),
-            if (canManage)
+            Expanded(child: Text('${rows.length} ${tr('parties')} · ${tr('customers you sell to and suppliers you buy from — GSTIN, address, credit days')}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant))),
+            if (canManage) ...[
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final saved = await showFastDialog<bool>(context, (_) => const PartyFormDialog(asSupplier: true));
+                  if (saved == true) _reload();
+                },
+                icon: const Icon(Icons.local_shipping_outlined, size: 18),
+                label: Text(tr('Add Supplier')),
+              ),
+              const SizedBox(width: 8),
               FilledButton.icon(
                 onPressed: () async {
                   final saved = await showFastDialog<bool>(context, (_) => const PartyFormDialog());
@@ -324,25 +552,32 @@ class _PartiesTabState extends State<_PartiesTab> {
                 icon: const Icon(Icons.person_add_alt_1_rounded),
                 label: Text(tr('Add Party')),
               ),
+            ],
           ]),
           const SizedBox(height: 16),
           SectionCard(
             title: tr('Party Master'),
             child: rows.isEmpty
-                ? EmptyState(tr('No parties yet — add your customers here (or type a name on the invoice; walk-in sales need no party).'), icon: Icons.storefront_outlined)
+                ? EmptyState(tr('No parties yet — add your customers and suppliers here (a one-time name can also be typed on the invoice / bill).'), icon: Icons.storefront_outlined)
                 : AppDataTable(
-                    columns: [tr('Party'), 'GSTIN', tr('State'), tr('Phone'), tr('Credit days'), tr('Invoices'), tr('Outstanding'), ''],
-                    moneyColumns: const {6},
+                    columns: [tr('Party'), tr('Type'), 'GSTIN', tr('State'), tr('Phone'), tr('Credit days'), tr('Invoices'), tr('Receivable'), tr('Bills'), tr('Payable'), ''],
+                    moneyColumns: const {7, 9},
                     rows: [
                       for (final p in rows)
                         [
                           Text(p['name'] as String, style: const TextStyle(fontWeight: FontWeight.w600)),
+                          Wrap(spacing: 4, children: [
+                            if ((p['is_customer'] ?? 1) == 1) const StatusChip('CUSTOMER'),
+                            if ((p['is_supplier'] ?? 0) == 1) const StatusChip('SUPPLIER'),
+                          ]),
                           (p['gstin'] as String? ?? '').isEmpty ? Text(tr('Unregistered (B2C)'), style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)) : p['gstin'],
                           gstStateName(p['state_code'] as String? ?? ''),
                           (p['phone'] as String? ?? '').isEmpty ? '—' : p['phone'],
                           '${p['credit_days'] ?? 0}',
                           qtyInt(p['invoices']),
                           p['outstanding'],
+                          qtyInt(p['purchases'] ?? 0),
+                          p['payable'] ?? 0,
                           if (canManage)
                             Row(mainAxisSize: MainAxisSize.min, children: [
                               IconButton(icon: const Icon(Icons.edit_outlined, size: 19), tooltip: tr('Edit'), onPressed: () async {
@@ -376,7 +611,9 @@ String gstStateName(String code) => code.isEmpty ? '—' : '$code · ${kGstState
 
 class PartyFormDialog extends StatefulWidget {
   final Map<String, dynamic>? party;
-  const PartyFormDialog({super.key, this.party});
+  /// New party opened from the purchase side → Supplier ticked by default.
+  final bool asSupplier;
+  const PartyFormDialog({super.key, this.party, this.asSupplier = false});
   @override
   State<PartyFormDialog> createState() => _PartyFormDialogState();
 }
@@ -389,6 +626,8 @@ class _PartyFormDialogState extends State<PartyFormDialog> {
   late final email = TextEditingController(text: widget.party?['email']?.toString() ?? '');
   late final credit = TextEditingController(text: '${widget.party?['credit_days'] ?? 0}');
   late String state = (widget.party?['state_code']?.toString() ?? '').isEmpty ? '' : widget.party!['state_code'].toString();
+  late bool isCustomer = widget.party == null ? !widget.asSupplier : (widget.party!['is_customer'] ?? 1) == 1;
+  late bool isSupplier = widget.party == null ? widget.asSupplier : (widget.party!['is_supplier'] ?? 0) == 1;
   bool busy = false;
 
   @override
@@ -396,10 +635,12 @@ class _PartyFormDialogState extends State<PartyFormDialog> {
 
   Future<void> _save() async {
     if (name.text.trim().length < 2) { showErr(context, tr('Party name is required.')); return; }
+    if (!isCustomer && !isSupplier) { showErr(context, tr('Tick Customer and/or Supplier.')); return; }
     setState(() => busy = true);
     final body = {
       'name': name.text.trim(), 'gstin': gstin.text.trim().toUpperCase(), 'address': address.text.trim(),
       'stateCode': state, 'phone': phone.text.trim(), 'email': email.text.trim(), 'creditDays': int.tryParse(credit.text) ?? 0,
+      'isCustomer': isCustomer, 'isSupplier': isSupplier,
     };
     try {
       final api = context.read<AuthController>().api;
@@ -419,13 +660,18 @@ class _PartyFormDialogState extends State<PartyFormDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.party == null ? tr('Add Party') : tr('Edit Party')),
+      title: Text(widget.party == null ? (widget.asSupplier ? tr('Add Supplier') : tr('Add Party')) : tr('Edit Party')),
       content: SizedBox(
         width: 460,
         child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(controller: name, textCapitalization: TextCapitalization.words, decoration: InputDecoration(labelText: tr('Party name *'), hintText: 'e.g. Guru Nanak Traders')),
-            const SizedBox(height: 10),
+            TextField(controller: name, textCapitalization: TextCapitalization.words, decoration: InputDecoration(labelText: tr('Party name *'), hintText: widget.asSupplier ? 'e.g. Ambala Sugar Mills' : 'e.g. Guru Nanak Traders')),
+            const SizedBox(height: 6),
+            Row(children: [
+              Expanded(child: CheckboxListTile(dense: true, contentPadding: EdgeInsets.zero, controlAffinity: ListTileControlAffinity.leading, value: isCustomer, onChanged: (v) => setState(() => isCustomer = v ?? false), title: Text(tr('Customer'), style: const TextStyle(fontSize: 13.5)), subtitle: Text(tr('we sell to'), style: const TextStyle(fontSize: 11)))),
+              Expanded(child: CheckboxListTile(dense: true, contentPadding: EdgeInsets.zero, controlAffinity: ListTileControlAffinity.leading, value: isSupplier, onChanged: (v) => setState(() => isSupplier = v ?? false), title: Text(tr('Supplier'), style: const TextStyle(fontSize: 13.5)), subtitle: Text(tr('we buy from'), style: const TextStyle(fontSize: 11)))),
+            ]),
+            const SizedBox(height: 4),
             TextField(
               controller: gstin,
               textCapitalization: TextCapitalization.characters,
@@ -454,7 +700,7 @@ class _PartyFormDialogState extends State<PartyFormDialog> {
             Row(children: [
               Expanded(child: TextField(controller: phone, keyboardType: TextInputType.phone, decoration: InputDecoration(labelText: tr('Phone')))),
               const SizedBox(width: 10),
-              Expanded(child: TextField(controller: credit, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('Credit days'), helperText: tr('0 = due on invoice date')))),
+              Expanded(child: TextField(controller: credit, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('Credit days'), helperText: isSupplier && !isCustomer ? tr('days we get to pay the supplier') : tr('0 = due on invoice date')))),
             ]),
             const SizedBox(height: 10),
             TextField(controller: email, keyboardType: TextInputType.emailAddress, decoration: InputDecoration(labelText: tr('Email'))),
@@ -481,6 +727,8 @@ class _RegisterTabState extends State<_RegisterTab> {
   late DateTime to;
   Future<Map<String, dynamic>>? _future;
   bool exporting = false;
+  bool purchase = false; // false = outward (GSTR-1), true = inward (purchase register / ITC)
+  String get _path => purchase ? 'purchase-register' : 'register';
 
   @override
   void initState() {
@@ -492,7 +740,7 @@ class _RegisterTabState extends State<_RegisterTab> {
   }
 
   Future<Map<String, dynamic>> _load() async =>
-      ((await context.read<AuthController>().api.get('/billing/register?from=${ymd(from)}&to=${ymd(to)}')) as Map).cast<String, dynamic>();
+      ((await context.read<AuthController>().api.get('/billing/$_path?from=${ymd(from)}&to=${ymd(to)}')) as Map).cast<String, dynamic>();
 
   Future<void> _pick(bool isFrom) async {
     final d = await showDatePicker(context: context, initialDate: isFrom ? from : to, firstDate: DateTime(2020), lastDate: DateTime.now().add(const Duration(days: 1)));
@@ -503,8 +751,8 @@ class _RegisterTabState extends State<_RegisterTab> {
   Future<void> _csv() async {
     setState(() => exporting = true);
     try {
-      final bytes = await context.read<AuthController>().api.getBytes('/billing/register.csv?from=${ymd(from)}&to=${ymd(to)}');
-      downloadBytes('gst-register-${ymd(from)}-to-${ymd(to)}.csv', bytes, 'text/csv');
+      final bytes = await context.read<AuthController>().api.getBytes('/billing/$_path.csv?from=${ymd(from)}&to=${ymd(to)}');
+      downloadBytes('${purchase ? 'purchase' : 'gst'}-register-${ymd(from)}-to-${ymd(to)}.csv', bytes, 'text/csv');
       if (mounted) showOk(context, tr('GST register exported (CSV) — open in Excel / share with your CA.'));
     } catch (e) {
       if (mounted) showErr(context, e);
@@ -518,12 +766,23 @@ class _RegisterTabState extends State<_RegisterTab> {
     final sub = Theme.of(context).colorScheme.onSurfaceVariant;
     return ListView(padding: const EdgeInsets.all(20), children: [
       Wrap(spacing: 10, runSpacing: 10, crossAxisAlignment: WrapCrossAlignment.center, children: [
+        SegmentedButton<bool>(
+          segments: [
+            ButtonSegment(value: false, label: Text(tr('Sales (outward)')), icon: const Icon(Icons.north_east_rounded, size: 16)),
+            ButtonSegment(value: true, label: Text(tr('Purchases (inward)')), icon: const Icon(Icons.south_west_rounded, size: 16)),
+          ],
+          selected: {purchase},
+          showSelectedIcon: false,
+          onSelectionChanged: (v) => setState(() { purchase = v.first; _future = _load(); }),
+        ),
         OutlinedButton.icon(onPressed: () => _pick(true), icon: const Icon(Icons.calendar_today_rounded, size: 16), label: Text('${tr('From')} ${fmtDate(ymd(from))}')),
         OutlinedButton.icon(onPressed: () => _pick(false), icon: const Icon(Icons.calendar_today_rounded, size: 16), label: Text('${tr('To')} ${fmtDate(ymd(to))}')),
-        FilledButton.tonalIcon(onPressed: exporting ? null : _csv, icon: const Icon(Icons.table_view_rounded, size: 18), label: Text(exporting ? tr('Preparing…') : tr('Export CSV (GSTR-1 data)'))),
+        FilledButton.tonalIcon(onPressed: exporting ? null : _csv, icon: const Icon(Icons.table_view_rounded, size: 18), label: Text(exporting ? tr('Preparing…') : (purchase ? tr('Export CSV (purchase register)') : tr('Export CSV (GSTR-1 data)')))),
       ]),
       const SizedBox(height: 6),
-      Text(tr('Outward supplies for the period — B2B (with GSTIN) and B2C rows, rate-wise tax summary. Cancelled invoices are listed but not totalled.'), style: TextStyle(fontSize: 12.5, color: sub)),
+      Text(purchase
+          ? tr('Inward supplies for the period — supplier bill-wise, HSN / rate-wise tax paid (input tax credit). B2B = supplier with GSTIN, URD = unregistered. Cancelled entries are listed but not totalled.')
+          : tr('Outward supplies for the period — B2B (with GSTIN) and B2C rows, rate-wise tax summary. Cancelled invoices are listed but not totalled.'), style: TextStyle(fontSize: 12.5, color: sub)),
       const SizedBox(height: 16),
       FutureBuilder<Map<String, dynamic>>(
         future: _future,
@@ -536,9 +795,9 @@ class _RegisterTabState extends State<_RegisterTab> {
           final t = (d['totals'] as Map).cast<String, dynamic>();
           return Column(children: [
             SectionCard(
-              title: tr('Rate-wise summary'),
+              title: purchase ? tr('Rate-wise tax paid (ITC)') : tr('Rate-wise summary'),
               child: byRate.isEmpty
-                  ? EmptyState(tr('No invoices in this period'))
+                  ? EmptyState(purchase ? tr('No purchase bills in this period') : tr('No invoices in this period'))
                   : AppDataTable(
                       columns: ['GST %', tr('Taxable'), 'CGST', 'SGST', 'IGST', tr('Total tax')],
                       moneyColumns: const {1, 2, 3, 4, 5},
@@ -550,11 +809,11 @@ class _RegisterTabState extends State<_RegisterTab> {
             ),
             const SizedBox(height: 16),
             SectionCard(
-              title: tr('Invoice-wise register'),
+              title: purchase ? tr('Bill-wise purchase register') : tr('Invoice-wise register'),
               child: rows.isEmpty
                   ? const SizedBox.shrink()
                   : AppDataTable(
-                      columns: [tr('Invoice'), tr('Date'), tr('Party'), 'GSTIN', tr('Type'), 'HSN', 'GST %', tr('Taxable'), 'CGST', 'SGST', 'IGST', tr('Status')],
+                      columns: [purchase ? tr('Supplier bill no') : tr('Invoice'), tr('Date'), purchase ? tr('Supplier') : tr('Party'), 'GSTIN', tr('Type'), 'HSN', 'GST %', tr('Taxable'), 'CGST', 'SGST', 'IGST', tr('Status')],
                       moneyColumns: const {7, 8, 9, 10},
                       rows: [
                         for (final r in rows)

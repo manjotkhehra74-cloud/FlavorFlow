@@ -129,6 +129,9 @@ class StatusChip extends StatelessWidget {
     'TRIAL': (Color(0xFF0F766E), Color(0xFFE6F5F3)),
     'EXPIRED': (Color(0xFFB91C1C), Color(0xFFFBEAEA)),
     'GRACE': (Color(0xFFC2410C), Color(0xFFFBEFE6)),
+    'RECEIVED': (Color(0xFF1D4ED8), Color(0xFFE9F0FC)),
+    'CUSTOMER': (Color(0xFF1D4ED8), Color(0xFFE9F0FC)),
+    'SUPPLIER': (Color(0xFF7C3AED), Color(0xFFF1EBFD)),
   };
 
   @override
