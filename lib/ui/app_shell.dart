@@ -188,6 +188,13 @@ class _AppShellState extends State<AppShell> {
       final at = ri != -1 ? ri + 1 : nav.length;
       nav.insert(at, {'path': '/loss', 'label': 'Packing Loss %', 'icon': 'percent', 'group': ri != -1 ? nav[ri]['group'] : 'Operations'});
     }
+    // Stock Ledger (SAP-style movement register): client-side entry right after
+    // Inventory for everyone who can see stock.
+    if (!nav.any((e) => e['path'] == '/stock') && auth.can('inventory.view')) {
+      final ii = nav.indexWhere((e) => e['path'] == '/inventory');
+      final at = ii != -1 ? ii + 1 : nav.length;
+      nav.insert(at, {'path': '/stock', 'label': 'Stock Ledger', 'icon': 'history', 'group': ii != -1 ? nav[ii]['group'] : 'Operations'});
+    }
     // Sales Billing (GST invoices): the server nav carries /billing once the
     // billing patch is applied; older servers get the entry client-side.
     if (!nav.any((e) => e['path'] == '/billing') && auth.canViewBilling) {

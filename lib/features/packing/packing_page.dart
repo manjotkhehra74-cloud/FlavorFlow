@@ -397,7 +397,7 @@ class _StockTabState extends State<_StockTab> {
                             Row(mainAxisSize: MainAxisSize.min, children: [
                               if (auth.canViewBilling)
                                 IconButton(
-                                  tooltip: tr('In / Out history'),
+                                  tooltip: tr('Stock ledger (all in / out with doc numbers)'),
                                   icon: const Icon(Icons.history_rounded, size: 18),
                                   onPressed: () => showItemHistory(context, type: 'material', id: m['id'] as int, name: m['name'] as String),
                                 ),

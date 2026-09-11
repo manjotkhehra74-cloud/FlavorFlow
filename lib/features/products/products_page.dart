@@ -121,7 +121,7 @@ class _ProductsPageState extends State<ProductsPage> {
                         if (auth.canViewBilling)
                           IconButton(
                             icon: const Icon(Icons.history_rounded, size: 19),
-                            tooltip: tr('In / Out history'),
+                            tooltip: tr('Stock ledger (all in / out with doc numbers)'),
                             onPressed: () => showItemHistory(context, type: 'product', id: products[i]['id'] as int, name: products[i]['name'] as String),
                           ),
                         if (canManage)

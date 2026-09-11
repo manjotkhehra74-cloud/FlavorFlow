@@ -10,7 +10,7 @@
 #   → 2-3 min baad result browser vich:  https://flavorflow.co.in/download/boot-status.txt
 #   (poora log: VM → "Serial port 1 (console)" ya /var/log/ff-boot.log)
 #
-# Steps (arg naal chuno, default sab):  fixssh industry billing saasbilling demo web apk
+# Steps (arg naal chuno, default sab):  fixssh industry billing stockledger saasbilling demo web apk
 #   fixssh   — memory/OOM/swap snapshot, swap ensure, google-guest-agent + sshd restart
 #              (SSH-in-browser "Connection failed… retrying" aksar guest-agent/RAM karke)
 #   industry — tools/ff-saasindustry.sh (idempotent) + tenant /api/settings/company verify
@@ -30,7 +30,7 @@ main() {
   WEB="${FF_WEB:-/opt/flavorflow-saas/web}"
   LOG=/var/log/ff-boot.log
   STATUS="$WEB/download/boot-status.txt"
-  STEPS="${*:-fixssh industry billing saasbilling demo web apk}"
+  STEPS="${*:-fixssh industry billing stockledger saasbilling demo web apk}"
   mkdir -p "$WEB/download"
   exec > >(tee -a "$LOG") 2>&1
   : > "$STATUS"; chmod 644 "$STATUS"
@@ -99,6 +99,19 @@ main() {
       fi
       st "[billing] rc=$RC"
     else st "[billing] koi server.js nahi — skip"; fi
+  fi
+
+  # ---------- stockledger (SAP-style stock journal: triggers + /api/stock routes + backfill) ----------
+  if [[ " $STEPS " == *" stockledger "* ]]; then
+    if [ -f /opt/flavorflow-saas/core/server.js ] || [ -f /opt/flavorflow/server/server.js ]; then
+      OUT=""; RC=1
+      if fetch "$RAW/ff-stockledger.sh" /tmp/ff-stockledger.sh; then OUT=$(bash /tmp/ff-stockledger.sh </dev/null 2>&1); RC=$?; fi
+      if [ -z "$OUT" ]; then st "[stockledger] script download FAIL (GitHub reach nahi hoya?)"; else
+        echo "$OUT"
+        echo "$OUT" | grep -E '^(CORE|ROUTES|ROUTE SYNTAX|STOCKCTX|SERVER|BILLING|TENANT|FACTORY|LOG|STOCKLEDGER|FATAL)' | cut -c1-200 | sed 's/^/[stockledger] /' | tee -a "$STATUS"
+      fi
+      st "[stockledger] rc=$RC"
+    else st "[stockledger] koi server.js nahi — skip"; fi
   fi
 
   # ---------- saasbilling (subscription plans, cheque activation, admin console API) ----------

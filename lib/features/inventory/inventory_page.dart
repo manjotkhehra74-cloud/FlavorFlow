@@ -138,6 +138,11 @@ class _InventoryPageState extends State<InventoryPage> {
                 label: Text(tr('Enter Supplier Bill')),
               ),
             OutlinedButton.icon(
+              onPressed: () => context.push('/stock'),
+              icon: const Icon(Icons.history_rounded, size: 18),
+              label: Text(tr('Stock Ledger')),
+            ),
+            OutlinedButton.icon(
               onPressed: _exporting ? null : _exportPdf,
               icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
               label: Text(tr('Stock PDF')),
@@ -170,7 +175,7 @@ class _InventoryPageState extends State<InventoryPage> {
                           Row(mainAxisSize: MainAxisSize.min, children: [
                             if (auth.canViewBilling)
                               IconButton(
-                                tooltip: tr('In / Out history'),
+                                tooltip: tr('Stock ledger (all in / out with doc numbers)'),
                                 icon: const Icon(Icons.history_rounded, size: 18),
                                 onPressed: () => showItemHistory(context, type: 'product', id: it['product_id'] as int, name: it['name'] as String),
                               ),
@@ -332,6 +337,7 @@ class _SetStockDialogState extends State<SetStockDialog> {
   late final TextEditingController cb = TextEditingController(text: '${widget.item['qty_cb']}');
   late final TextEditingController trays = TextEditingController(text: '${widget.item['qty_trays']}');
   final note = TextEditingController();
+  final reference = TextEditingController();
   bool busy = false;
 
   bool get _hasTray => CompanyProfile.usesTrays && (widget.item['bottles_per_tray'] as num? ?? 0) > 0;
@@ -344,6 +350,7 @@ class _SetStockDialogState extends State<SetStockDialog> {
         'qtyCb': int.tryParse(cb.text) ?? 0,
         'qtyTrays': _hasTray ? (int.tryParse(trays.text) ?? 0) : 0,
         'note': note.text.trim(),
+        'reference': reference.text.trim(), // stock-ledger doc no (count sheet / memo)
       });
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
@@ -373,7 +380,11 @@ class _SetStockDialogState extends State<SetStockDialog> {
             ],
           ]),
           const SizedBox(height: 12),
+          TextField(controller: reference, textCapitalization: TextCapitalization.characters, decoration: InputDecoration(labelText: tr('Reference / count sheet no (optional)'), hintText: 'e.g. PC-0912', prefixIcon: const Icon(Icons.tag_rounded, size: 18))),
+          const SizedBox(height: 12),
           TextField(controller: note, decoration: InputDecoration(labelText: tr('Note (optional)'), hintText: 'e.g. Opening stock 04 Aug 2026')),
+          const SizedBox(height: 8),
+          Text(tr('The difference is posted to the stock ledger as "Stock set (physical count)" with this reference.'), style: TextStyle(fontSize: 11.5, color: Theme.of(context).colorScheme.onSurfaceVariant)),
         ]),
       ),
       actions: [
@@ -396,6 +407,8 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
   final cb = TextEditingController();
   final trays = TextEditingController();
   final note = TextEditingController();
+  final reference = TextEditingController();
+  final party = TextEditingController();
   bool busy = false;
   String? loadError;
 
@@ -425,6 +438,8 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
         'qtyCb': int.tryParse(cb.text) ?? 0,
         if (_hasTray) 'qtyTrays': int.tryParse(trays.text) ?? 0,
         'note': note.text.trim(),
+        'reference': reference.text.trim(), // stock-ledger doc no (GRN / challan / return memo)
+        'party': party.text.trim(),
       });
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
@@ -469,7 +484,19 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                         ),
                       ),
                     const SizedBox(height: 12),
+                    Row(children: [
+                      Expanded(child: TextField(controller: reference, textCapitalization: TextCapitalization.characters, decoration: InputDecoration(labelText: tr('GRN / challan / ref no'), hintText: 'e.g. GRN-0451', prefixIcon: const Icon(Icons.tag_rounded, size: 18)))),
+                      const SizedBox(width: 12),
+                      Expanded(child: TextField(controller: party, decoration: InputDecoration(labelText: tr('From (party / depot)'), hintText: tr('optional')))),
+                    ]),
+                    const SizedBox(height: 12),
                     TextField(controller: note, decoration: InputDecoration(labelText: tr('Note (optional)'))),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(tr('Goods received against a supplier invoice? Use Billing → Purchases (Inward) instead — it records the bill number, GST and payable too.'),
+                          style: TextStyle(fontSize: 11.5, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                    ),
                   ]),
       ),
       actions: [

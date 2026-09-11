@@ -182,7 +182,7 @@ class _PurchaseDetailPageState extends State<PurchaseDetailPage> {
                     items[i]['total'],
                     items[i]['item_id'] != null && items[i]['item_type'] != 'other'
                         ? IconButton(
-                            tooltip: tr('In / Out history'),
+                            tooltip: tr('Stock ledger (all in / out with doc numbers)'),
                             icon: const Icon(Icons.history_rounded, size: 19),
                             onPressed: () => showItemHistory(context, type: items[i]['item_type'] as String, id: items[i]['item_id'] as int, name: items[i]['description'] as String),
                           )
