@@ -220,6 +220,7 @@ async function seedTenant(code, c) {
   }
   // one completed production run for the first product (Production + run-wise stock + reports get data)
   const p0 = d.P[0], pid0 = idOf(p0[0]);
+  let did = 0; // dispatch id → sample invoice below
   if (pid0) {
     const qty = ind === 'mill' ? 200 : 100;
     const cr = await call(port, 'POST', '/production/batches', { productId: pid0, plannedCb: qty, plannedDate: today, remarks: 'Demo run' }, token);
@@ -236,8 +237,48 @@ async function seedTenant(code, c) {
     } else err('batch create', cr);
     const dr = await call(port, 'POST', '/dispatch', { dispatchDate: today, destination: d.TR[0][1], truckNumber: d.TR[0][0], remarks: 'Demo dispatch', items: [{ productId: pid0, cartons: 20, trays: 0 }] }, token);
     stat.dispatch = dr.status < 300 ? 'ok' : 'fail'; if (dr.status >= 300) err('dispatch', dr);
+    did = (dr.json && dr.json.id) || 0;
   }
-  log('[' + ind + '] products ' + stat.products + '/' + d.P.length + ', materials ' + stat.materials + '/' + (d.PM.length + d.RM.length) + ', trucks ' + stat.trucks + ', receipts ' + stat.receipts + ', run ' + stat.batch + ', dispatch ' + stat.dispatch + (stat.errors.length ? ' | ERR: ' + stat.errors.join('; ') : ' ✓'));
+  // billing sample — GST setup, one customer invoice made from the dispatch (half paid by cheque)
+  // and one supplier bill for raw material (stock IN, part paid). Skipped quietly when the
+  // billing module is not mounted on this core (older VM).
+  stat.billing = 'n/a';
+  const bset = await call(port, 'GET', '/billing/settings', null, token);
+  if (bset.status === 200) {
+    stat.billing = 'ok';
+    const berr = (what, r) => { stat.billing = 'partial'; err(what, r); };
+    const gst = ['paint', 'agro', 'plastic', 'hardware', 'general'].includes(ind) ? 18 : 5;
+    const RATE_PER_KG = { water: 18, dairy: 60, mill: 50, oil: 130, food: 110, bakery: 90, soap: 110, cosmetics: 250, paint: 200, agro: 180, pharma: 300, textile: 350, footwear: 250, plastic: 140, hardware: 160, general: 110 };
+    await call(port, 'PUT', '/billing/settings', { gstin: '03DEMOF0000A1Z5', legalName: c.name || ('Demo ' + ind), address: 'Focal Point, Ludhiana, Punjab 141010', bankName: 'Demo Bank', accountNo: '000011112222', ifsc: 'DEMO0000001', defaultGstRate: gst, creditDays: 30 }, token);
+    for (const p of d.P) { const pid = idOf(p[0]); if (pid) await call(port, 'PUT', '/billing/products/' + pid + '/rates', { gstRate: gst, saleRate: Math.max(10, Math.round(p[2] * (RATE_PER_KG[ind] || 110) / 10) * 10), ratePer: 'pack' }, token); }
+    const cust = await call(port, 'POST', '/billing/parties', { name: 'Sample Distributor (Demo)', gstin: '03DEMOC0001A1Z5', address: 'Miller Ganj, Ludhiana, Punjab', creditDays: 30, isCustomer: true }, token);
+    const sup = await call(port, 'POST', '/billing/parties', { name: 'Sample Supplier (Demo)', gstin: '06DEMOS0001A1Z5', address: 'Industrial Area, Ambala, Haryana', creditDays: 15, isSupplier: true, isCustomer: false }, token);
+    const custId = cust.json && cust.json.id, supId = sup.json && sup.json.id;
+    if (!custId) berr('customer party', cust);
+    if (!supId) berr('supplier party', sup);
+    if (custId && did) {
+      const fd = await call(port, 'GET', '/billing/from-dispatch/' + did, null, token);
+      const lines = (fd.json && fd.json.lines) || [];
+      const inv = await call(port, 'POST', '/billing/invoices', { partyId: custId, invoiceDate: today, dispatchId: did, items: lines }, token);
+      if (inv.status < 300 && inv.json && inv.json.id) {
+        const pay = await call(port, 'POST', '/billing/invoices/' + inv.json.id + '/payments', { amount: Math.round(inv.json.total / 2), mode: 'cheque', refNo: '004521', bank: 'Demo Bank', paidOn: today, note: 'Part payment (demo)' }, token);
+        if (pay.status >= 300) berr('invoice payment', pay);
+      } else berr('invoice', inv);
+    }
+    if (supId) {
+      const it = await call(port, 'GET', '/billing/items', null, token);
+      const mats = ((it.json && it.json.materials) || []).filter((m) => m.category === RAW).slice(0, 2);
+      const items = mats.map((m) => ({ itemType: 'material', itemId: m.id, description: m.name, qty: Math.max(1, Math.round(m.min_stock || 10)), unit: m.unit, rate: m.unit === 'kg' ? 48 : m.unit === 'Ltr' ? 95 : 120, gstRate: gst }));
+      if (items.length) {
+        const pur = await call(port, 'POST', '/billing/purchases', { billNo: 'SS/2026/1187', billDate: today, receivedDate: today, partyId: supId, addStock: true, remarks: 'Demo supplier bill', items }, token);
+        if (pur.status < 300 && pur.json && pur.json.id) {
+          const pay = await call(port, 'POST', '/billing/purchases/' + pur.json.id + '/payments', { amount: Math.round(pur.json.total * 0.4), mode: 'cheque', refNo: '117733', bank: 'Demo Bank', paidOn: today, note: 'Advance (demo)' }, token);
+          if (pay.status >= 300) berr('purchase payment', pay);
+        } else berr('purchase', pur);
+      }
+    }
+  }
+  log('[' + ind + '] products ' + stat.products + '/' + d.P.length + ', materials ' + stat.materials + '/' + (d.PM.length + d.RM.length) + ', trucks ' + stat.trucks + ', receipts ' + stat.receipts + ', run ' + stat.batch + ', dispatch ' + stat.dispatch + ', billing ' + stat.billing + (stat.errors.length ? ' | ERR: ' + stat.errors.join('; ') : ' ✓'));
   return stat.errors.length ? 'partial' : 'ok';
 }
 
