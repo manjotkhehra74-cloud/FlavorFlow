@@ -67,6 +67,10 @@ class _DispatchDetailPageState extends State<DispatchDetailPage> {
     return (json as Map).cast<String, dynamic>();
   }
 
+  /// Billing permission — or, on servers without the billing role patch yet,
+  /// the dispatch manage permission (the server enforces the real rule).
+  bool _canBill(BuildContext context) => context.read<AuthController>().canManageBilling;
+
   Future<void> _exportPdf(Map<String, dynamic> d, List<Map<String, dynamic>> items) async {
     setState(() => exporting = true);
     try {
@@ -107,6 +111,14 @@ class _DispatchDetailPageState extends State<DispatchDetailPage> {
               icon: const Icon(Icons.picture_as_pdf_rounded, size: 19),
               label: Text(exporting ? 'Preparing…' : 'Export PDF'),
             ),
+            // Bill this dispatch: opens the GST invoice form pre-filled with
+            // these lines (qty, batch, product HSN / GST / rate).
+            if (_canBill(context) && '${d['status']}'.toUpperCase() != 'VOID')
+              FilledButton.tonalIcon(
+                onPressed: () => context.push('/billing/new?dispatch=${widget.id}'),
+                icon: const Icon(Icons.receipt_long_rounded, size: 18),
+                label: Text(tr('Make invoice')),
+              ),
             // Wrong entry? Void returns every item's stock to inventory
             // (batch-wise too) and marks this dispatch VOID — then re-enter.
             if (context.watch<AuthController>().can('dispatch.manage') && '${d['status']}'.toUpperCase() != 'VOID')

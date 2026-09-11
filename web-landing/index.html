@@ -39,10 +39,26 @@ header{position:sticky;top:0;background:#fffdf;background:rgba(255,255,255,.95);
 .band h2{font-size:clamp(22px,4vw,30px);letter-spacing:-.6px}
 .band p{opacity:.9;margin:10px auto 22px;max-width:520px}
 .band .btn{background:#fff;color:var(--blue2)}
-.price{max-width:420px;margin:0 auto;text-align:center}
-.price .big{font-size:44px;font-weight:800;letter-spacing:-1px}
-.price ul{list-style:none;padding:0;margin:18px 0;color:var(--sub);font-size:14.5px}
-.price li{padding:7px 0;border-bottom:1px dashed var(--line)}
+.price{text-align:center}
+.price .big{font-size:38px;font-weight:800;letter-spacing:-1px;line-height:1.1}
+.price .big small{font-size:14px;color:var(--sub);font-weight:600;letter-spacing:0}
+.price ul{list-style:none;padding:0;margin:16px 0;color:var(--sub);font-size:13.5px;text-align:left}
+.price li{padding:6px 0;border-bottom:1px dashed var(--line)}
+.price li:before{content:"✓";color:var(--green2);font-weight:800;margin-right:8px}
+.plans{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;margin-top:22px;text-align:left}
+.plan{position:relative;display:flex;flex-direction:column}
+.plan.hot{border:2px solid var(--blue);box-shadow:0 12px 30px rgba(30,111,224,.12)}
+.plan .tag{position:absolute;top:-12px;left:50%;transform:translateX(-50%);color:#fff;font-size:11px;font-weight:800;letter-spacing:.6px;padding:4px 12px;border-radius:999px}
+.plan .tier{font-weight:800;font-size:18px}
+.plan .tl{color:var(--sub);font-size:13px;min-height:38px;margin-top:2px}
+.plan .save{display:none;color:var(--green2);font-size:12px;font-weight:700;margin-top:4px}
+.plan .btn{margin-top:auto;text-align:center}
+.cyc{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:4px;background:#fff;margin-top:14px}
+.cyc button{border:0;background:transparent;padding:8px 18px;border-radius:999px;font-weight:700;font-size:13.5px;cursor:pointer;font-family:inherit;color:var(--sub)}
+.cyc button.on{background:var(--navy);color:#fff}
+.cyc .pill{display:inline-block;background:#E1F8EF;color:var(--green2);font-size:11px;padding:2px 7px;border-radius:999px;margin-left:6px}
+.trialbox{margin:22px auto 0;max-width:720px;background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:16px 20px;font-size:13.5px;color:var(--sub)}
+.trialbox b{color:var(--ink)}
 footer{border-top:1px solid var(--line);padding:28px 0;color:var(--sub);font-size:13px}
 footer .wrap{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center}
 footer a{color:var(--sub)}
@@ -73,6 +89,7 @@ footer a{color:var(--sub)}
 <header><div class="wrap nav">
   <img src="/app-icon.png" alt="FlavorFlow" style="width:34px;height:34px;border-radius:9px;border:1px solid #DDE6EF"><b>FlavorFlow</b>
   <div class="cta">
+    <a class="btn btn-o" href="#pricing" style="border-color:transparent">Pricing</a>
     <a class="btn btn-o" href="#" onclick="openM('demo');return false">Try Demo</a>
     <a class="btn btn-p grad" href="#" onclick="openM('reg');return false">Start Free Trial</a>
   </div>
@@ -111,27 +128,45 @@ footer a{color:var(--sub)}
   </div>
 </div></section>
 
-<section class="sec"><div class="wrap price">
-  <h2>Simple pricing</h2>
-  <div style="margin-top:22px" class="card">
-    <div style="color:var(--sub);font-weight:700;font-size:13px">FIRST 10 DAYS</div>
-    <div class="big">Free</div>
-    <ul>
-      <li>Full ERP — nothing locked</li>
-      <li>Your own private database</li>
-      <li>Unlimited users & products</li>
-      <li>WhatsApp support</li>
-    </ul>
-    <div style="color:var(--sub);font-size:13px;margin-bottom:14px">After trial: simple monthly plan — we'll talk on WhatsApp before your trial ends. No auto-charges.</div>
-    <a class="btn btn-p grad" href="#" onclick="openM('reg');return false" style="width:100%">Start Free Trial</a>
+<section class="sec" id="pricing"><div class="wrap price">
+  <h2>Simple pricing — pick a plan, pay yearly or monthly</h2>
+  <p class="sub">Every plan starts with a <b>free 30-day trial</b> of Pro — nothing locked. Prices exclude GST.</p>
+  <div class="cyc" role="tablist">
+    <button type="button" class="on" id="cyc-m" onclick="setCycle('monthly')">Monthly</button>
+    <button type="button" id="cyc-y" onclick="setCycle('yearly')">Yearly <span class="pill">2 months free</span></button>
   </div>
+  <div class="plans" id="plans">
+    <div class="card plan" data-tier="basic">
+      <div class="tier">Basic</div><div class="tl">Small unit — stock, packing, dispatch & GST billing</div>
+      <div class="big" style="margin-top:10px">₹<span class="amt" data-m="999" data-y="9990">999</span><small> / month</small></div>
+      <div class="save">₹9,990 billed yearly · save ₹1,998</div>
+      <ul><li>Up to 5 users</li><li>Products, inventory & packing material</li><li>Dispatch challans + PDF</li><li>GST tax invoices & receivables</li><li>Stock & sales reports</li><li>WhatsApp support</li></ul>
+      <a class="btn btn-o" href="#" onclick="pick('basic');return false">Start free trial</a>
+    </div>
+    <div class="card plan hot" data-tier="pro">
+      <span class="tag grad">MOST POPULAR</span>
+      <div class="tier">Pro</div><div class="tl">Growing factory — production, recipes & controls</div>
+      <div class="big" style="margin-top:10px">₹<span class="amt" data-m="1999" data-y="19990">1,999</span><small> / month</small></div>
+      <div class="save">₹19,990 billed yearly · save ₹3,998</div>
+      <ul><li>Up to 15 users</li><li>Everything in Basic</li><li>Production batches, recipes / BOM</li><li>Raw material & packing-loss tracking</li><li>Approvals & full audit log</li><li>Priority WhatsApp support</li></ul>
+      <a class="btn btn-p grad" href="#" onclick="pick('pro');return false">Start free trial</a>
+    </div>
+    <div class="card plan" data-tier="enterprise">
+      <div class="tier">Enterprise</div><div class="tl">Multi-shift plant — unlimited users & onboarding</div>
+      <div class="big" style="margin-top:10px">₹<span class="amt" data-m="3999" data-y="39990">3,999</span><small> / month</small></div>
+      <div class="save">₹39,990 billed yearly · save ₹7,998</div>
+      <ul><li>Unlimited users</li><li>Everything in Pro</li><li>Custom roles & permissions</li><li>On-site / video onboarding</li><li>Data export & backup on request</li><li>Phone support</li></ul>
+      <a class="btn btn-o" href="#" onclick="pick('enterprise');return false">Start free trial</a>
+    </div>
+  </div>
+  <div class="trialbox"><b>How payment works:</b> no card, no auto-debit. Before your trial ends we send a simple invoice — pay by <b>cheque or NEFT</b>, WhatsApp us the cheque photo / UTR, and your plan is activated the same day. Prices shown are the defaults; the live prices load from our server.</div>
 </div></section>
 
 <section class="sec" id="download"><div class="wrap"><div class="band grad">
   <h2>Download FlavorFlow ERP</h2>
   <p>Android app — download directly from us. Register your company first, then install and sign in with your company code.</p>
   <a class="btn" href="/download/flavorflow-erp.apk">⬇ Download for Android (APK)</a>
-  <p style="font-size:12.5px;margin-top:14px;opacity:.85">Free to install · 10-day full trial · after trial a simple paid plan keeps your company active</p>
+  <p style="font-size:12.5px;margin-top:14px;opacity:.85">Free to install · 30-day full trial · then Basic / Pro / Enterprise — pay yearly or monthly by cheque / NEFT</p>
 </div></div></section>
 
 <footer><div class="wrap">
@@ -164,8 +199,10 @@ footer a{color:var(--sub)}
 <!-- REGISTER modal -->
 <div class="mback" id="m-reg" onclick="if(event.target===this)closeM('reg')">
   <form class="modal" onsubmit="return doReg(event)">
-    <h3>Start your 10-day free trial</h3>
+    <h3>Start your 30-day free trial</h3>
     <div class="note">Your company gets its own private database. You are the admin.</div>
+    <label>Plan after trial <span style="color:var(--sub);font-weight:500">(you can change later)</span></label>
+    <select id="r-plan"><option value="basic-monthly">Basic — ₹999 / month</option><option value="basic-yearly">Basic — ₹9,990 / year</option><option value="pro-monthly" selected>Pro — ₹1,999 / month</option><option value="pro-yearly">Pro — ₹19,990 / year</option><option value="enterprise-monthly">Enterprise — ₹3,999 / month</option><option value="enterprise-yearly">Enterprise — ₹39,990 / year</option></select>
     <label>Company name *</label><input id="r-co" required minlength="3" placeholder="e.g. Khalsa Foods Pvt. Ltd.">
     <label>Industry *</label>
     <select id="r-ind"><option>Food & Beverage</option><option>Dairy</option><option>Edible Oil</option><option>Bakery & Snacks</option><option>Beverages / Water</option><option>Soap & Detergent</option><option>Cosmetics & Personal Care</option><option>Paint & Lubricants</option><option>Agro-chemicals & Fertilizer</option><option>Pharma / Ayurvedic</option><option>Textile / Hosiery</option><option>Rice / Flour / Feed Mill</option><option>Footwear</option><option>Plastic & Packaging</option><option>Utensils & Hardware</option><option>General Manufacturing</option></select>
@@ -192,6 +229,17 @@ footer a{color:var(--sub)}
 </div>
 
 <script>
+var CYC='monthly';
+function inr(n){n=Math.round(n);var s=String(n);if(s.length<=3)return s;var last=s.slice(-3),rest=s.slice(0,-3);return rest.replace(/\B(?=(\d{2})+(?!\d))/g,',')+','+last}
+function setCycle(c){CYC=c;document.getElementById('cyc-m').className=c==='monthly'?'on':'';document.getElementById('cyc-y').className=c==='yearly'?'on':'';
+  document.querySelectorAll('.plan').forEach(function(p){var a=p.querySelector('.amt'),m=+a.dataset.m,y=+a.dataset.y;a.textContent=inr(c==='yearly'?Math.round(y/12):m);
+    p.querySelector('.big small').textContent=c==='yearly'?' / month, billed yearly':' / month';var sv=p.querySelector('.save');sv.style.display=c==='yearly'?'block':'none';sv.textContent='₹'+inr(y)+' billed yearly · save ₹'+inr(m*12-y)});}
+function pick(t){var sel=document.getElementById('r-plan');if(sel)sel.value=t+'-'+CYC;openM('reg')}
+(async function(){try{var r=await fetch('/api/saas/plans');if(!r.ok)return;var d=await r.json();var t=d.tiers||{};
+  document.querySelectorAll('.plan').forEach(function(p){var k=p.dataset.tier;if(!t[k])return;var a=p.querySelector('.amt');a.dataset.m=t[k].monthly;a.dataset.y=t[k].yearly;
+    if(t[k].tagline)p.querySelector('.tl').textContent=t[k].tagline;if(t[k].features&&t[k].features.length)p.querySelector('ul').innerHTML=t[k].features.map(function(f){return '<li>'+f.replace(/</g,'&lt;')+'</li>'}).join('');
+    var o=document.querySelectorAll('#r-plan option');o.forEach(function(op){var v=op.value.split('-');if(v[0]!==k)return;op.textContent=(t[k].name||k)+' — ₹'+inr(v[1]==='yearly'?t[k].yearly:t[k].monthly)+(v[1]==='yearly'?' / year':' / month')})});
+  var td=document.querySelector('#pricing .sub b');if(td&&d.trialDays)td.textContent='free '+d.trialDays+'-day trial';setCycle(CYC)}catch(e){}})();
 function openM(x){document.getElementById('m-'+x).classList.add('open')}
 function closeM(x){document.getElementById('m-'+x).classList.remove('open')}
 async function lead(kind,data){try{await fetch('/api/saas/lead',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,...data})})}catch(e){}}
@@ -211,8 +259,8 @@ async function doReg(e){
   e.preventDefault();
   const b=document.getElementById('r-go'),m=document.getElementById('r-msg');
   b.disabled=true;b.textContent='Creating…';m.className='msg';
-  const body={company:d_v('r-co'),industry:d_v('r-ind'),adminName:d_v('r-name'),adminEmail:d_v('r-em'),adminPassword:document.getElementById('r-pw').value};
-  await lead('register',{name:body.adminName,company:body.company,phone:d_v('r-ph'),industry:body.industry});
+  const body={company:d_v('r-co'),industry:d_v('r-ind'),adminName:d_v('r-name'),adminEmail:d_v('r-em'),adminPassword:document.getElementById('r-pw').value,plan:d_v('r-plan'),phone:d_v('r-ph')};
+  await lead('register',{name:body.adminName,company:body.company,phone:d_v('r-ph'),industry:body.industry+' · plan '+body.plan});
   try{
     const r=await fetch('/api/saas/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await r.json();

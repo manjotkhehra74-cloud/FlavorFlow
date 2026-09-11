@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -276,6 +277,22 @@ class _SettingsPageState extends State<SettingsPage> {
           title: tr('Company details (PDF header)'),
           subtitle: 'Name, address, GSTIN · industry (units, categories, destinations)',
           onTap: () => showDialog(context: context, builder: (_) => const CompanyProfileDialog()),
+        ),
+        _tile(
+          icon: Icons.receipt_long_outlined,
+          title: tr('Billing setup (GST invoices)'),
+          subtitle: 'GSTIN, invoice prefix, bank details, terms · printed on every tax invoice',
+          onTap: () => context.push('/billing?tab=settings'),
+        ),
+      ],
+
+      if (auth.subscription.status.available) ...[
+        _section('SUBSCRIPTION'),
+        _tile(
+          icon: Icons.workspace_premium_outlined,
+          title: tr('FlavorFlow subscription'),
+          subtitle: '${auth.subscription.status.planName}${auth.subscription.status.planCycle.isEmpty ? '' : ' · ${auth.subscription.status.planCycle}'} · ${auth.subscription.status.state}${auth.subscription.status.until.isEmpty ? '' : ' · till ${auth.subscription.status.until}'} — plans, invoice, pay by cheque',
+          onTap: () => context.push('/subscription'),
         ),
       ],
 

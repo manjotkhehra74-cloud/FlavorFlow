@@ -10,10 +10,13 @@
 #   → 2-3 min baad result browser vich:  https://flavorflow.co.in/download/boot-status.txt
 #   (poora log: VM → "Serial port 1 (console)" ya /var/log/ff-boot.log)
 #
-# Steps (arg naal chuno, default sab):  fixssh industry demo web apk
+# Steps (arg naal chuno, default sab):  fixssh industry billing saasbilling demo web apk
 #   fixssh   — memory/OOM/swap snapshot, swap ensure, google-guest-agent + sshd restart
 #              (SSH-in-browser "Connection failed… retrying" aksar guest-agent/RAM karke)
 #   industry — tools/ff-saasindustry.sh (idempotent) + tenant /api/settings/company verify
+#   billing  — tools/ff-billing.sh: GST sales invoices module in the core (/api/billing)
+#   saasbilling — tools/ff-saasbilling.sh: subscription plans + cheque activation + owner
+#              console API in the gateway (admin key from GCE metadata `ff-admin-key`)
 #   demo     — tools/ff-saasdemo.sh (16 demo-<industry> tenants, same demo login)
 #   web      — web-landing/*.html (is branch ton) → /opt/flavorflow-saas/web
 #   apk      — tools/ff-apkpublish.sh ci (CircleCI di navi successful APK → website)
@@ -27,7 +30,7 @@ main() {
   WEB="${FF_WEB:-/opt/flavorflow-saas/web}"
   LOG=/var/log/ff-boot.log
   STATUS="$WEB/download/boot-status.txt"
-  STEPS="${*:-fixssh industry demo web apk}"
+  STEPS="${*:-fixssh industry billing saasbilling demo web apk}"
   mkdir -p "$WEB/download"
   exec > >(tee -a "$LOG") 2>&1
   : > "$STATUS"; chmod 644 "$STATUS"
@@ -85,6 +88,37 @@ main() {
     else st "[industry] /opt/flavorflow-saas/core/server.js nahi — eh SaaS VM nahi? skip"; fi
   fi
 
+  # ---------- billing (GST sales invoices module: routes/billing.js + rbac + early mount) ----------
+  if [[ " $STEPS " == *" billing "* ]]; then
+    if [ -f /opt/flavorflow-saas/core/server.js ] || [ -f /opt/flavorflow/server/server.js ]; then
+      OUT=""; RC=1
+      if fetch "$RAW/ff-billing.sh" /tmp/ff-billing.sh; then OUT=$(bash /tmp/ff-billing.sh </dev/null 2>&1); RC=$?; fi
+      if [ -z "$OUT" ]; then st "[billing] script download FAIL (GitHub reach nahi hoya?)"; else
+        echo "$OUT"
+        echo "$OUT" | grep -E '^(RBAC|ROUTES|ROUTE SYNTAX|SERVER|BACKFILL|TENANT|FACTORY|BILLING|FATAL)' | cut -c1-200 | sed 's/^/[billing] /' | tee -a "$STATUS"
+      fi
+      st "[billing] rc=$RC"
+    else st "[billing] koi server.js nahi — skip"; fi
+  fi
+
+  # ---------- saasbilling (subscription plans, cheque activation, admin console API) ----------
+  if [[ " $STEPS " == *" saasbilling "* ]]; then
+    if [ -f /opt/flavorflow-saas/server/server.js ]; then
+      OUT=""; RC=1
+      # owner console key from GCE metadata (GCP console → VM → Edit → Custom metadata → ff-admin-key). Never logged.
+      MK=$(curl -s -m 3 -H 'Metadata-Flavor: Google' 'http://metadata.google.internal/computeMetadata/v1/instance/attributes/ff-admin-key' 2>/dev/null || true)
+      if printf '%s' "$MK" | grep -Eq '^[A-Za-z0-9._@#!-]{8,64}$'; then export FF_ADMIN_KEY="$MK"; st "[saasbilling] metadata ff-admin-key: found (${#MK} chars)"; else unset FF_ADMIN_KEY; st "[saasbilling] metadata ff-admin-key: not set — add it in GCP console to unlock admin.html"; fi
+      if fetch "$RAW/ff-saasbilling.sh" /tmp/ff-saasbilling.sh; then OUT=$(bash /tmp/ff-saasbilling.sh </dev/null 2>&1); RC=$?; fi
+      unset FF_ADMIN_KEY MK
+      if [ -z "$OUT" ]; then st "[saasbilling] script download FAIL (GitHub reach nahi hoya?)"; else
+        echo "$OUT"
+        echo "$OUT" | grep -E '^(PLANS|ADMIN KEY|GATEWAY|HEALTH|STATUS|ADMIN:|SAASBILLING|FATAL)' | cut -c1-260 | sed 's/^/[saasbilling] /' | tee -a "$STATUS"
+      fi
+      st "[saasbilling] rc=$RC"
+      mkdir -p /opt/flavorflow-saas/web/download 2>/dev/null   # gateway sweep writes billing-due.json here for the owner console
+    else st "[saasbilling] gateway nahi — skip"; fi
+  fi
+
   # ---------- demo ----------
   if [[ " $STEPS " == *" demo "* ]]; then
     if [ -f /opt/flavorflow-saas/data/registry.json ]; then
@@ -102,12 +136,12 @@ main() {
   if [[ " $STEPS " == *" web "* ]]; then
     if [ -d /opt/flavorflow-saas/web ]; then
       WRAW="${RAW%/tools}/web-landing"; n=0
-      for f in index.html privacy.html demo.html; do
+      for f in index.html privacy.html demo.html admin.html; do
         if curl -fsSL -m 40 --retry 3 "$WRAW/$f" -o "/tmp/ff-$f" </dev/null && grep -qi '<html' "/tmp/ff-$f"; then
           cp -f "/tmp/ff-$f" "/opt/flavorflow-saas/web/$f" && n=$((n+1))
         else st "[web] $f download FAIL"; fi
       done
-      st "[web] landing pages updated: $n/3 (demo codes: $(grep -o 'demo-mill' /opt/flavorflow-saas/web/demo.html | head -1))"
+      st "[web] landing pages updated: $n/4 (demo codes: $(grep -o 'demo-mill' /opt/flavorflow-saas/web/demo.html | head -1))"
     else st "[web] /opt/flavorflow-saas/web nahi — skip"; fi
   fi
 

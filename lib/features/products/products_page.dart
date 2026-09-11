@@ -76,6 +76,18 @@ class _ProductsPageState extends State<ProductsPage> {
               child: Text('${products.length} ${tr('finished goods')} · ${U.carton.toLowerCase()} ${CompanyProfile.usesTrays ? '& ${U.trayLc} ' : ''}${tr('weights')}, ${U.piece.toLowerCase()} ${tr('packing')}',
                   style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
             ),
+            if (auth.canManageBilling)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    final saved = await showDialog<bool>(context: context, builder: (_) => ProductRatesDialog(products: products));
+                    if (saved == true) _reload();
+                  },
+                  icon: const Icon(Icons.currency_rupee_rounded, size: 18),
+                  label: Text(tr('Rates & GST')),
+                ),
+              ),
             if (canManage)
               FilledButton.icon(
                 onPressed: () async {
@@ -212,6 +224,133 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
         FilledButton(onPressed: busy ? null : _save, child: Text(busy ? 'Saving…' : 'Save')),
+      ],
+    );
+  }
+}
+
+/// Billing master per product: HSN code, GST %, sale rate (per pack or per
+/// piece). Saved through the billing module — the invoice form and the
+/// dispatch → invoice prefill read these.
+class ProductRatesDialog extends StatefulWidget {
+  final List<Map<String, dynamic>> products;
+  const ProductRatesDialog({super.key, required this.products});
+  @override
+  State<ProductRatesDialog> createState() => _ProductRatesDialogState();
+}
+
+class _ProductRatesDialogState extends State<ProductRatesDialog> {
+  static const slabs = <num>[0, 5, 18, 40, 12, 28];
+  List<Map<String, dynamic>> rows = [];
+  final hsn = <int, TextEditingController>{};
+  final rate = <int, TextEditingController>{};
+  final gst = <int, num>{};
+  final per = <int, String>{};
+  bool loading = true, busy = false;
+  String? error;
+
+  @override
+  void initState() { super.initState(); _load(); }
+  @override
+  void dispose() { for (final c in [...hsn.values, ...rate.values]) { c.dispose(); } super.dispose(); }
+
+  Future<void> _load() async {
+    try {
+      final j = await context.read<AuthController>().api.get('/billing/products');
+      rows = ((j as Map)['products'] as List).cast<Map<String, dynamic>>();
+      for (final p in rows) {
+        final id = p['id'] as int;
+        hsn[id] = TextEditingController(text: (p['hsn_code'] ?? '').toString());
+        final sr = (p['sale_rate'] as num?) ?? 0;
+        rate[id] = TextEditingController(text: sr == 0 ? '' : (sr == sr.roundToDouble() ? sr.toInt().toString() : sr.toString()));
+        final g = p['gst_rate'] as num?;
+        gst[id] = g != null && slabs.contains(g) ? g : 5;
+        per[id] = p['rate_per'] == 'piece' ? 'piece' : 'pack';
+      }
+    } catch (e) {
+      error = '$e';
+    }
+    if (mounted) setState(() => loading = false);
+  }
+
+  Future<void> _save() async {
+    setState(() => busy = true);
+    final api = context.read<AuthController>().api;
+    var n = 0;
+    try {
+      for (final p in rows) {
+        final id = p['id'] as int;
+        final h = hsn[id]!.text.trim(), r = num.tryParse(rate[id]!.text.trim()) ?? 0;
+        final changed = h != (p['hsn_code'] ?? '').toString() || r != ((p['sale_rate'] as num?) ?? 0) || gst[id] != (p['gst_rate'] as num?) || per[id] != (p['rate_per'] ?? 'pack');
+        if (!changed) continue;
+        await api.put('/billing/products/$id/rates', {'hsnCode': h, 'gstRate': gst[id], 'saleRate': r, 'ratePer': per[id]});
+        n++;
+      }
+      if (mounted) { showOk(context, '$n ${tr('products updated')}'); Navigator.pop(context, true); }
+    } catch (e) {
+      if (mounted) showErr(context, e);
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sub = Theme.of(context).colorScheme.onSurfaceVariant;
+    return AlertDialog(
+      title: Text(tr('Rates & GST (for invoices)')),
+      content: SizedBox(
+        width: 720,
+        height: 460,
+        child: loading
+            ? const Center(child: CircularProgressIndicator())
+            : error != null
+                ? ErrorState(error!, onRetry: () { setState(() { loading = true; error = null; }); _load(); })
+                : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(tr('HSN code and GST % print on every tax invoice. GST 2.0 slabs: 0 / 5 / 18 / 40 (12 and 28 marked * are legacy). Sale rate is the default — it can be changed on each invoice.'), style: TextStyle(fontSize: 12.5, color: sub)),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: ListView.separated(
+                        itemCount: rows.length,
+                        separatorBuilder: (context, index) => const Divider(height: 14),
+                        itemBuilder: (_, i) {
+                          final p = rows[i];
+                          final id = p['id'] as int;
+                          return Wrap(spacing: 10, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                            SizedBox(width: 200, child: Text(p['name'] as String, style: const TextStyle(fontWeight: FontWeight.w600), maxLines: 2, overflow: TextOverflow.ellipsis)),
+                            SizedBox(width: 100, child: TextField(controller: hsn[id], keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'HSN', isDense: true))),
+                            SizedBox(
+                              width: 100,
+                              child: DropdownButtonFormField<num>(
+                                initialValue: gst[id],
+                                decoration: const InputDecoration(labelText: 'GST %', isDense: true),
+                                items: [for (final g in slabs) DropdownMenuItem(value: g, child: Text('$g%${g == 12 || g == 28 ? ' *' : ''}'))],
+                                onChanged: (v) => setState(() => gst[id] = v ?? 5),
+                              ),
+                            ),
+                            SizedBox(width: 110, child: TextField(controller: rate[id], keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: '${tr('Rate')} ₹', isDense: true))),
+                            SizedBox(
+                              width: 150,
+                              child: DropdownButtonFormField<String>(
+                                initialValue: per[id],
+                                isExpanded: true,
+                                decoration: InputDecoration(labelText: tr('per'), isDense: true),
+                                items: [
+                                  DropdownMenuItem(value: 'pack', child: Text(U.cb)),
+                                  DropdownMenuItem(value: 'piece', child: Text('${U.piece} (${qtyInt(p['bottles_per_cb'])}/${U.cb})', overflow: TextOverflow.ellipsis)),
+                                ],
+                                onChanged: (v) => setState(() => per[id] = v ?? 'pack'),
+                              ),
+                            ),
+                          ]);
+                        },
+                      ),
+                    ),
+                  ]),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('Close'))),
+        FilledButton(onPressed: busy || loading || error != null ? null : _save, child: Text(busy ? tr('Saving…') : tr('Save rates'))),
       ],
     );
   }

@@ -9,12 +9,19 @@ class ApiException implements Exception {
   ApiException(this.status, this.message);
   bool get forbidden => status == 403;
   bool get unauthenticated => status == 401;
+  /// SaaS subscription ended / suspended / plan limit (gateway 402).
+  bool get paymentRequired => status == 402;
   @override
   String toString() => message;
 }
 
 /// Thin REST client. The server is the authority — every call is re-authorized.
 class ApiClient {
+  /// Called whenever the server answers 402 (SaaS subscription ended /
+  /// suspended / plan limit). Wired by AuthController to the subscription
+  /// controller so the app can show the "pay by cheque" screen.
+  void Function(String message, Map<String, dynamic>? billing, String? code)? onPaymentRequired;
+
   /// API base URL resolution order:
   /// 1. The address SAVED by the user (login-screen ✏️) — must WIN so a user
   ///    can point the app at any server (SaaS tenants), even in release
@@ -150,6 +157,11 @@ class ApiClient {
     final msg = (json is Map && (json['error'] != null || json['message'] != null))
         ? (json['error'] ?? json['message']).toString()
         : 'Request failed (${res.statusCode})';
+    if (res.statusCode == 402 && onPaymentRequired != null) {
+      final billing = json is Map && json['billing'] is Map ? (json['billing'] as Map).cast<String, dynamic>() : null;
+      final code = json is Map ? json['code']?.toString() : null;
+      try { onPaymentRequired!(msg, billing, code); } catch (_) {}
+    }
     throw ApiException(res.statusCode, msg);
   }
 }

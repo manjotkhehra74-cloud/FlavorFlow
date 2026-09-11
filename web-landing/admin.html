@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>FlavorFlow — Owner Console</title>
+<style>
+:root{--blue:#1E6FE0;--green:#16B878;--green2:#07945D;--navy:#081C33;--ink:#172334;--sub:#617083;--bg:#F4F7FB;--line:#DDE6EF;--red:#DC3545;--amber:#D98200}
+*{box-sizing:border-box;margin:0}
+body{font-family:Inter,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:var(--ink);background:var(--bg);line-height:1.45;font-size:14px}
+header{background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+.nav{max-width:1200px;margin:0 auto;padding:0 18px;height:58px;display:flex;align-items:center;gap:12px}
+.nav b{font-size:17px}
+.nav .sp{margin-left:auto;display:flex;gap:8px;align-items:center}
+.wrap{max-width:1200px;margin:0 auto;padding:18px}
+.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+h2{font-size:16px;margin-bottom:10px}
+input,select,textarea{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--ink)}
+input:focus,select:focus,textarea:focus{outline:2px solid #BBD3F7;border-color:var(--blue)}
+.btn{font:inherit;font-weight:700;padding:8px 13px;border-radius:9px;border:1px solid var(--line);background:#fff;cursor:pointer;color:var(--ink)}
+.btn.p{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn.g{background:var(--green2);border-color:var(--green2);color:#fff}
+.btn.d{color:var(--red)}
+.btn.s{padding:5px 9px;font-size:12.5px}
+.btn:disabled{opacity:.5;cursor:default}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:11px;letter-spacing:.5px;color:var(--sub);text-transform:uppercase;padding:8px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:hover td{background:#FAFCFF}
+.chip{display:inline-block;padding:2px 8px;border-radius:5px;font-size:11px;font-weight:800;letter-spacing:.3px}
+.active{background:#E7F6EF;color:#047857}.trial{background:#E6F5F3;color:#0F766E}.grace{background:#FBEFE6;color:#C2410C}.expired{background:#FBEAEA;color:#B91C1C}.suspended{background:#FBEAEA;color:#B91C1C}.demo{background:#EFF2F6;color:#475569}
+.due{background:#FEF6E7;color:#B45309}.paid{background:#E7F6EF;color:#047857}.void{background:#EFF2F6;color:#475569}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px}
+.kpi{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.kpi .l{font-size:11px;color:var(--sub);font-weight:700;letter-spacing:.5px;text-transform:uppercase}
+.kpi .v{font-size:22px;font-weight:800;margin-top:2px}
+.sub{color:var(--sub);font-size:12.5px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.mback{position:fixed;inset:0;background:rgba(8,28,51,.5);display:none;align-items:center;justify-content:center;padding:16px;z-index:20}
+.mback.open{display:flex}
+.modal{background:#fff;border-radius:16px;padding:20px;width:100%;max-width:520px;max-height:92vh;overflow:auto}
+.modal h3{font-size:17px;margin-bottom:4px}
+.modal label{display:block;font-size:12px;font-weight:700;color:var(--sub);margin:12px 0 4px}
+.modal input,.modal select,.modal textarea{width:100%}
+.modal .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+.msg{font-size:13px;margin-top:10px;min-height:18px}
+.msg.err{color:var(--red)}.msg.ok{color:var(--green2)}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--navy);color:#fff;padding:10px 16px;border-radius:10px;font-weight:600;display:none;z-index:30}
+.hid{display:none}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.mini{font-size:12px;color:var(--sub)}
+code{background:var(--bg);padding:1px 5px;border-radius:5px;font-size:12px}
+@media (max-width:760px){th:nth-child(3),td:nth-child(3),th:nth-child(7),td:nth-child(7){display:none}}
+</style>
+</head>
+<body>
+<header><div class="nav">
+  <img src="/app-icon.png" alt="" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--line)"><b>FlavorFlow · Owner Console</b>
+  <div class="sp">
+    <input id="key" type="password" placeholder="Admin key" style="width:220px" autocomplete="off">
+    <button class="btn p" onclick="saveKey()">Unlock</button>
+    <button class="btn" onclick="load()" title="Refresh">↻</button>
+  </div>
+</div></header>
+
+<div class="wrap">
+  <div id="locked" class="card"><h2>Enter the admin key</h2><p class="sub">This is the secret you set in GCP console → VM → Edit → Custom metadata → <code>ff-admin-key</code> (then RESET). It is kept only in this browser.</p></div>
+
+  <div id="main" class="hid">
+    <div class="kpis">
+      <div class="kpi"><div class="l">Paying companies</div><div class="v" id="k-active">–</div></div>
+      <div class="kpi"><div class="l">On trial</div><div class="v" id="k-trial">–</div></div>
+      <div class="kpi"><div class="l">Grace / expired</div><div class="v" id="k-risk" style="color:var(--red)">–</div></div>
+      <div class="kpi"><div class="l">Invoices due</div><div class="v" id="k-due">–</div><div class="sub" id="k-dueamt"></div></div>
+      <div class="kpi"><div class="l">Collected (all time)</div><div class="v" id="k-coll">–</div></div>
+      <div class="kpi"><div class="l">MRR (normalised)</div><div class="v" id="k-mrr">–</div></div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0">Companies</h2>
+        <div class="row">
+          <input id="q" placeholder="Search company / code / email" oninput="render()" style="width:240px">
+          <label class="mini"><input type="checkbox" id="showdemo" onchange="render()"> show demo tenants</label>
+          <button class="btn s" onclick="openPlans()">Plans & prices</button>
+          <a class="btn s" href="/download/billing-due.json" target="_blank" rel="noopener">due list (json)</a>
+        </div>
+      </div>
+      <div style="overflow:auto;margin-top:10px">
+      <table>
+        <thead><tr><th>Company</th><th>Status</th><th>Admin</th><th>Plan</th><th>Access until</th><th>Due invoice</th><th>Paid history</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>How to activate a cheque payment</h2>
+      <ol class="sub" style="padding-left:18px;line-height:1.7">
+        <li>Customer picks a plan → <b>Set plan</b> (creates a due invoice FF-INV-…; the period starts the day after the trial / current paid period ends).</li>
+        <li>Cheque clears / NEFT received → <b>Mark paid</b> with cheque no + bank → access moves to the invoice period end automatically.</li>
+        <li>Cheque late but promised → <b>Extend</b> a few days. Cheque bounced → <b>Suspend</b> (blocks the app instantly; un-suspend after payment).</li>
+        <li>Renewal invoices are auto-created 10 days before the paid period ends; the app shows a banner to the company admin.</li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+<!-- action modal -->
+<div class="mback" id="m" onclick="if(event.target===this)closeM()">
+  <form class="modal" onsubmit="return submitM(event)">
+    <h3 id="m-title"></h3>
+    <div class="sub" id="m-sub"></div>
+    <div id="m-body"></div>
+    <div class="msg" id="m-msg"></div>
+    <div class="acts"><button type="button" class="btn" onclick="closeM()">Cancel</button><button class="btn p" id="m-go">Save</button></div>
+  </form>
+</div>
+
+<!-- plans modal -->
+<div class="mback" id="mp" onclick="if(event.target===this)document.getElementById('mp').classList.remove('open')">
+  <form class="modal" style="max-width:760px" onsubmit="return savePlans(event)">
+    <h3>Plans, prices & payment details</h3>
+    <div class="sub">Changes apply immediately to the website pricing, the app banner and new invoices (existing invoices keep their amount).</div>
+    <div id="p-body"></div>
+    <div class="msg" id="p-msg"></div>
+    <div class="acts"><button type="button" class="btn" onclick="document.getElementById('mp').classList.remove('open')">Close</button><button class="btn p">Save plans</button></div>
+  </form>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+var KEY=localStorage.getItem('ff_admin_key')||'', DATA=null, PLANS=null, ACT=null;
+function inr(n){n=Math.round(+n||0);var s=String(Math.abs(n));if(s.length>3){var last=s.slice(-3),rest=s.slice(0,-3);s=rest.replace(/\B(?=(\d{2})+(?!\d))/g,',')+','+last}return (n<0?'-':'')+'₹'+s}
+function esc(x){return String(x==null?'':x).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function toast(t){var e=document.getElementById('toast');e.textContent=t;e.style.display='block';setTimeout(function(){e.style.display='none'},2600)}
+function saveKey(){KEY=document.getElementById('key').value.trim();localStorage.setItem('ff_admin_key',KEY);load()}
+async function api(path,opt){opt=opt||{};opt.headers=Object.assign({'x-admin-key':KEY},opt.body?{'Content-Type':'application/json'}:{},opt.headers||{});var r=await fetch(path,opt);var d=null;try{d=await r.json()}catch(e){}if(!r.ok)throw new Error((d&&d.error)||('HTTP '+r.status));return d}
+async function load(){
+  if(!KEY){document.getElementById('locked').classList.remove('hid');document.getElementById('main').classList.add('hid');return}
+  try{DATA=await api('/api/saas/admin/companies');PLANS=await api('/api/saas/admin/plans')}catch(e){document.getElementById('locked').classList.remove('hid');document.getElementById('main').classList.add('hid');document.querySelector('#locked h2').textContent=e.message==='Admin key required.'?'Wrong admin key':'Cannot load: '+e.message;return}
+  document.getElementById('locked').classList.add('hid');document.getElementById('main').classList.remove('hid');render()
+}
+function planLabel(c){if(!c.plan)return '—';var p=c.plan;return (p.name||p.tier)+(p.cycle?' · '+p.cycle:'')+(p.chosen?'':' (trial default)')+(c.planIntent?'<div class="mini">asked for: '+esc(c.planIntent)+'</div>':'')}
+function render(){
+  var q=(document.getElementById('q').value||'').toLowerCase(), showDemo=document.getElementById('showdemo').checked;
+  var cs=DATA.companies.filter(function(c){return (showDemo||!c.demo)&&(!q||(c.name+' '+c.code+' '+(c.adminEmail||'')).toLowerCase().indexOf(q)>=0)});
+  var order={expired:0,suspended:0,grace:1,trial:2,active:3,demo:4};
+  cs.sort(function(a,b){return (order[a.state]-order[b.state])||(a.until<b.until?-1:1)});
+  var tb=document.getElementById('rows');tb.innerHTML='';
+  cs.forEach(function(c){
+    var due=c.dueInvoice, paid=(c.invoices||[]).filter(function(i){return i.status==='paid'});
+    var tr=document.createElement('tr');
+    tr.innerHTML='<td><b>'+esc(c.name)+'</b><div class="mini">'+esc(c.code)+' · '+esc(c.industry||'')+'</div></td>'
+      +'<td><span class="chip '+c.state+'">'+c.state.toUpperCase()+'</span>'+(c.daysLeft!=null&&c.state!=='demo'?'<div class="mini">'+c.daysLeft+' days left</div>':'')+'</td>'
+      +'<td>'+esc(c.adminName||'')+'<div class="mini">'+esc(c.adminEmail||'')+'</div></td>'
+      +'<td>'+planLabel(c)+'</td>'
+      +'<td>'+esc(c.until||'')+(c.paidUntil?'<div class="mini">paid till '+esc(c.paidUntil)+'</div>':'<div class="mini">trial till '+esc(c.trialEnds)+'</div>')+'</td>'
+      +'<td>'+(due?'<span class="chip due">'+esc(due.no)+'</span><div class="mini">'+inr(due.amount)+' · '+esc(due.tier)+'/'+esc(due.cycle)+'<br>'+esc(due.periodFrom)+' → '+esc(due.periodTo)+'</div>':'<span class="mini">—</span>')+'</td>'
+      +'<td class="mini">'+(paid.length?paid.slice(-3).reverse().map(function(i){return esc(i.paidOn)+' · '+inr(i.paidAmount!=null?i.paidAmount:i.amount)+' · '+esc((i.mode||'cheque')+(i.chequeNo?' '+i.chequeNo:''))}).join('<br>'):'—')+'</td>'
+      +'<td><div class="row" style="gap:4px;flex-wrap:nowrap">'
+      +(c.demo?'':'<button class="btn s" onclick="act(\'plan\',\''+c.code+'\')">Set plan</button>'
+      +(due?'<button class="btn s g" onclick="act(\'paid\',\''+c.code+'\')">Mark paid</button>':'<button class="btn s" onclick="act(\'invoice\',\''+c.code+'\')">Invoice</button>')
+      +'<button class="btn s" onclick="act(\'extend\',\''+c.code+'\')">Extend</button>'
+      +'<button class="btn s '+(c.suspended?'g':'d')+'" onclick="act(\'suspend\',\''+c.code+'\')">'+(c.suspended?'Unsuspend':'Suspend')+'</button>')
+      +'</div></td>';
+    tb.appendChild(tr);
+  });
+  var real=DATA.companies.filter(function(c){return !c.demo});
+  var n=function(st){return real.filter(function(c){return c.state===st}).length};
+  document.getElementById('k-active').textContent=n('active');
+  document.getElementById('k-trial').textContent=n('trial');
+  document.getElementById('k-risk').textContent=n('grace')+n('expired')+n('suspended');
+  var dues=real.filter(function(c){return c.dueInvoice});
+  document.getElementById('k-due').textContent=dues.length;
+  document.getElementById('k-dueamt').textContent=inr(dues.reduce(function(s,c){return s+(+c.dueInvoice.amount||0)},0));
+  var coll=0,mrr=0;real.forEach(function(c){(c.invoices||[]).forEach(function(i){if(i.status==='paid')coll+=+(i.paidAmount!=null?i.paidAmount:i.amount)||0});if(c.state==='active'&&c.plan&&c.plan.chosen)mrr+=c.plan.cycle==='yearly'?(+c.plan.price||0)/12:(+c.plan.price||0)});
+  document.getElementById('k-coll').textContent=inr(coll);document.getElementById('k-mrr').textContent=inr(mrr);
+}
+function co(code){return DATA.companies.filter(function(c){return c.code===code})[0]}
+function tierOpts(sel){return Object.keys(PLANS.tiers).map(function(k){var t=PLANS.tiers[k];return '<option value="'+k+'"'+(k===sel?' selected':'')+'>'+esc(t.name)+' — '+inr(t.monthly)+'/mo · '+inr(t.yearly)+'/yr</option>'}).join('')}
+function act(kind,code){
+  var c=co(code);ACT={kind:kind,code:code};var b=document.getElementById('m-body'),t=document.getElementById('m-title'),s=document.getElementById('m-sub');document.getElementById('m-msg').textContent='';
+  var intent=(c.planIntent||'').split('-');var selTier=c.plan&&c.plan.chosen?c.plan.tier:(PLANS.tiers[intent[0]]?intent[0]:'pro');var selCyc=c.plan&&c.plan.chosen?c.plan.cycle:(intent[1]==='yearly'?'yearly':'monthly');
+  if(kind==='plan'){t.textContent='Set plan — '+c.name;s.textContent='Creates a due invoice (if none is open). Period starts after the current trial / paid period.';
+    b.innerHTML='<label>Tier</label><select id="f-tier">'+tierOpts(selTier)+'</select><label>Billing cycle</label><select id="f-cycle"><option value="monthly"'+(selCyc==='monthly'?' selected':'')+'>Monthly</option><option value="yearly"'+(selCyc==='yearly'?' selected':'')+'>Yearly</option></select>'}
+  if(kind==='invoice'){t.textContent='New invoice — '+c.name;s.textContent='Manual invoice (custom amount allowed, e.g. a discount or pro-rata).';
+    b.innerHTML='<label>Tier</label><select id="f-tier">'+tierOpts(selTier)+'</select><label>Cycle</label><select id="f-cycle"><option value="monthly"'+(selCyc==='monthly'?' selected':'')+'>Monthly</option><option value="yearly"'+(selCyc==='yearly'?' selected':'')+'>Yearly</option></select><label>Amount (blank = plan price)</label><input id="f-amount" type="number" min="0" step="1"><label>Period starts (blank = auto)</label><input id="f-from" type="date"><label>Note</label><input id="f-note" placeholder="e.g. first-year offer">'}
+  if(kind==='paid'){var d=c.dueInvoice;t.textContent='Mark paid — '+c.name;s.textContent=d.no+' · '+inr(d.amount)+' · '+d.tier+'/'+d.cycle+' · '+d.periodFrom+' → '+d.periodTo;
+    b.innerHTML='<label>Mode</label><select id="f-mode"><option value="cheque">Cheque</option><option value="neft">NEFT / RTGS / IMPS</option><option value="upi">UPI</option><option value="cash">Cash</option></select><label>Cheque no / UTR</label><input id="f-ref" required placeholder="e.g. 445512"><label>Bank</label><input id="f-bank" placeholder="e.g. HDFC Amritsar"><label>Received on</label><input id="f-date" type="date" value="'+DATA.today+'"><label>Amount received (blank = invoice amount)</label><input id="f-amount" type="number" min="0" step="1">'}
+  if(kind==='extend'){t.textContent='Extend access — '+c.name;s.textContent='Currently until '+(c.until||'—')+'. Use for "cheque is on the way".';
+    b.innerHTML='<label>Days</label><input id="f-days" type="number" min="1" max="3660" value="7"><label>…or until (date)</label><input id="f-until" type="date"><label>Note</label><input id="f-note" placeholder="e.g. cheque promised Monday">'}
+  if(kind==='suspend'){t.textContent=(c.suspended?'Unsuspend':'Suspend')+' — '+c.name;s.textContent=c.suspended?'Access is restored immediately.':'Blocks the app for everyone in this company immediately (data is kept).';
+    b.innerHTML=c.suspended?'':'<label>Reason (shown to the customer)</label><input id="f-note" placeholder="e.g. cheque returned">'}
+  document.getElementById('m').classList.add('open')
+}
+function closeM(){document.getElementById('m').classList.remove('open')}
+function v(id){var e=document.getElementById(id);return e?e.value.trim():''}
+async function submitM(e){
+  e.preventDefault();var m=document.getElementById('m-msg'),go=document.getElementById('m-go');go.disabled=true;m.className='msg';
+  try{
+    var k=ACT.kind,code=ACT.code,c=co(code),body={code:code},path='';
+    if(k==='plan'){path='set-plan';body.tier=v('f-tier');body.cycle=v('f-cycle')}
+    if(k==='invoice'){path='invoice';body.tier=v('f-tier');body.cycle=v('f-cycle');if(v('f-amount'))body.amount=+v('f-amount');if(v('f-from'))body.periodFrom=v('f-from');body.note=v('f-note')}
+    if(k==='paid'){path='mark-paid';body.invoiceNo=c.dueInvoice.no;body.mode=v('f-mode');body.chequeNo=v('f-ref');body.bank=v('f-bank');body.paidOn=v('f-date');if(v('f-amount'))body.amount=+v('f-amount')}
+    if(k==='extend'){path='extend';if(v('f-until'))body.until=v('f-until');else body.days=+v('f-days')||7;body.note=v('f-note')}
+    if(k==='suspend'){path='suspend';body.suspended=!c.suspended;body.note=v('f-note')}
+    var r=await api('/api/saas/admin/'+path,{method:'POST',body:JSON.stringify(body)});
+    closeM();toast(k==='paid'?'Paid ✓ access till '+r.paidUntil:k==='plan'?'Plan set ✓'+(r.invoice?' invoice '+r.invoice.no:''):k==='invoice'?'Invoice '+r.invoice.no+' created':k==='extend'?'Extended till '+r.until:'Done ✓');
+    await load();
+  }catch(x){m.textContent=x.message;m.className='msg err'}
+  go.disabled=false;return false
+}
+function openPlans(){
+  var p=PLANS,b=document.getElementById('p-body'),h='';
+  h+='<div class="grid2">';
+  Object.keys(p.tiers).forEach(function(k){var t=p.tiers[k];h+='<div class="card" style="margin:0"><b>'+esc(t.name)+'</b> <span class="mini">('+k+')</span>'
+    +'<label class="mini" style="display:block;margin-top:8px">Monthly ₹</label><input data-t="'+k+'" data-f="monthly" type="number" min="0" value="'+t.monthly+'" style="width:100%">'
+    +'<label class="mini" style="display:block;margin-top:6px">Yearly ₹</label><input data-t="'+k+'" data-f="yearly" type="number" min="0" value="'+t.yearly+'" style="width:100%">'
+    +'<label class="mini" style="display:block;margin-top:6px">Users (0 = unlimited)</label><input data-t="'+k+'" data-f="users" type="number" min="0" value="'+(t.users||0)+'" style="width:100%">'
+    +'<label class="mini" style="display:block;margin-top:6px">Tagline</label><input data-t="'+k+'" data-f="tagline" value="'+esc(t.tagline||'')+'" style="width:100%">'
+    +'<label class="mini" style="display:block;margin-top:6px">Features (one per line)</label><textarea data-t="'+k+'" data-f="features" rows="5" style="width:100%">'+esc((t.features||[]).join('\n'))+'</textarea></div>'});
+  h+='</div><div class="grid2" style="margin-top:12px">';
+  [['trialDays','Trial days'],['graceDays','Grace days after expiry'],['renewalNoticeDays','Renewal invoice N days before expiry']].forEach(function(x){h+='<div><label class="mini">'+x[1]+'</label><input data-g="'+x[0]+'" type="number" min="0" value="'+(p[x[0]]||0)+'" style="width:100%"></div>'});
+  h+='</div><h3 style="font-size:14px;margin:14px 0 6px">Payment details (shown to customers in the app & on invoices)</h3><div class="grid2">';
+  [['chequeInFavourOf','Cheque in favour of'],['bankName','Bank & branch'],['accountNo','Account no'],['ifsc','IFSC'],['upiId','UPI ID (optional)'],['whatsapp','WhatsApp (91…)'],['email','Email'],['address','Postal address for cheques']].forEach(function(x){h+='<div><label class="mini">'+x[1]+'</label><input data-p="'+x[0]+'" value="'+esc(p.payment[x[0]]||'')+'" style="width:100%"></div>'});
+  h+='</div><label class="mini" style="display:block;margin-top:8px">Payment note</label><textarea data-p="note" rows="2" style="width:100%">'+esc(p.payment.note||'')+'</textarea>';
+  b.innerHTML=h;document.getElementById('p-msg').textContent='';document.getElementById('mp').classList.add('open')
+}
+async function savePlans(e){
+  e.preventDefault();var m=document.getElementById('p-msg');m.className='msg';
+  try{
+    var p=JSON.parse(JSON.stringify(PLANS));
+    document.querySelectorAll('#p-body [data-t]').forEach(function(i){var t=p.tiers[i.dataset.t],f=i.dataset.f;if(f==='features')t.features=i.value.split('\n').map(function(x){return x.trim()}).filter(Boolean);else if(f==='tagline')t.tagline=i.value.trim();else t[f]=+i.value||0});
+    document.querySelectorAll('#p-body [data-g]').forEach(function(i){p[i.dataset.g]=+i.value||0});
+    document.querySelectorAll('#p-body [data-p]').forEach(function(i){p.payment[i.dataset.p]=i.value.trim()});
+    await api('/api/saas/admin/plans',{method:'PUT',body:JSON.stringify(p)});
+    document.getElementById('mp').classList.remove('open');toast('Plans saved ✓');await load()
+  }catch(x){m.textContent=x.message;m.className='msg err'}
+  return false
+}
+document.getElementById('key').value=KEY;load();
+</script>
+</body>
+</html>

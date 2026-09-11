@@ -188,6 +188,13 @@ class _AppShellState extends State<AppShell> {
       final at = ri != -1 ? ri + 1 : nav.length;
       nav.insert(at, {'path': '/loss', 'label': 'Packing Loss %', 'icon': 'percent', 'group': ri != -1 ? nav[ri]['group'] : 'Operations'});
     }
+    // Sales Billing (GST invoices): the server nav carries /billing once the
+    // billing patch is applied; older servers get the entry client-side.
+    if (!nav.any((e) => e['path'] == '/billing') && auth.canViewBilling) {
+      final di = nav.indexWhere((e) => e['path'] == '/dispatch');
+      final at = di != -1 ? di + 1 : nav.length;
+      nav.insert(at, {'path': '/billing', 'label': 'Billing', 'icon': 'receipt_long', 'group': di != -1 ? nav[di]['group'] : 'Operations'});
+    }
     // Industry gating: the server nav is the same for every company — drop
     // every section this industry never uses (Loss % sheet for mills /
     // textile / hardware…, production for trading-only profiles).

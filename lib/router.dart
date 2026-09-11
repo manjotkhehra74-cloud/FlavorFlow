@@ -6,6 +6,10 @@ import 'features/adjustments/approvals_page.dart';
 import 'features/audit/audit_page.dart';
 import 'features/auth/login_page.dart';
 import 'features/auth/setup_page.dart';
+import 'features/billing/billing_page.dart';
+import 'features/billing/invoice_detail_page.dart';
+import 'features/billing/invoice_form.dart';
+import 'features/billing/subscription_page.dart';
 import 'features/dashboard/dashboard_page.dart';
 import 'features/dispatch/dispatch_detail_page.dart';
 import 'features/dispatch/dispatch_page.dart';
@@ -33,6 +37,7 @@ String? permForPath(String path) {
   if (path.startsWith('/approvals')) return 'adjustments.approve';
   if (path.startsWith('/production')) return 'production.view';
   if (path.startsWith('/dispatch')) return 'dispatch.view';
+  if (path.startsWith('/billing')) return 'billing.view';
   if (path.startsWith('/reports')) return 'reports.view';
   if (path.startsWith('/users')) return 'users.view';
   if (path.startsWith('/audit')) return 'audit.view';
@@ -57,6 +62,8 @@ GoRouter buildRouter(AuthController auth) {
       if (!loggedIn) return atLogin ? null : '/login';
       if (atLogin) return '/dashboard';
       final perm = permForPath(state.matchedLocation);
+      // Billing falls back to dispatch permissions on servers not yet patched.
+      if (perm == 'billing.view') return auth.canViewBilling ? null : '/dashboard';
       if (perm != null && !auth.can(perm)) return '/dashboard';
       return null;
     },
@@ -103,11 +110,26 @@ GoRouter buildRouter(AuthController auth) {
               ),
             ],
           ),
+          GoRoute(
+            path: '/billing',
+            builder: (c, s) => BillingPage(tab: s.uri.queryParameters['tab']),
+            routes: [
+              GoRoute(
+                path: 'new',
+                builder: (c, s) => InvoiceFormPage(dispatchId: int.tryParse(s.uri.queryParameters['dispatch'] ?? '')),
+              ),
+              GoRoute(
+                path: ':id',
+                builder: (c, s) => InvoiceDetailPage(id: int.tryParse(s.pathParameters['id'] ?? '') ?? 0),
+              ),
+            ],
+          ),
           GoRoute(path: '/reports', builder: (c, s) => const ReportsPage()),
           GoRoute(path: '/users', builder: (c, s) => const UsersPage()),
           GoRoute(path: '/audit', builder: (c, s) => const AuditPage()),
           GoRoute(path: '/notifications', builder: (c, s) => const NotificationsPage()),
           GoRoute(path: '/settings', builder: (c, s) => const SettingsPage()),
+          GoRoute(path: '/subscription', builder: (c, s) => const SubscriptionPage()),
         ],
       ),
     ],

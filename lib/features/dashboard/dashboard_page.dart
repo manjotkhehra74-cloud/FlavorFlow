@@ -9,6 +9,7 @@ import '../../core/theme.dart';
 import '../../core/i18n.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
+import '../billing/subscription_banner.dart';
 
 /// Server-driven role dashboard: the API decides which KPIs, charts,
 /// tables, alerts and quick actions each profile sees.
@@ -57,6 +58,7 @@ class _DashboardPageState extends State<DashboardPage> {
             children: [
               _Header(greeting: data['greeting'] as String, name: data['name'] as String, session: session),
               const SizedBox(height: 18),
+              const SubscriptionBanner(),
               for (final w in widgets) ...[
                 _buildWidget(w),
                 const SizedBox(height: 16),

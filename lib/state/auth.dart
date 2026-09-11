@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/api.dart';
+import '../core/subscription.dart';
 import '../core/biometric.dart';
 import '../core/company.dart';
 
@@ -32,7 +33,17 @@ class UserSession {
 
 class AuthController extends ChangeNotifier {
   final ApiClient api = ApiClient();
+  /// FlavorFlow cloud subscription (plan, due invoice, cheque details).
+  final SubscriptionController subscription = SubscriptionController();
   UserSession? session;
+
+  AuthController() {
+    api.onPaymentRequired = (msg, billing, code) {
+      // Plan-limit 402s (feature / users) are per-request errors, not a block.
+      if (code != null && code.startsWith('PLAN_')) return;
+      subscription.onPaymentRequired(msg, billing);
+    };
+  }
   bool ready = false; // restored-from-storage completed
   bool busy = false;
 
@@ -47,6 +58,14 @@ class AuthController extends ChangeNotifier {
   /// Permission check with a legacy fallback: before ff-permfix runs on the
   /// server, the old umbrella permission (packing.*) keeps everything working.
   bool canOr(String perm, String legacy) => can(perm) || (!hasSplitPerms && can(legacy));
+
+  /// True once the server carries the billing.* permissions (ff-billing applied).
+  bool get hasBillingPerms => session?.permissions.any((p) => p.startsWith('billing.')) ?? false;
+
+  /// Sales billing access — falls back to dispatch permissions on servers that
+  /// are not yet updated (the server still enforces its own guard).
+  bool get canViewBilling => can('billing.view') || (!hasBillingPerms && can('dispatch.view'));
+  bool get canManageBilling => can('billing.manage') || (!hasBillingPerms && can('dispatch.manage'));
 
   /// Resolved API base (may be null on native until the user sets it).
   String? get serverBase => api.baseUrl;
@@ -75,6 +94,7 @@ class AuthController extends ChangeNotifier {
           api.token = token;
           final json = await api.get('/auth/me');
           session = UserSession.fromJson((json as Map).cast<String, dynamic>());
+          subscription.refresh(api);
         }
       }
     } catch (_) {
@@ -105,6 +125,7 @@ class AuthController extends ChangeNotifier {
       // — refreshed on every login so a device that last opened a food
       // company shows mill units the moment a rice mill signs in.
       try { await CompanyProfile.load(api); } catch (_) {/* server route optional */}
+      subscription.refresh(api); // fire-and-forget (cloud tenants only)
       return null;
     } on ApiException catch (e) {
       return e.message;
@@ -121,6 +142,7 @@ class AuthController extends ChangeNotifier {
       final json = await api.get('/auth/me');
       session = UserSession.fromJson((json as Map).cast<String, dynamic>());
       notifyListeners();
+      subscription.refresh(api);
     } catch (_) {/* keep old session */}
   }
 
@@ -130,6 +152,7 @@ class AuthController extends ChangeNotifier {
     } catch (_) {/* ignore */}
     api.token = null;
     session = null;
+    subscription.clear();
     // In-memory credentials are dropped; the saved passkey (secure storage)
     // stays so "Login with passkey" keeps working on the login screen.
     BiometricAuth.forgetSession();

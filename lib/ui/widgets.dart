@@ -11,6 +11,8 @@ import '../core/theme.dart';
 IconData iconFor(String? name) {
   switch (name) {
     case 'dashboard': return Icons.dashboard_outlined;
+    case 'receipt_long': return Icons.receipt_long_outlined;
+    case 'receipt': return Icons.receipt_outlined;
     case 'inventory_2': return Icons.inventory_2_outlined;
     case 'warehouse': return Icons.warehouse_outlined;
     case 'tune': return Icons.tune_rounded;
@@ -117,6 +119,16 @@ class StatusChip extends StatelessWidget {
     'RECEIPT': (Color(0xFF0891B2), Color(0xFFE5F6FA)),
     'EXPORT': (Color(0xFF1D4ED8), Color(0xFFE9F0FC)),
     'SEED': (Color(0xFF475569), Color(0xFFEFF2F6)),
+    // billing
+    'ISSUED': (Color(0xFF1D4ED8), Color(0xFFE9F0FC)),
+    'UNPAID': (Color(0xFF1D4ED8), Color(0xFFE9F0FC)),
+    'PARTIAL': (Color(0xFFB45309), Color(0xFFFEF6E7)),
+    'PAID': (Color(0xFF047857), Color(0xFFE7F6EF)),
+    'OVERDUE': (Color(0xFFB91C1C), Color(0xFFFBEAEA)),
+    'DUE': (Color(0xFFB45309), Color(0xFFFEF6E7)),
+    'TRIAL': (Color(0xFF0F766E), Color(0xFFE6F5F3)),
+    'EXPIRED': (Color(0xFFB91C1C), Color(0xFFFBEAEA)),
+    'GRACE': (Color(0xFFC2410C), Color(0xFFFBEFE6)),
   };
 
   @override
