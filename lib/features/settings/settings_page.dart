@@ -199,7 +199,7 @@ class _SettingsPageState extends State<SettingsPage> {
         icon: Icons.alarm_rounded,
         title: 'Daily entry reminder',
         subtitle: settings.dailyReminder
-            ? 'ON — roz ${settings.dailyReminderHour > 12 ? settings.dailyReminderHour - 12 : settings.dailyReminderHour} ${settings.dailyReminderHour >= 12 ? 'PM' : 'AM'} vaje yaad karauga (+ month-end Loss% close)'
+            ? 'ON — roz ${settings.dailyReminderHour > 12 ? settings.dailyReminderHour - 12 : settings.dailyReminderHour} ${settings.dailyReminderHour >= 12 ? 'PM' : 'AM'} vaje yaad karauga (+ month-end stock closing)'
             : 'OFF — production/dispatch entry da roz da reminder',
         trailing: Switch(
           value: settings.dailyReminder,

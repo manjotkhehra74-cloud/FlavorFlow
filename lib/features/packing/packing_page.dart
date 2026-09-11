@@ -607,7 +607,7 @@ class _TxnDialogState extends State<_TxnDialog> {
   List<Map<String, dynamic>> materials = [];
   int? materialId;
   List<Map<String, dynamic>> products = [];
-  int? productId; // consumption is tagged to ONE product (no sharing in Loss%)
+  int? productId; // optional: which product this consumption was for (shown in the stock ledger note)
   final qty = TextEditingController();
   final reference = TextEditingController();
   final remark = TextEditingController();
@@ -636,7 +636,7 @@ class _TxnDialogState extends State<_TxnDialog> {
     }).catchError((e) { setState(() => loadError = '$e'); });
     if (!widget.rawOnly) {
       // BOM: which product each material belongs to — used to sort the
-      // material list product-wise AND to auto-pick the Loss% product.
+      // material list product-wise AND to auto-pick the "for product" tag.
       context.read<AuthController>().api.get('/packing/bom').then((json) {
         if (!mounted) return;
         setState(() {
@@ -678,7 +678,7 @@ class _TxnDialogState extends State<_TxnDialog> {
     _autoTagProduct();
   }
 
-  /// Auto-select the Loss% product from the chosen material's BOM owner —
+  /// Auto-select the "for product" tag from the chosen material's BOM owner —
   /// unique owner picks itself; shared materials keep the (filtered) choice.
   void _autoTagProduct() {
     if (isReceive || widget.rawOnly) return;
@@ -711,10 +711,6 @@ class _TxnDialogState extends State<_TxnDialog> {
       materialId == null ? null : materials.firstWhere((m) => m['id'] == materialId, orElse: () => materials.first);
 
   Future<void> _save() async {
-    if (!isReceive && !widget.rawOnly && productId == null) {
-      showErr(context, 'Choose which product this consumption is for (Loss% sheet).');
-      return;
-    }
     setState(() => busy = true);
     try {
       await context.read<AuthController>().api.post('/packing/${isReceive ? 'receive' : 'consume'}', {
@@ -759,7 +755,7 @@ class _TxnDialogState extends State<_TxnDialog> {
                         key: ValueKey('prodpick-$materialId-$productId'),
                         initialValue: productId,
                         isExpanded: true,
-                        decoration: InputDecoration(labelText: tr('For product * (Loss% sheet)')),
+                        decoration: InputDecoration(labelText: tr('For product (optional)'), helperText: tr('Tags the consumption to a product in the stock ledger')),
                         items: [for (final p in _productChoices) DropdownMenuItem(value: p['id'] as int, child: Text(p['name'] as String, overflow: TextOverflow.ellipsis))],
                         onChanged: (v) => setState(() => productId = v),
                       ),

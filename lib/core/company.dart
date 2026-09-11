@@ -62,8 +62,6 @@ class CompanyProfile {
   ///              agro-chem, pharma). Discrete industries (textile, footwear,
   ///              plastic moulding, hardware, mills) mostly consume per-unit
   ///              BOM, not per-batch recipes.
-  ///   lossPct  → monthly packing-material Loss % sheet (bottling/packing
-  ///              lines where labels/caps/sleeves wastage matters).
   ///   trays    → whether the secondary "tray/roll/strip" unit is meaningful
   ///              (food/bakery trays, dairy cup trays, beverage shells, pharma
   ///              strips, textile rolls). Off → every tray field/column/row
@@ -72,29 +70,32 @@ class CompanyProfile {
   /// Production, Dispatch, Adjustments, Reports, Users, Audit) are the
   /// universal backbone — every industry keeps them.
   static const Map<String, Map<String, bool>> industryFeatures = {
-    //              recipes  lossPct  trays   production  bom
-    'food':      {'recipes': true,  'lossPct': true,  'trays': true,  'production': true, 'bom': true},
-    'dairy':     {'recipes': true,  'lossPct': true,  'trays': true,  'production': true, 'bom': true},
-    'oil':       {'recipes': true,  'lossPct': true,  'trays': true,  'production': true, 'bom': true},
-    'bakery':    {'recipes': true,  'lossPct': true,  'trays': true,  'production': true, 'bom': true},
-    'water':     {'recipes': true,  'lossPct': true,  'trays': true,  'production': true, 'bom': true},
-    'soap':      {'recipes': true,  'lossPct': true,  'trays': false, 'production': true, 'bom': true},
-    'cosmetics': {'recipes': true,  'lossPct': true,  'trays': false, 'production': true, 'bom': true},
-    'paint':     {'recipes': true,  'lossPct': true,  'trays': false, 'production': true, 'bom': true},
-    'agro':      {'recipes': true,  'lossPct': true,  'trays': false, 'production': true, 'bom': true},
-    'pharma':    {'recipes': true,  'lossPct': true,  'trays': true,  'production': true, 'bom': true},
-    'textile':   {'recipes': false, 'lossPct': false, 'trays': true,  'production': true, 'bom': true},
-    'mill':      {'recipes': false, 'lossPct': false, 'trays': false, 'production': true, 'bom': true},
-    'footwear':  {'recipes': false, 'lossPct': false, 'trays': false, 'production': true, 'bom': true},
-    'plastic':   {'recipes': false, 'lossPct': true,  'trays': false, 'production': true, 'bom': true},
-    'hardware':  {'recipes': false, 'lossPct': false, 'trays': false, 'production': true, 'bom': true},
-    'general':   {'recipes': true,  'lossPct': true,  'trays': true,  'production': true, 'bom': true},
+    //              recipes  trays   production  bom
+    'food':      {'recipes': true,  'trays': true,  'production': true, 'bom': true},
+    'dairy':     {'recipes': true,  'trays': true,  'production': true, 'bom': true},
+    'oil':       {'recipes': true,  'trays': true,  'production': true, 'bom': true},
+    'bakery':    {'recipes': true,  'trays': true,  'production': true, 'bom': true},
+    'water':     {'recipes': true,  'trays': true,  'production': true, 'bom': true},
+    'soap':      {'recipes': true,  'trays': false, 'production': true, 'bom': true},
+    'cosmetics': {'recipes': true,  'trays': false, 'production': true, 'bom': true},
+    'paint':     {'recipes': true,  'trays': false, 'production': true, 'bom': true},
+    'agro':      {'recipes': true,  'trays': false, 'production': true, 'bom': true},
+    'pharma':    {'recipes': true,  'trays': true,  'production': true, 'bom': true},
+    'textile':   {'recipes': false, 'trays': true,  'production': true, 'bom': true},
+    'mill':      {'recipes': false, 'trays': false, 'production': true, 'bom': true},
+    'footwear':  {'recipes': false, 'trays': false, 'production': true, 'bom': true},
+    'plastic':   {'recipes': false, 'trays': false, 'production': true, 'bom': true},
+    'hardware':  {'recipes': false, 'trays': false, 'production': true, 'bom': true},
+    'general':   {'recipes': true,  'trays': true,  'production': true, 'bom': true},
   };
 
   /// Menu sections an industry never needs (hidden from nav, bottom bar,
   /// dashboard shortcuts and deep links). Paths are the app routes.
   static List<String> get hiddenSections => [
-        if (!usesLossPct) '/loss',
+        // Packing Loss % sheet is retired for every industry (Sep 2026):
+        // older servers still send its nav entry / dashboard tile / report,
+        // so the path stays permanently hidden here.
+        '/loss',
         if (!usesProduction) '/production',
       ];
 
@@ -103,9 +104,6 @@ class CompanyProfile {
 
   /// Does the active industry use recipe-based raw material consumption?
   static bool get usesRecipes => industryFeatures[current.industry]?['recipes'] ?? true;
-
-  /// Does the active industry track the monthly Packing Loss % sheet?
-  static bool get usesLossPct => industryFeatures[current.industry]?['lossPct'] ?? true;
 
   /// Does the active industry use the secondary tray/roll/strip unit?
   static bool get usesTrays => industryFeatures[current.industry]?['trays'] ?? true;

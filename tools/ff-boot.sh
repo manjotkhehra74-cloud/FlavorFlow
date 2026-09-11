@@ -10,11 +10,12 @@
 #   → 2-3 min baad result browser vich:  https://flavorflow.co.in/download/boot-status.txt
 #   (poora log: VM → "Serial port 1 (console)" ya /var/log/ff-boot.log)
 #
-# Steps (arg naal chuno, default sab):  fixssh industry billing stockledger saasbilling demo web apk
+# Steps (arg naal chuno, default sab):  fixssh industry billing stockledger lossretire saasbilling demo web apk
 #   fixssh   — memory/OOM/swap snapshot, swap ensure, google-guest-agent + sshd restart
 #              (SSH-in-browser "Connection failed… retrying" aksar guest-agent/RAM karke)
 #   industry — tools/ff-saasindustry.sh (idempotent) + tenant /api/settings/company verify
 #   billing  — tools/ff-billing.sh: GST sales invoices module in the core (/api/billing)
+#   lossretire — tools/ff-lossretire.sh: Packing Loss % sheet retired (server menu entry removed)
 #   saasbilling — tools/ff-saasbilling.sh: subscription plans + cheque activation + owner
 #              console API in the gateway (admin key from GCE metadata `ff-admin-key`)
 #   demo     — tools/ff-saasdemo.sh (16 demo-<industry> tenants, same demo login)
@@ -30,7 +31,7 @@ main() {
   WEB="${FF_WEB:-/opt/flavorflow-saas/web}"
   LOG=/var/log/ff-boot.log
   STATUS="$WEB/download/boot-status.txt"
-  STEPS="${*:-fixssh industry billing stockledger saasbilling demo web apk}"
+  STEPS="${*:-fixssh industry billing stockledger lossretire saasbilling demo web apk}"
   mkdir -p "$WEB/download"
   exec > >(tee -a "$LOG") 2>&1
   : > "$STATUS"; chmod 644 "$STATUS"
@@ -112,6 +113,19 @@ main() {
       fi
       st "[stockledger] rc=$RC"
     else st "[stockledger] koi server.js nahi — skip"; fi
+  fi
+
+  # ---------- lossretire (Packing Loss % sheet removed for every industry — server nav entry) ----------
+  if [[ " $STEPS " == *" lossretire "* ]]; then
+    if [ -f /opt/flavorflow-saas/core/rbac.js ] || [ -f /opt/flavorflow/server/rbac.js ]; then
+      OUT=""; RC=1
+      if fetch "$RAW/ff-lossretire.sh" /tmp/ff-lossretire.sh; then OUT=$(bash /tmp/ff-lossretire.sh </dev/null 2>&1); RC=$?; fi
+      if [ -z "$OUT" ]; then st "[lossretire] script download FAIL (GitHub reach nahi hoya?)"; else
+        echo "$OUT"
+        echo "$OUT" | grep -E '^(RBAC|SERVER|SKIP|LOSSRETIRE|FATAL)' | cut -c1-200 | sed 's/^/[lossretire] /' | tee -a "$STATUS"
+      fi
+      st "[lossretire] rc=$RC"
+    else st "[lossretire] koi rbac.js nahi — skip"; fi
   fi
 
   # ---------- saasbilling (subscription plans, cheque activation, admin console API) ----------

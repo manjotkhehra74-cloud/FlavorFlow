@@ -183,7 +183,7 @@ class _UsersPageState extends State<UsersPage> {
                 for (final r in roles)
                   [
                     _RoleChip(role: r),
-                    Text((r['permissions'] as List).join(' · ')),
+                    Text((r['permissions'] as List).where((p) => !'$p'.startsWith('loss.')).join(' · ')),
                   ],
               ],
             ),
@@ -309,7 +309,8 @@ class _UserFormDialogState extends State<UserFormDialog> {
               for (final ro in widget.roles) {
                 allPerms.addAll(List<String>.from((ro['permissions'] as List?) ?? const []));
               }
-              final permsList = allPerms.toList()..sort();
+              // loss.* belongs to the retired Packing Loss % sheet — never offer it.
+              final permsList = (allPerms.where((p) => !p.startsWith('loss.')).toList())..sort();
               final color = hexColor(r['color'] as String? ?? '#4f46e5');
               return Container(
                 width: double.infinity,

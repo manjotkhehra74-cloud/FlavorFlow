@@ -131,7 +131,7 @@ class PhoneNotifier {
 
 /// ---------------- Daily reminders (exact alarms) ----------------
 /// 1) Daily production-entry reminder at a chosen hour (default 5 PM)
-/// 2) Month-end reminder (last day, 6 PM): export + close the Loss% sheet.
+/// 2) Month-end reminder (last day, 6 PM): closing-stock check + export.
 class Reminders {
   static const _idDaily = 900001;
   static const _idMonthEnd = 900002;
@@ -184,7 +184,7 @@ class Reminders {
       await plugin.zonedSchedule(
         _idMonthEnd,
         'FlavorFlow ERP — month end',
-        'Loss% sheet export karke month close kar lao (closing → next opening).',
+        'Month end — closing stock check karke Stock Ledger / reports export kar lao.',
         lastDay,
         const NotificationDetails(
           android: AndroidNotificationDetails('ff_reminders', 'Reminders',

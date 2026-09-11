@@ -17,7 +17,6 @@ import 'features/dispatch/dispatch_detail_page.dart';
 import 'features/dispatch/dispatch_page.dart';
 import 'features/inventory/inventory_page.dart';
 import 'features/notifications/notifications_page.dart';
-import 'features/packing/loss_page.dart';
 import 'features/packing/packing_page.dart';
 import 'features/production/production_detail_page.dart';
 import 'features/production/production_page.dart';
@@ -36,7 +35,6 @@ String? permForPath(String path) {
   if (path.startsWith('/stock')) return 'inventory.view';
   if (path.startsWith('/packing')) return 'packing.view';
   if (path.startsWith('/raw')) return 'packing.view';
-  if (path.startsWith('/loss')) return 'packing.view';
   if (path.startsWith('/adjustments')) return 'adjustments.view';
   if (path.startsWith('/approvals')) return 'adjustments.approve';
   if (path.startsWith('/production')) return 'production.view';
@@ -65,6 +63,9 @@ GoRouter buildRouter(AuthController auth) {
       final atLogin = state.matchedLocation == '/login';
       if (!loggedIn) return atLogin ? null : '/login';
       if (atLogin) return '/dashboard';
+      // Retired section: old dashboard tiles / notifications may still deep-link
+      // to the Packing Loss % sheet — land on Packing Material instead.
+      if (state.matchedLocation == '/loss' || state.matchedLocation.startsWith('/loss/')) return '/packing';
       final perm = permForPath(state.matchedLocation);
       // Billing falls back to dispatch permissions on servers not yet patched.
       if (perm == 'billing.view') return auth.canViewBilling ? null : '/dashboard';
@@ -92,7 +93,6 @@ GoRouter buildRouter(AuthController auth) {
             builder: (c, s) => PackingPage(lowOnly: s.uri.queryParameters['filter'] == 'low'),
           ),
           GoRoute(path: '/raw', builder: (c, s) => const RawMaterialPage()),
-          GoRoute(path: '/loss', builder: (c, s) => const LossPage()),
           GoRoute(path: '/adjustments', builder: (c, s) => const AdjustmentsPage()),
           GoRoute(
             path: '/approvals',

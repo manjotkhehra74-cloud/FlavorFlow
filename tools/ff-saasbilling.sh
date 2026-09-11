@@ -50,7 +50,7 @@ cat > "$BASE/plans.json" <<'JSON'
     "pro": {
       "name": "Pro", "monthly": 1999, "yearly": 19990, "users": 15,
       "tagline": "Growing factory — production, recipes & controls",
-      "features": ["Up to 15 users", "Everything in Basic", "Production batches, recipes / BOM", "Raw material & packing-loss tracking", "Approvals & full audit log", "Priority WhatsApp support"],
+      "features": ["Up to 15 users", "Everything in Basic", "Production batches, recipes / BOM", "Raw material & consumption tracking", "Approvals & full audit log", "Priority WhatsApp support"],
       "blockedPaths": []
     },
     "enterprise": {
@@ -76,6 +76,10 @@ cat > "$BASE/plans.json" <<'JSON'
 JSON
 echo "PLANS: $BASE/plans.json created (Basic 999 / Pro 1999 / Enterprise 3999 per month; yearly = 10x)"
 else echo "PLANS: plans.json already ✓ (kept)"; fi
+# Retired feature wording (Packing Loss % sheet removed Sep 2026) — fix an existing plans.json in place.
+node -e '
+const fs=require("fs"),f=process.argv[1];try{const t=fs.readFileSync(f,"utf8");const n=t.split("Raw material & packing-loss tracking").join("Raw material & consumption tracking");if(n!==t){fs.writeFileSync(f,n);console.log("PLANS: feature text updated (packing-loss → consumption)");}}catch(e){}
+' "$BASE/plans.json"
 
 # ---------- 2) admin key (NEVER printed — boot-status.txt is public) ----------
 #   Set your own: GCP console → VM → Edit → Custom metadata  ff-admin-key = <your secret>  → RESET

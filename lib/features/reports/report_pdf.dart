@@ -8,7 +8,7 @@ import '../../core/company.dart';
 import '../../core/i18n.dart';
 import '../../core/pdf_fonts.dart';
 
-/// A grouped block inside a report (e.g. one product's materials in Loss%).
+/// A grouped block inside a report (e.g. one product's materials in a BOM sheet).
 /// Rendered as its OWN table so the heading row always stays attached to its
 /// data rows across page breaks (repeat:true re-prints it on continuations).
 class PdfSection {
@@ -167,7 +167,7 @@ class ReportPdf {
               ]),
           ],
         ),
-        // ---- grouped sections (e.g. Loss% per-product blocks) ----
+        // ---- grouped sections (per-product blocks) ----
         // Each section renders as its own small tables so MultiPage can pack
         // pages fully (no half-empty pages), while the heading + column labels
         // + first data row form ONE widget — a heading can never be left

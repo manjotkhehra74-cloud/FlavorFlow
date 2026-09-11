@@ -183,11 +183,6 @@ class _AppShellState extends State<AppShell> {
       final at = pi != -1 ? pi + 1 : nav.length;
       nav.insert(at, {'path': '/raw', 'label': 'Raw Material', 'icon': 'science', 'group': pi != -1 ? nav[pi]['group'] : 'Operations'});
     }
-    final ri = nav.indexWhere((e) => e['path'] == '/raw');
-    if (!nav.any((e) => e['path'] == '/loss') && auth.canOr('loss.view', 'packing.view') && CompanyProfile.usesLossPct) {
-      final at = ri != -1 ? ri + 1 : nav.length;
-      nav.insert(at, {'path': '/loss', 'label': 'Packing Loss %', 'icon': 'percent', 'group': ri != -1 ? nav[ri]['group'] : 'Operations'});
-    }
     // Stock Ledger (SAP-style movement register): client-side entry right after
     // Inventory for everyone who can see stock.
     if (!nav.any((e) => e['path'] == '/stock') && auth.can('inventory.view')) {
@@ -203,8 +198,8 @@ class _AppShellState extends State<AppShell> {
       nav.insert(at, {'path': '/billing', 'label': 'Billing', 'icon': 'receipt_long', 'group': di != -1 ? nav[di]['group'] : 'Operations'});
     }
     // Industry gating: the server nav is the same for every company — drop
-    // every section this industry never uses (Loss % sheet for mills /
-    // textile / hardware…, production for trading-only profiles).
+    // every section this industry never uses (production for trading-only
+    // profiles) and the retired Packing Loss % sheet older servers still send.
     nav.removeWhere((e) => !CompanyProfile.sectionVisible(e['path'] as String));
     // Settings entry at the end of the menu for every user.
     if (!nav.any((e) => e['path'] == '/settings')) {
@@ -818,7 +813,6 @@ class _CompanyProfileDialogState extends State<CompanyProfileDialog> {
   static String _hiddenFor(String id) {
     final f = CompanyProfile.industryFeatures[id] ?? const {};
     final hidden = <String>[
-      if (f['lossPct'] == false) 'Loss %',
       if (f['recipes'] == false) 'Recipes',
       if (f['trays'] == false) 'Tray columns',
       if (f['production'] == false) 'Production',

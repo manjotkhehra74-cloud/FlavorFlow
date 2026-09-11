@@ -45,7 +45,8 @@ class _DashboardPageState extends State<DashboardPage> {
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
         final data = snap.data!;
         // Industry gating: drop server widgets that belong to hidden sections
-        // (e.g. a Loss % tile for a rice mill) and shortcuts/alerts pointing there.
+        // (retired Loss % tile, production for trading-only profiles) and
+        // shortcuts/alerts pointing there.
         final widgets = [
           for (final w in (data['widgets'] as List).cast<Map<String, dynamic>>())
             if (CompanyProfile.sectionVisible((w['route'] as String?) ?? '/')) _gateWidget(w),

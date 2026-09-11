@@ -33,8 +33,8 @@ class _ReportsPageState extends State<ReportsPage> {
   Future<List<Map<String, dynamic>>> _load() async {
     final json = await context.read<AuthController>().api.get('/reports');
     // The server's report library is the same for every company — keep only
-    // what this industry runs (no Loss % sheet for mills, no recipe reports
-    // for discrete industries, no tray registers where trays don't exist).
+    // what this industry runs (no recipe reports for discrete industries, no
+    // tray registers where trays don't exist) and drop the retired Loss % sheet.
     final list = [
       for (final r in ((json as Map)['reports'] as List).cast<Map<String, dynamic>>())
         if (_reportVisible(r)) r,
@@ -45,7 +45,7 @@ class _ReportsPageState extends State<ReportsPage> {
 
   static bool _reportVisible(Map<String, dynamic> r) {
     final key = '${r['id'] ?? ''} ${r['title'] ?? ''}'.toLowerCase();
-    if (!CompanyProfile.usesLossPct && key.contains('loss')) return false;
+    if (key.contains('loss')) return false; // Packing Loss % sheet retired for every industry
     if (!CompanyProfile.usesRecipes && key.contains('recipe')) return false;
     if (!CompanyProfile.usesTrays && RegExp(r'\btrays?\b').hasMatch(key)) return false;
     if (!CompanyProfile.usesProduction && (key.contains('production') || key.contains('batch'))) return false;
