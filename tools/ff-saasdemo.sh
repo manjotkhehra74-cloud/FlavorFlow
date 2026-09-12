@@ -96,7 +96,7 @@ const D = {
     RM: [['Maida', 'kg', 4800, 1000], ['Sugar', 'kg', 2200, 500], ['Vegetable Fat / Palm Oil', 'kg', 1600, 400], ['Yeast', 'kg', 60, 15], ['Besan', 'kg', 900, 200]],
     TR: [['PB11BK3344', 'DEPOT'], ['CH01SN1122', 'SUPER STOCKIST']] },
   water: {
-    P: [['Packaged Drinking Water 1 Ltr', 12, 12.6, 12.0, 100, 640], ['Soda 750ml', 24, 20.4, 19.2, 60, 300, 12, 9.8], ['Jar 20 Ltr', 1, 20.9, 20.0, 40, 220], ['Orange Drink 250ml', 24, 6.9, 6.3, 60, 280]],
+    P: [['Packaged Drinking Water 1 Ltr', 12, 12.6, 12.0, 100, 640], ['Soda 750ml', 24, 20.4, 19.2, 60, 300, 24, 19.2], ['Jar 20 Ltr', 1, 20.9, 20.0, 40, 220], ['Orange Drink 250ml', 24, 6.9, 6.3, 60, 280]],
     PM: [['PET Preform 19.5gm', 'PET Preforms / Bottles', 'pcs', 60000, 15000], ['Cap 29/25 Blue', 'Caps', 'pcs', 70000, 15000], ['Label 1 Ltr', 'Labels', 'pcs', 60000, 15000], ['Shrink Film 12-pack', 'Shrink Film', 'kg', 360, 90], ['Jar 20 Ltr', 'Jars (20 Ltr)', 'pcs', 800, 200], ['Crate 24 × 300ml', 'Crates', 'pcs', 600, 150]],
     RM: [['Sugar', 'kg', 3000, 800], ['Concentrate / Flavour', 'Ltr', 240, 60], ['CO2', 'kg', 900, 200], ['Citric Acid', 'kg', 180, 40], ['Mineral Mix', 'kg', 60, 15]],
     TR: [['PB02WT5566', 'DISTRIBUTOR'], ['PB02WT5567', 'RETAIL ROUTE']] },
@@ -126,7 +126,7 @@ const D = {
     RM: [['Paracetamol API', 'kg', 400, 100], ['Ashwagandha Powder', 'kg', 300, 80], ['Lactose', 'kg', 600, 150], ['Magnesium Stearate', 'kg', 60, 15], ['Empty Capsules Size 0', 'pcs', 500000, 100000]],
     TR: [['PB10PH4455', 'C&F AGENT'], ['CH01ST9911', 'STOCKIST']] },
   textile: {
-    P: [['Men T-Shirt L', 60, 14.5, 13.8, 20, 140], ['Ladies Cardigan M', 40, 18.2, 17.4, 20, 90], ['Socks 3-pack', 120, 12.0, 11.4, 30, 160], ['Thermal Set XL', 30, 15.6, 15.0, 20, 110]],
+    P: [['Men T-Shirt L', 60, 14.5, 13.8, 20, 140, 12, 2.8], ['Ladies Cardigan M', 40, 18.2, 17.4, 20, 90], ['Socks 3-pack', 120, 12.0, 11.4, 30, 160, 12, 1.1], ['Thermal Set XL', 30, 15.6, 15.0, 20, 110]],
     PM: [['Poly Bag 12×16', 'Poly Bags', 'pcs', 30000, 8000], ['Hanger', 'Hangers', 'pcs', 9000, 2000], ['Hang Tag', 'Tags & Labels', 'pcs', 30000, 8000], ['Wash Care Label', 'Tags & Labels', 'pcs', 30000, 8000], ['Carton 60 pcs', 'Cartons', 'pcs', 800, 200], ['PP Strap', 'Strapping', 'Roll', 60, 15]],
     RM: [['Cotton Yarn 30s', 'kg', 3200, 800], ['Polyester Yarn', 'kg', 1800, 400], ['Fabric (Single Jersey)', 'kg', 2400, 600], ['Sewing Thread', 'Cone', 900, 200], ['Elastic', 'Meter', 6000, 1500]],
     TR: [['PB10TX1212', 'WHOLESALER'], ['PB10TX1213', 'BRAND WAREHOUSE']] },
@@ -136,17 +136,17 @@ const D = {
     RM: [['Paddy (PR-126)', 'Quintal', 2400, 500], ['Paddy (Basmati 1121)', 'Quintal', 1800, 400], ['Wheat', 'Quintal', 1600, 400], ['Maize', 'Quintal', 600, 150], ['Soya DOC', 'Quintal', 300, 80]],
     TR: [['PB03RM1001', 'MANDI'], ['PB03RM1002', 'FCI GODOWN']] },
   footwear: {
-    P: [['Sports Shoe Size 8', 12, 11.4, 10.8, 20, 140], ['Ladies Sandal Size 6', 24, 9.6, 9.0, 20, 120], ['School Shoe Size 4', 24, 12.2, 11.6, 30, 200], ['Slipper Size 9', 48, 13.0, 12.4, 30, 260]],
+    P: [['Sports Shoe Size 8', 12, 11.4, 10.8, 20, 140], ['Ladies Sandal Size 6', 24, 9.6, 9.0, 20, 120], ['School Shoe Size 4', 24, 12.2, 11.6, 30, 200], ['Slipper Size 9', 48, 13.0, 12.4, 30, 260, 12, 3.1]],
     PM: [['Shoe Box Size 8', 'Shoe Boxes', 'pcs', 6000, 1500], ['Poly Bag', 'Poly Bags', 'pcs', 20000, 5000], ['Tissue Paper', 'Tissue Paper', 'Ream', 120, 30], ['Size Sticker', 'Tags & Labels', 'pcs', 20000, 5000], ['Master Carton 12 pairs', 'Cartons', 'pcs', 900, 200], ['Silica Gel 1gm', 'Silica Gel', 'pcs', 15000, 4000]],
     RM: [['Leather (sq ft)', 'sq ft', 9000, 2000], ['PU Sheet', 'Meter', 1800, 400], ['EVA Sole', 'Pair', 12000, 3000], ['Adhesive', 'Ltr', 400, 100], ['Laces', 'Pair', 15000, 4000]],
     TR: [['PB10FW3030', 'WHOLESALER'], ['UP32SH4141', 'SHOWROOM']] },
   plastic: {
-    P: [['Carry Bag 16×20', 2000, 9.2, 8.6, 30, 220], ['HDPE Bottle 1 Ltr', 200, 8.4, 7.8, 30, 180], ['Disposable Glass 200ml', 1000, 6.6, 6.0, 40, 300], ['PVC Pipe 4 inch', 10, 32.0, 31.4, 20, 90]],
+    P: [['Carry Bag 16×20', 2000, 9.2, 8.6, 30, 220], ['HDPE Bottle 1 Ltr', 200, 8.4, 7.8, 30, 180], ['Disposable Glass 200ml', 1000, 6.6, 6.0, 40, 300, 100, 0.6], ['PVC Pipe 4 inch', 10, 32.0, 31.4, 20, 90]],
     PM: [['Carton 500 pcs', 'Cartons', 'pcs', 1500, 400], ['Poly Bag 24×36', 'Poly Bags', 'pcs', 12000, 3000], ['Stretch Film 23 mic', 'Stretch Film', 'kg', 300, 80], ['Wooden Pallet', 'Pallets', 'pcs', 120, 30], ['PP Strap 12mm', 'Strapping', 'Roll', 80, 20], ['Label', 'Labels', 'pcs', 20000, 5000]],
     RM: [['PP Granules', 'kg', 12000, 3000], ['HDPE Granules', 'kg', 9000, 2000], ['LDPE Granules', 'kg', 6000, 1500], ['Masterbatch White', 'kg', 600, 150], ['Printing Ink', 'Ltr', 200, 50]],
     TR: [['PB10PL5050', 'CUSTOMER FACTORY'], ['HR29PK6161', 'DEALER']] },
   hardware: {
-    P: [['SS Pressure Cooker 5 Ltr', 4, 10.8, 10.2, 20, 120], ['Aluminium Kadai 3 Ltr', 6, 6.6, 6.0, 20, 140], ['Door Hinge 4 inch', 200, 24.0, 23.4, 30, 160], ['Hex Bolt M12', 500, 26.0, 25.4, 30, 180]],
+    P: [['SS Pressure Cooker 5 Ltr', 4, 10.8, 10.2, 20, 120], ['Aluminium Kadai 3 Ltr', 6, 6.6, 6.0, 20, 140], ['Door Hinge 4 inch', 200, 24.0, 23.4, 30, 160, 10, 1.2], ['Hex Bolt M12', 500, 26.0, 25.4, 30, 180, 100, 5.1]],
     PM: [['Carton 24 pcs', 'Cartons', 'pcs', 1200, 300], ['Corrugated Sheet', 'Corrugated Sheets', 'pcs', 5000, 1200], ['Poly Bag', 'Poly Bags', 'pcs', 15000, 4000], ['Bubble Wrap Roll', 'Bubble Wrap', 'Roll', 90, 20], ['Wooden Pallet', 'Pallets', 'pcs', 80, 20], ['Steel Strap', 'Strapping', 'Roll', 60, 15]],
     RM: [['SS Sheet 202', 'kg', 6000, 1500], ['SS Coil 304', 'kg', 4000, 1000], ['Aluminium Circle', 'kg', 3000, 800], ['MS Rod 12mm', 'kg', 5000, 1200], ['Polish Compound', 'kg', 200, 50]],
     TR: [['PB10HW7070', 'DEALER'], ['PB10HW7071', 'WHOLESALER']] },

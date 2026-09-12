@@ -41,17 +41,17 @@ class CompanyProfile {
     ['dairy', 'Dairy', 'Crates', 'Crate', 'Trays', 'Packets'],
     ['oil', 'Edible Oil', 'Cartons', 'CB', 'Trays', 'Tins'],
     ['bakery', 'Bakery & Snacks', 'Cartons', 'CB', 'Trays', 'Packets'],
-    ['water', 'Beverages / Water', 'Cases', 'Case', 'Shells', 'Bottles'],
+    ['water', 'Beverages / Water', 'Cases', 'Case', 'Crates', 'Bottles'],
     ['soap', 'Soap & Detergent', 'Cartons', 'CB', 'Trays', 'Bars'],
     ['cosmetics', 'Cosmetics & Personal Care', 'Cartons', 'CB', 'Trays', 'Units'],
     ['paint', 'Paint & Lubricants', 'Cartons', 'CB', 'Trays', 'Tins'],
     ['agro', 'Agro-chemicals & Fertilizer', 'Cartons', 'CB', 'Trays', 'Bottles'],
     ['pharma', 'Pharma / Ayurvedic', 'Boxes', 'Box', 'Strips', 'Units'],
-    ['textile', 'Textile / Hosiery', 'Bales', 'Bale', 'Rolls', 'Pieces'],
+    ['textile', 'Textile / Hosiery', 'Bales', 'Bale', 'Dozens', 'Pieces'],
     ['mill', 'Rice / Flour / Feed Mill', 'Bags', 'Bag', 'Stacks', 'KG'],
-    ['footwear', 'Footwear', 'Cartons', 'CB', 'Racks', 'Pairs'],
-    ['plastic', 'Plastic & Packaging', 'Cartons', 'CB', 'Trays', 'Pieces'],
-    ['hardware', 'Utensils & Hardware', 'Cartons', 'CB', 'Trays', 'Pieces'],
+    ['footwear', 'Footwear', 'Cartons', 'CB', 'Dozens', 'Pairs'],
+    ['plastic', 'Plastic & Packaging', 'Cartons', 'CB', 'Packs', 'Pieces'],
+    ['hardware', 'Utensils & Hardware', 'Cartons', 'CB', 'Inner Boxes', 'Pieces'],
     ['general', 'General Manufacturing', 'Cartons', 'CB', 'Trays', 'Pieces'],
   ];
 
@@ -62,10 +62,21 @@ class CompanyProfile {
   ///              agro-chem, pharma). Discrete industries (textile, footwear,
   ///              plastic moulding, hardware, mills) mostly consume per-unit
   ///              BOM, not per-batch recipes.
-  ///   trays    → whether the secondary "tray/roll/strip" unit is meaningful
-  ///              (food/bakery trays, dairy cup trays, beverage shells, pharma
-  ///              strips, textile rolls). Off → every tray field/column/row
-  ///              disappears app-wide (mills, soap, paint, agro, footwear…).
+  ///   trays    → whether a SECONDARY pack unit (the "tray" slot) exists
+  ///              between piece and carton, as the trade actually packs:
+  ///                food     Trays   (6-bottle shrink tray of sauce / ketchup)
+  ///                dairy    Trays   (24-cup curd tray; milk goes in crates)
+  ///                bakery   Trays   (biscuit / rusk tray inside the carton)
+  ///                water    Crates  (24-bottle glass crate; PET = 12-case)
+  ///                pharma   Strips  (10 strips of 10 per box)
+  ///                textile  Dozens  (hosiery is bought and packed per dozen)
+  ///                footwear Dozens  (12 pairs; chappal / hawai per dozen)
+  ///                plastic  Packs   (100-pc sleeve of disposables, 1 kg bag pack)
+  ///                hardware Inner Boxes (100-pc bolt box, 10-pc hinge box)
+  ///              Off (unit is loose / carton only): edible oil (12-bottle
+  ///              carton, 15 kg tin, 5 L jar), soap, cosmetics, paint, agro,
+  ///              mills → every tray field/column/row disappears app-wide.
+  ///              The slot stays optional per product (0 = none).
   /// Sections NOT listed here (Products, Inventory, Packing, Raw Material,
   /// Production, Dispatch, Adjustments, Reports, Users, Audit) are the
   /// universal backbone — every industry keeps them.
@@ -73,7 +84,7 @@ class CompanyProfile {
     //              recipes  trays   production  bom
     'food':      {'recipes': true,  'trays': true,  'production': true, 'bom': true},
     'dairy':     {'recipes': true,  'trays': true,  'production': true, 'bom': true},
-    'oil':       {'recipes': true,  'trays': true,  'production': true, 'bom': true},
+    'oil':       {'recipes': true,  'trays': false, 'production': true, 'bom': true},
     'bakery':    {'recipes': true,  'trays': true,  'production': true, 'bom': true},
     'water':     {'recipes': true,  'trays': true,  'production': true, 'bom': true},
     'soap':      {'recipes': true,  'trays': false, 'production': true, 'bom': true},
@@ -83,9 +94,9 @@ class CompanyProfile {
     'pharma':    {'recipes': true,  'trays': true,  'production': true, 'bom': true},
     'textile':   {'recipes': false, 'trays': true,  'production': true, 'bom': true},
     'mill':      {'recipes': false, 'trays': false, 'production': true, 'bom': true},
-    'footwear':  {'recipes': false, 'trays': false, 'production': true, 'bom': true},
-    'plastic':   {'recipes': false, 'trays': false, 'production': true, 'bom': true},
-    'hardware':  {'recipes': false, 'trays': false, 'production': true, 'bom': true},
+    'footwear':  {'recipes': false, 'trays': true,  'production': true, 'bom': true},
+    'plastic':   {'recipes': false, 'trays': true,  'production': true, 'bom': true},
+    'hardware':  {'recipes': false, 'trays': true,  'production': true, 'bom': true},
     'general':   {'recipes': true,  'trays': true,  'production': true, 'bom': true},
   };
 
@@ -118,6 +129,22 @@ class CompanyProfile {
   /// Preset row for an industry id (falls back to 'general').
   static List<String> presetFor(String id) =>
       industries.firstWhere((r) => r[0] == id, orElse: () => industries.last);
+
+  /// Secondary-unit names an older preset / server seed stored for an
+  /// industry before the pack research fix (beverage "Shells", hosiery
+  /// "Rolls", footwear "Racks", plastic / hardware "Trays"). They were never
+  /// typed by an admin, so they count as "not customised" and the corrected
+  /// preset name applies.
+  static const Map<String, List<String>> _legacyTray = {
+    'water': ['Shells'],
+    'textile': ['Rolls'],
+    'footwear': ['Racks'],
+    'plastic': ['Trays'],
+    'hardware': ['Trays'],
+  };
+
+  static String _trayFor(String industry, String stored) =>
+      (_legacyTray[industry]?.contains(stored) ?? false) ? presetFor(industry)[4] : stored;
 
   /// Normalise whatever the server/website sent into a preset id:
   /// 'mill' → 'mill'; 'Rice / Flour / Feed Mill' → 'mill'; 'Sauces &
@@ -196,6 +223,7 @@ class CompanyProfile {
       trayLabel: prefs.getString('unit_tray') ?? 'Trays',
       pieceLabel: prefs.getString('unit_piece') ?? 'Bottles',
     );
+    p.trayLabel = _trayFor(p.industry, p.trayLabel);
     if (api != null) {
       try {
         final j = await api.get('/settings/company');
@@ -214,7 +242,7 @@ class CompanyProfile {
             industry: ind,
             cartonLabel: hasUnits ? j['cartonLabel'].toString() : row[2],
             cartonShort: hasUnits ? (j['cartonShort'] ?? row[3]).toString() : row[3],
-            trayLabel: hasUnits ? (j['trayLabel'] ?? row[4]).toString() : row[4],
+            trayLabel: hasUnits ? _trayFor(ind, (j['trayLabel'] ?? row[4]).toString()) : row[4],
             pieceLabel: hasUnits ? (j['pieceLabel'] ?? row[5]).toString() : row[5],
           );
           await _persist(prefs, p);
@@ -371,7 +399,7 @@ class U {
   static String _singular(String plural) {
     if (plural == 'KG' || plural.toUpperCase() == plural) return plural; // KG, CB…
     if (plural.endsWith('ies')) return '${plural.substring(0, plural.length - 3)}y';
-    if (plural.endsWith('xes') || plural.endsWith('ses') || plural.endsWith('ches')) return plural.substring(0, plural.length - 2);
+    if (plural.endsWith('xes') || plural.endsWith('sses') || plural.endsWith('ches')) return plural.substring(0, plural.length - 2);
     if (plural.endsWith('s')) return plural.substring(0, plural.length - 1);
     return plural;
   }

@@ -108,18 +108,33 @@ try {
   }
 
   // 2b) boot seed from env (SaaS) + normalise free-text industry → preset id
+  //     v3: researched secondary units (Crates / Dozens / Packs / Inner Boxes) + legacy
+  //     tray-name migration. An older seed block (no 'v3' marker) is cut out and
+  //     re-inserted so live servers pick up new presets / industries too.
+  const SEED_END = "} catch (e) { console.log('[ff-industry] seed error: ' + e.message); }";
+  if (src.includes('/* ffIndustrySeed */') && !src.includes('/* ffIndustrySeed v3 */')) {
+    const a = src.indexOf('/* ffIndustrySeed */');
+    const e = src.indexOf(SEED_END, a);
+    if (e > a) {
+      const ls = src.lastIndexOf('\n', a) + 1;
+      const le = src.indexOf('\n', e); const cutEnd = le < 0 ? src.length : le + 1;
+      src = src.slice(0, ls) + src.slice(cutEnd);
+      touched = true;
+      console.log('CORE: old industry boot-seed removed (pre-v3) — re-inserting');
+    } else console.log('CORE: old boot-seed end marker nahi labhya — block left as is');
+  }
   if (!src.includes('/* ffIndustrySeed */')) {
     const SEED = `
-/* ffIndustrySeed */
+/* ffIndustrySeed */ /* ffIndustrySeed v3 */
 try {
   const _idb = require('./db');
   _idb.prepare("CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)").run();
   const PRESETS = {
     food: ['Cartons', 'CB', 'Trays', 'Bottles'], dairy: ['Crates', 'Crate', 'Trays', 'Packets'], oil: ['Cartons', 'CB', 'Trays', 'Tins'],
-    bakery: ['Cartons', 'CB', 'Trays', 'Packets'], water: ['Cases', 'Case', 'Shells', 'Bottles'], soap: ['Cartons', 'CB', 'Trays', 'Bars'],
+    bakery: ['Cartons', 'CB', 'Trays', 'Packets'], water: ['Cases', 'Case', 'Crates', 'Bottles'], soap: ['Cartons', 'CB', 'Trays', 'Bars'],
     cosmetics: ['Cartons', 'CB', 'Trays', 'Units'], paint: ['Cartons', 'CB', 'Trays', 'Tins'], agro: ['Cartons', 'CB', 'Trays', 'Bottles'],
-    pharma: ['Boxes', 'Box', 'Strips', 'Units'], textile: ['Bales', 'Bale', 'Rolls', 'Pieces'], mill: ['Bags', 'Bag', 'Stacks', 'KG'],
-    footwear: ['Cartons', 'CB', 'Racks', 'Pairs'], plastic: ['Cartons', 'CB', 'Trays', 'Pieces'], hardware: ['Cartons', 'CB', 'Trays', 'Pieces'],
+    pharma: ['Boxes', 'Box', 'Strips', 'Units'], textile: ['Bales', 'Bale', 'Dozens', 'Pieces'], mill: ['Bags', 'Bag', 'Stacks', 'KG'],
+    footwear: ['Cartons', 'CB', 'Dozens', 'Pairs'], plastic: ['Cartons', 'CB', 'Packs', 'Pieces'], hardware: ['Cartons', 'CB', 'Inner Boxes', 'Pieces'],
     general: ['Cartons', 'CB', 'Trays', 'Pieces'],
   };
   const KEYS = {
@@ -146,7 +161,7 @@ try {
     'plastic & packaging': 'plastic', 'utensils & hardware': 'hardware', 'general manufacturing': 'general',
   };
   const industryId = (raw) => {
-    const v = String(raw || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const v = String(raw || '').trim().toLowerCase().replace(/[ ]+/g, ' ');
     if (!v) return '';
     if (PRESETS[v]) return v;
     if (LABELS[v]) return LABELS[v];
@@ -161,6 +176,15 @@ try {
     next = { ...row, name: row.name || process.env.COMPANY_NAME || '', industry: envId };
   } else if (row.industry && !PRESETS[String(row.industry)]) {
     next = { ...row, industry: curId || 'general' };
+  }
+  /* ffTrayFix: secondary-unit names the OLD presets seeded (beverage "Shells", hosiery "Rolls",
+     footwear "Racks", plastic / hardware "Trays") were never typed by an admin — move them to the
+     researched trade unit (Crates / Dozens / Packs / Inner Boxes). Admin-typed names stay. */
+  const LEGACY_TRAY = { water: ['Shells'], textile: ['Rolls'], footwear: ['Racks'], plastic: ['Trays'], hardware: ['Trays'] };
+  const cur = next || row;
+  if (!next && PRESETS[String(cur.industry)] && (LEGACY_TRAY[cur.industry] || []).includes(String(cur.trayLabel || ''))) {
+    next = { ...row, trayLabel: PRESETS[cur.industry][2] };
+    console.log('[ff-industry] tray unit ' + cur.trayLabel + ' -> ' + next.trayLabel + ' (' + cur.industry + ')');
   }
   if (next) {
     const u = PRESETS[next.industry] || PRESETS.general;
