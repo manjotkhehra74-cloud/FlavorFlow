@@ -31,11 +31,13 @@ class DispatchPdf {
   static Future<Uint8List> challan(Map<String, dynamic> d, List<Map<String, dynamic>> items) async {
     await _loadFonts();
     final hasBatch = items.any((it) => (it['batch_code'] ?? '').toString().isNotEmpty);
+    final hasCode = items.any((it) => (it['item_code'] ?? '').toString().isNotEmpty);
     final rows = <List<String>>[
       for (var i = 0; i < items.length; i++)
         [
           '${i + 1}',
           '${items[i]['product_name']}',
+          if (hasCode) '${items[i]['item_code'] ?? ''}',
           if (hasBatch) '${items[i]['batch_code'] ?? '—'}',
           '${items[i]['cartons']}',
           if (_trays) '${items[i]['trays'] ?? 0}',
@@ -49,8 +51,9 @@ class DispatchPdf {
     doc.addPage(_page(
       title: tr('Dispatch Packing Slip').toUpperCase(),
       subtitle: '', // dispatch number intentionally not printed on the slip
-      headers: hasBatch ? _headersWithBatch : _headers,
+      headers: _hdrs(code: hasCode, batch: hasBatch),
       hasBatch: hasBatch,
+      hasCode: hasCode,
       meta: [
         [tr('Dispatch Date'), _dateWithDay(d['dispatch_date'])],
         [tr('Truck / Vehicle No.'), '${d['truck_number']}'],
@@ -60,7 +63,7 @@ class DispatchPdf {
       remarks: '${d['remarks'] ?? ''}',
       rows: rows,
       totals: [
-        'TOTAL', '', if (hasBatch) '', '${d['total_cartons']}', if (_trays) '${d['total_trays'] ?? 0}', '${d['total_bottles']}',
+        'TOTAL', '', if (hasCode) '', if (hasBatch) '', '${d['total_cartons']}', if (_trays) '${d['total_trays'] ?? 0}', '${d['total_bottles']}',
         kg(d['carton_weight']), if (_trays) kg(d['tray_weight'] ?? 0), kg(d['gross_weight']),
       ],
       footnote: tr('Date & day are recorded automatically at dispatch time.'),
@@ -113,7 +116,8 @@ class DispatchPdf {
   /// Tray columns only for industries that use the secondary unit.
   static bool get _trays => CompanyProfile.usesTrays;
   static List<String> get _headers => ['#', tr('Product'), tr(U.carton), if (_trays) tr(U.tray), tr(U.piece), '${U.cb} ${tr('Wt')}', if (_trays) '${tr(U.tray)} ${tr('Wt')}', tr('Gross Wt')];
-  static List<String> get _headersWithBatch => ['#', tr('Product'), tr('Batch'), tr(U.carton), if (_trays) tr(U.tray), tr(U.piece), '${U.cb} ${tr('Wt')}', if (_trays) '${tr(U.tray)} ${tr('Wt')}', tr('Gross Wt')];
+  static List<String> get _headersWithBatch => _hdrs(batch: true);
+  static List<String> _hdrs({bool code = false, bool batch = false}) => ['#', tr('Product'), if (code) tr('Item Code'), if (batch) tr('Batch'), tr(U.carton), if (_trays) tr(U.tray), tr(U.piece), '${U.cb} ${tr('Wt')}', if (_trays) '${tr(U.tray)} ${tr('Wt')}', tr('Gross Wt')];
 
   static pw.Page _page({
     required String title,
@@ -125,10 +129,13 @@ class DispatchPdf {
     String remarks = '',
     List<String>? headers,
     bool hasBatch = false,
+    bool hasCode = false,
     String preparedBy = '',
   }) {
     final company = CompanyProfile.current;
     final List<String> hdrs = headers ?? _headers;
+    // first numeric column: after #, product, [item code], [batch]
+    final firstNum = 2 + (hasCode ? 1 : 0) + (hasBatch ? 1 : 0);
     const primary = PdfColor.fromInt(0xFF2456C8);
     const headerBg = PdfColor.fromInt(0xFFEFF4FF);
     const greyTxt = PdfColor.fromInt(0xFF64748B);
@@ -149,9 +156,10 @@ class DispatchPdf {
 
     final widths = <int, pw.TableColumnWidth>{
       0: const pw.FixedColumnWidth(26),
-      1: pw.FlexColumnWidth(hasBatch ? 2.2 : 2.6),
-      if (hasBatch) 2: const pw.FlexColumnWidth(1.2),
-      for (var i = hasBatch ? 3 : 2; i < hdrs.length; i++) i: const pw.FlexColumnWidth(1.1),
+      1: pw.FlexColumnWidth(hasBatch || hasCode ? 2.1 : 2.6),
+      if (hasCode) 2: const pw.FixedColumnWidth(70),
+      if (hasBatch) (hasCode ? 3 : 2): const pw.FlexColumnWidth(1.2),
+      for (var i = firstNum; i < hdrs.length; i++) i: const pw.FlexColumnWidth(1.1),
     };
 
     return pw.Page(
@@ -206,17 +214,17 @@ class DispatchPdf {
           children: [
             pw.TableRow(
               decoration: const pw.BoxDecoration(color: headerBg),
-              children: [for (var i = 0; i < hdrs.length; i++) cell(hdrs[i], header: true, right: i >= (hasBatch ? 3 : 2))],
+              children: [for (var i = 0; i < hdrs.length; i++) cell(hdrs[i], header: true, right: i >= firstNum)],
             ),
             for (final r in rows)
-              pw.TableRow(children: [for (var i = 0; i < r.length; i++) cell(r[i], right: i >= (hasBatch ? 3 : 2))]),
+              pw.TableRow(children: [for (var i = 0; i < r.length; i++) cell(r[i], right: i >= firstNum)]),
             pw.TableRow(
               decoration: const pw.BoxDecoration(color: headerBg),
               children: [
                 for (var i = 0; i < totals.length; i++)
                   i == 0
                       ? pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 7, vertical: 6), child: pw.Text(PdfFonts.shape(tr('Total').toUpperCase()), style: ts(9, bold: true, color: primary)))
-                      : cell(totals[i], bold: true, right: i >= (hasBatch ? 3 : 2), color: primary),
+                      : cell(totals[i], bold: true, right: i >= firstNum, color: primary),
               ],
             ),
           ],

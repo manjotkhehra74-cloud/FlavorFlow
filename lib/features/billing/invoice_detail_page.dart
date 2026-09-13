@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../core/i18n.dart';
+import '../../core/item_code.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
@@ -178,7 +179,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                 for (var i = 0; i < items.length; i++)
                   [
                     '${i + 1}',
-                    items[i]['description'],
+                    ItemNameCell(name: '${items[i]['description']}', code: ItemCode.of(items[i])),
                     (items[i]['hsn_code'] as String? ?? '').isEmpty ? '—' : items[i]['hsn_code'],
                     (items[i]['batch_code'] as String? ?? '').isEmpty ? '—' : items[i]['batch_code'],
                     '${qty(items[i]['qty'])} ${items[i]['rate_per'] == 'piece' ? '${U.cb} (${qty((items[i]['qty'] as num) * (items[i]['pieces_per_pack'] as num? ?? 1))} ${U.piece.toLowerCase()})' : U.cb}',

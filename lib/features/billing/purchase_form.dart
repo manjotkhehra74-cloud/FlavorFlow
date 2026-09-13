@@ -427,7 +427,7 @@ class _PurchaseFormPageState extends State<PurchaseFormPage> {
                     key: ValueKey('it-$i-${l.itemType}-${l.itemId}'),
                     initialValue: l.itemId ?? 0,
                     isExpanded: true,
-                    decoration: InputDecoration(labelText: l.itemType == 'product' ? tr('Product *') : tr('Raw / packing material *')),
+                    decoration: InputDecoration(labelText: l.itemType == 'product' ? tr('Product *') : tr('Raw / packing material *'), suffixIcon: ScanPickButton(rows: choices, onPicked: (p) => _applyItem(l, p['id'] as int))),
                     items: [
                       DropdownMenuItem<int>(value: 0, child: Text(tr('— select —'))),
                       for (final p in choices)

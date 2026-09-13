@@ -14,6 +14,8 @@ import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 import '../billing/item_history_page.dart' show showItemHistory;
 import '../reports/report_pdf.dart';
+import '../products/import_dialog.dart';
+import '../products/label_dialog.dart';
 
 /// Packing Material — stock of bottles, caps, labels, cartons, trays etc.
 /// Receipts & consumption feed a ledger; batch completion auto-consumes per BOM.
@@ -370,6 +372,20 @@ class _StockTabState extends State<_StockTab> {
                 icon: const Icon(Icons.add_rounded, size: 18),
                 label: Text(tr('New Material')),
               ),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final saved = await showImportDialog(context, ImportKind.materials, rawOnly: widget.rawOnly);
+                  if (saved == true) _reload();
+                },
+                icon: const Icon(Icons.upload_file_rounded, size: 18),
+                label: Text(tr('Import')),
+              ),
+              if (hasCodes)
+                OutlinedButton.icon(
+                  onPressed: () => showLabelDialog(context, rows),
+                  icon: const Icon(Icons.qr_code_2_rounded, size: 18),
+                  label: Text(tr('Labels')),
+                ),
               if (all.isEmpty)
                 OutlinedButton.icon(
                   onPressed: () async {
@@ -767,9 +783,10 @@ class _TxnDialogState extends State<_TxnDialog> {
                 ? const SizedBox(height: 80, child: Center(child: CircularProgressIndicator()))
                 : Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
                     DropdownButtonFormField<int>(
+                      key: ValueKey('mat-$materialId'),
                       initialValue: materialId,
                       isExpanded: true,
-                      decoration: InputDecoration(labelText: tr('Material *')),
+                      decoration: InputDecoration(labelText: tr('Material *'), suffixIcon: ScanPickButton(rows: materials, onPicked: (m) => setState(() { materialId = m['id'] as int; _autoTagProduct(); }))),
                       // Raw screen: category suffix skipped so the full name fits.
                       items: [for (final m in materials) DropdownMenuItem(value: m['id'] as int, child: Text(widget.rawOnly ? ItemCode.pick(m) : '${ItemCode.pick(m)} (${m['category']})', overflow: TextOverflow.ellipsis))],
                       onChanged: (v) => setState(() { materialId = v; _autoTagProduct(); }),

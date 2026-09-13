@@ -486,8 +486,10 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                 ? const SizedBox(height: 80, child: Center(child: CircularProgressIndicator()))
                 : Column(mainAxisSize: MainAxisSize.min, children: [
                     DropdownButtonFormField<int>(
+                      key: ValueKey('rcpt-$productId'),
                       initialValue: productId,
-                      decoration: InputDecoration(labelText: tr('Product *')),
+                      isExpanded: true,
+                      decoration: InputDecoration(labelText: tr('Product *'), suffixIcon: ScanPickButton(rows: products, onPicked: (p) => setState(() => productId = p['id'] as int))),
                       items: [for (final p in products) DropdownMenuItem(value: p['id'] as int, child: Text(ItemCode.pick(p), overflow: TextOverflow.ellipsis))],
                       onChanged: (v) => setState(() => productId = v),
                     ),

@@ -84,7 +84,7 @@ class _AdjustmentsPageState extends State<AdjustmentsPage> {
                       for (final a in rows)
                         [
                           Text(a['code'] as String, style: const TextStyle(fontWeight: FontWeight.w700)),
-                          a['product_name'],
+                          ItemNameCell(name: '${a['product_name']}', code: ItemCode.of(a)),
                           StatusChip(a['adj_type'] as String),
                           qtyInt(a['qty_cb']),
                           a['reason'],
@@ -172,8 +172,9 @@ class _AdjustmentFormDialogState extends State<AdjustmentFormDialog> {
             ? const SizedBox(height: 100, child: Center(child: CircularProgressIndicator()))
             : Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
                 DropdownButtonFormField<int>(
+                  key: ValueKey('adj-$productId'),
                   initialValue: productId,
-                  decoration: InputDecoration(labelText: tr('Product *')),
+                  decoration: InputDecoration(labelText: tr('Product *'), suffixIcon: ScanPickButton(rows: products, onPicked: (p) => setState(() => productId = p['id'] as int))),
                   isExpanded: true,
                   items: [for (final p in products) DropdownMenuItem(value: p['id'] as int, child: Text(ItemCode.pick(p), overflow: TextOverflow.ellipsis))],
                   onChanged: (v) => setState(() => productId = v),

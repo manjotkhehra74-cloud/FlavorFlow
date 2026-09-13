@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'i18n.dart';
+import '../ui/scan_page.dart';
 
 /// SAP-style item codes (material numbers) — client helpers.
 ///
@@ -62,12 +64,74 @@ class ItemCode {
     return (row['name'] ?? '').toString().toLowerCase().contains(q) || of(row).toLowerCase().contains(q) || short(of(row)).toLowerCase().contains(q);
   }
 
+  /// Find the item a scanned payload points at. Accepts the bare code
+  /// (`FG0000000012` — what our labels encode), the short form (`FG-12`), a
+  /// URL / text that contains the code, or an exact item name.
+  static Map<String, dynamic>? resolve(Iterable<Map<String, dynamic>> rows, String payload) {
+    final raw = payload.trim();
+    if (raw.isEmpty) return null;
+    final up = normalize(raw);
+    for (final r in rows) {
+      final c = of(r);
+      if (c.isNotEmpty && (c == up || short(c) == up)) return r;
+    }
+    // FG-12 / FG12 / fg 12 → FG0000000012
+    final m = RegExp(r'^(FG|RM|PM)[-_ ]?0*(\d{1,10})$').firstMatch(up);
+    if (m != null) {
+      final full = '${m.group(1)}${m.group(2)!.padLeft(10, '0')}';
+      for (final r in rows) if (of(r) == full) return r;
+    }
+    // code embedded in a longer scan (URL, label text)
+    for (final r in rows) {
+      final c = of(r);
+      if (c.length >= 4 && up.contains(c)) return r;
+    }
+    final lc = raw.toLowerCase();
+    for (final r in rows) if ((r['name'] ?? '').toString().toLowerCase() == lc) return r;
+    return null;
+  }
+
+  /// Camera scan → matching item (or null after a "not found" snackbar).
+  /// Phone only — on web the scan page itself explains typing is needed.
+  static Future<Map<String, dynamic>?> scanPick(BuildContext context, Iterable<Map<String, dynamic>> rows, {String? title}) async {
+    final v = await ScanPage.scan(context, title: title ?? tr('Scan item code'));
+    if (v == null) return null;
+    final hit = resolve(rows, v);
+    if (hit == null && context.mounted) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('${tr('No item with code')} "${v.length > 40 ? '${v.substring(0, 40)}…' : v}"')));
+    }
+    return hit;
+  }
+
   /// Input formatters for the code field (upper-case, no spaces, 24 max).
   static List<TextInputFormatter> get formatters => [
         FilteringTextInputFormatter.deny(RegExp(r'\s')),
         LengthLimitingTextInputFormatter(24),
         TextInputFormatter.withFunction((o, n) => n.copyWith(text: n.text.toUpperCase(), selection: n.selection)),
       ];
+}
+
+/// Suffix icon for a picker: opens the camera and returns the matched item.
+class ScanPickButton extends StatelessWidget {
+  final Iterable<Map<String, dynamic>> rows;
+  final void Function(Map<String, dynamic> item) onPicked;
+  final String? tooltip;
+  const ScanPickButton({super.key, required this.rows, required this.onPicked, this.tooltip});
+
+  @override
+  Widget build(BuildContext context) {
+    if (kIsWeb || rows.isEmpty) return const SizedBox.shrink();
+    return IconButton(
+      tooltip: tooltip ?? tr('Scan item code'),
+      icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
+      onPressed: () async {
+        final hit = await ItemCode.scanPick(context, rows);
+        if (hit != null) onPicked(hit);
+      },
+    );
+  }
 }
 
 /// Small monospace chip showing an item code in tables / tiles.

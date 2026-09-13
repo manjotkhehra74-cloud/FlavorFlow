@@ -9,6 +9,8 @@ import '../../core/item_code.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 import '../billing/item_history_page.dart' show showItemHistory;
+import 'import_dialog.dart';
+import 'label_dialog.dart';
 
 /// Product Master — Finished Goods with exact spec data (carton & tray packing).
 class ProductsPage extends StatefulWidget {
@@ -82,23 +84,11 @@ class _ProductsPageState extends State<ProductsPage> {
         final hasCodes = ItemCode.anyIn(all);
         final products = all.where((p) => ItemCode.matches(p, _q.text)).toList();
         return ListView(padding: const EdgeInsets.all(20), children: [
-          Row(children: [
-            Expanded(
-              child: Text('${all.length} ${tr('finished goods')} · ${U.carton.toLowerCase()} ${CompanyProfile.usesTrays ? '& ${U.trayLc} ' : ''}${tr('weights')}, ${U.piece.toLowerCase()} ${tr('packing')}',
-                  style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-            ),
-            if (auth.canManageBilling)
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: OutlinedButton.icon(
-                  onPressed: () async {
-                    final saved = await showDialog<bool>(context: context, builder: (_) => ProductRatesDialog(products: products));
-                    if (saved == true) _reload();
-                  },
-                  icon: const Icon(Icons.currency_rupee_rounded, size: 18),
-                  label: Text(tr('Rates & GST')),
-                ),
-              ),
+          // header: summary line + action buttons (Wrap → no overflow on phones)
+          Text('${all.length} ${tr('finished goods')} · ${U.carton.toLowerCase()} ${CompanyProfile.usesTrays ? '& ${U.trayLc} ' : ''}${tr('weights')}, ${U.piece.toLowerCase()} ${tr('packing')}',
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          const SizedBox(height: 10),
+          Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
             if (canManage)
               FilledButton.icon(
                 onPressed: () async {
@@ -107,6 +97,30 @@ class _ProductsPageState extends State<ProductsPage> {
                 },
                 icon: const Icon(Icons.add_rounded),
                 label: Text(tr('Add Product')),
+              ),
+            if (canManage)
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final saved = await showImportDialog(context, ImportKind.products);
+                  if (saved == true) _reload();
+                },
+                icon: const Icon(Icons.upload_file_rounded, size: 18),
+                label: Text(tr('Import')),
+              ),
+            if (auth.canManageBilling)
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final saved = await showDialog<bool>(context: context, builder: (_) => ProductRatesDialog(products: products));
+                  if (saved == true) _reload();
+                },
+                icon: const Icon(Icons.currency_rupee_rounded, size: 18),
+                label: Text(tr('Rates & GST')),
+              ),
+            if (hasCodes)
+              OutlinedButton.icon(
+                onPressed: () => showLabelDialog(context, products),
+                icon: const Icon(Icons.qr_code_2_rounded, size: 18),
+                label: Text(tr('Labels')),
               ),
           ]),
           const SizedBox(height: 12),

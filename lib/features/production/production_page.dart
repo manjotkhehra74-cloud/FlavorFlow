@@ -80,7 +80,7 @@ class _ProductionPageState extends State<ProductionPage> {
                       for (final b in rows)
                         [
                           Text(b['code'] as String, style: const TextStyle(fontWeight: FontWeight.w700)),
-                          b['product_name'],
+                          ItemNameCell(name: '${b['product_name']}', code: ItemCode.of(b)),
                           qtyInt(b['planned_cb']),
                           qtyInt(b['produced_cb']),
                           if (CompanyProfile.usesTrays) qtyInt(b['produced_trays'] ?? 0),
@@ -320,8 +320,9 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
                   )
                 else
                   DropdownButtonFormField<int>(
+                    key: ValueKey('prod-$productId'),
                     initialValue: productId,
-                    decoration: InputDecoration(labelText: tr('Product *')),
+                    decoration: InputDecoration(labelText: tr('Product *'), suffixIcon: ScanPickButton(rows: products, onPicked: (p) => setState(() => productId = p['id'] as int))),
                     isExpanded: true,
                     items: [for (final p in products) DropdownMenuItem(value: p['id'] as int, child: Text(ItemCode.pick(p), overflow: TextOverflow.ellipsis))],
                     onChanged: (v) => setState(() => productId = v),

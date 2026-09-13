@@ -405,7 +405,7 @@ class _InvoiceFormPageState extends State<InvoiceFormPage> {
               key: ValueKey('p-$i-${l.productId}'),
               initialValue: l.productId ?? 0,
               isExpanded: true,
-              decoration: InputDecoration(labelText: '${tr('Item')} ${i + 1}'),
+              decoration: InputDecoration(labelText: '${tr('Item')} ${i + 1}', suffixIcon: ScanPickButton(rows: products, onPicked: (p) => _applyProduct(l, p['id'] as int))),
               items: [
                 DropdownMenuItem<int>(value: 0, child: Text(tr('Other / free text'))),
                 for (final p in products) DropdownMenuItem<int>(value: p['id'] as int, child: Text(ItemCode.pick(p), overflow: TextOverflow.ellipsis)),

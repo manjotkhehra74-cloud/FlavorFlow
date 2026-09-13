@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../core/i18n.dart';
+import '../../core/item_code.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
@@ -175,7 +176,7 @@ class _DispatchDetailPageState extends State<DispatchDetailPage> {
               rows: [
                 for (final it in items)
                   [
-                    Text(it['product_name'] as String, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    ItemNameCell(name: it['product_name'] as String, code: ItemCode.of(it)),
                     (it['batch_code'] ?? '—').toString(),
                     qtyInt(it['cartons']),
                     if (CompanyProfile.usesTrays) qtyInt(it['trays'] ?? 0),

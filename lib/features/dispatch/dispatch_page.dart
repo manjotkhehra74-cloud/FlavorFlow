@@ -114,8 +114,11 @@ class _LinesEditor extends StatelessWidget {
   final List<_Line> lines;
   final VoidCallback onAdd, onChanged;
   final void Function(int) onRemove;
+  /// Camera scan picked a product for line [i] — parent must setState so the
+  /// dropdown (keyed on productId) rebuilds with the new value.
+  final void Function(int i, int productId) onScanPick;
   final bool showBatch;
-  const _LinesEditor({required this.products, required this.lines, required this.onAdd, required this.onRemove, required this.onChanged, this.showBatch = false});
+  const _LinesEditor({required this.products, required this.lines, required this.onAdd, required this.onRemove, required this.onChanged, required this.onScanPick, this.showBatch = false});
 
   @override
   Widget build(BuildContext context) {
@@ -134,9 +137,10 @@ class _LinesEditor extends StatelessWidget {
             Row(children: [
               Expanded(
                 child: DropdownButtonFormField<int>(
+                  key: ValueKey('dl-$i-${lines[i].productId}'),
                   initialValue: lines[i].productId,
                   isExpanded: true,
-                  decoration: InputDecoration(labelText: tr('Product ${i + 1} *')),
+                  decoration: InputDecoration(labelText: tr('Product ${i + 1} *'), suffixIcon: ScanPickButton(rows: products, onPicked: (p) => onScanPick(i, p['id'] as int))),
                   items: [for (final p in products) DropdownMenuItem(value: p['id'] as int, child: Text(ItemCode.pick(p), overflow: TextOverflow.ellipsis))],
                   onChanged: (v) { lines[i].productId = v; onChanged(); },
                 ),
@@ -356,6 +360,7 @@ mixin _CalcMixin<T extends StatefulWidget> on State<T> {
   }
 
   void addLine() => setState(() => lines.add(_Line()..productId = products.isNotEmpty ? products.first['id'] as int : null));
+  void scanPick(int i, int productId) => setState(() { lines[i].productId = productId; recalcDebounced(); });
   void removeLine(int i) => setState(() { lines.removeAt(i).dispose(); recalc(); });
   void disposeLines() { _debounce?.cancel(); for (final l in lines) { l.dispose(); } }
 }
@@ -781,7 +786,7 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
               ? (productsLoaded
                   ? _NoProductsHint(onAdd: () => context.go('/products'))
                   : const SizedBox(height: 60, child: Center(child: CircularProgressIndicator())))
-              : _LinesEditor(products: products, lines: lines, onAdd: addLine, onRemove: removeLine, onChanged: recalcDebounced, showBatch: true),
+              : _LinesEditor(products: products, lines: lines, onAdd: addLine, onRemove: removeLine, onChanged: recalcDebounced, onScanPick: scanPick, showBatch: true),
         ]));
         final side = SectionCard(title: 'Before you dispatch', child: Column(children: [
           if (calc != null) ...[
@@ -891,7 +896,7 @@ class _CalculatorTabState extends State<_CalculatorTab> with _CalcMixin {
               ? (productsLoaded
                   ? _NoProductsHint(onAdd: () => context.go('/products'))
                   : const SizedBox(height: 60, child: Center(child: CircularProgressIndicator())))
-              : _LinesEditor(products: products, lines: lines, onAdd: addLine, onRemove: removeLine, onChanged: recalcDebounced),
+              : _LinesEditor(products: products, lines: lines, onAdd: addLine, onRemove: removeLine, onChanged: recalcDebounced, onScanPick: scanPick),
         ]));
         final side = SectionCard(title: 'Calculated Weights', child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           if (calc != null) ...[

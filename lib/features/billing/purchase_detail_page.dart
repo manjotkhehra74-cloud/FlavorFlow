@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../core/i18n.dart';
+import '../../core/item_code.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
@@ -169,7 +170,7 @@ class _PurchaseDetailPageState extends State<PurchaseDetailPage> {
                 for (var i = 0; i < items.length; i++)
                   [
                     '${i + 1}',
-                    Text(items[i]['description'] as String, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    ItemNameCell(name: items[i]['description'] as String, code: ItemCode.of(items[i])),
                     _typeLabel(items[i]['item_type'] as String? ?? ''),
                     (items[i]['hsn_code'] as String? ?? '').isEmpty ? '—' : items[i]['hsn_code'],
                     (items[i]['batch_code'] as String? ?? '').isEmpty ? '—' : items[i]['batch_code'],

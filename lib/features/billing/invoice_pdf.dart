@@ -222,7 +222,7 @@ class InvoicePdf {
             for (var i = 0; i < items.length; i++)
               pw.TableRow(children: [
                 cell('${i + 1}'),
-                cell('${items[i]['description']}${items[i]['rate_per'] == 'piece' && _n(items[i]['pieces_per_pack']) > 1 ? '\n${q(items[i]['qty'])} ${profile.cartonShort} × ${q(items[i]['pieces_per_pack'])} ${profile.pieceLabel.toLowerCase()}' : ''}'),
+                cell('${items[i]['description']}${(items[i]['item_code'] ?? '').toString().isNotEmpty ? '\n${tr('Code')}: ${items[i]['item_code']}' : ''}${items[i]['rate_per'] == 'piece' && _n(items[i]['pieces_per_pack']) > 1 ? '\n${q(items[i]['qty'])} ${profile.cartonShort} × ${q(items[i]['pieces_per_pack'])} ${profile.pieceLabel.toLowerCase()}' : ''}'),
                 cell('${items[i]['hsn_code'] ?? ''}'),
                 if (hasBatch) cell('${items[i]['batch_code'] ?? ''}'),
                 cell(items[i]['rate_per'] == 'piece' ? '${q(_n(items[i]['qty']) * (_n(items[i]['pieces_per_pack']) <= 0 ? 1 : _n(items[i]['pieces_per_pack'])))} ${unitOf(items[i])}' : '${q(items[i]['qty'])} ${unitOf(items[i])}', right: true),

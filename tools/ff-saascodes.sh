@@ -10,9 +10,14 @@
 #                                     blank → the new row gets the next series number right away (not only at next boot)
 #                                   GET /api/products, /api/inventory, /api/packing/materials, /api/billing/products,
 #                                       /api/billing/items → every row carries item_code (app shows / searches it)
+#                                   GET /api/billing/invoices/:id, /api/billing/purchases/:id, /api/dispatch/:id,
+#                                       /api/production/batches, /api/adjustments → line items carry item_code
+#                                       (documents / PDFs print the code); GET /api/reports/:id → an "Item Code"
+#                                       column is inserted after the Product / Material column (matched by name)
 #   2) db.js                    — /* ffItemCodes v2 */ boot line at EOF (old v1 inline block removed); new tenant DBs get it too
 #   3) server.js                — /* ffItemCodes */ middleware mounted BEFORE the first /api mount
-#   (GET /api/packing/bom → bom[i].product.item_code too)
+#   (also GET /packing/bom, /billing/invoices/:id, /billing/purchases/:id, /dispatch/:id, /production/batches,
+#    /adjustments → item rows carry item_code so documents / PDFs print the material number)
 #   Codes are permanent (SAP rule): category change / rename never re-numbers; admin may type an own code.
 #   One-time v1 → v2 migration: auto RM/PM codes whose prefix disagrees with the category get re-numbered (guarded by app_settings).
 #   SaaS core te vi chaldi hai, factory server te vi (auto-detect). Idempotent. Backups + node --check + auto-restore.
@@ -127,14 +132,47 @@ function boot(handle) {
 const ensureBooted = () => { if (!booted) safe(() => boot(null)); };
 
 /* ---------------- GET enrichment ---------------- */
+// GET responses that get item_code stamped on every item row (lists, detail documents).
+// key = array in the body · id = field holding the item id · table (or tables by typeField) · sub = nested object
+const P = 'products', M = 'packing_materials';
 const LISTS = [
-  { re: /^\/api\/products\/?$/, keys: [['products', 'id', 'products']] },
-  { re: /^\/api\/inventory\/?$/, keys: [['items', 'product_id', 'products']] },
-  { re: /^\/api\/packing\/materials\/?$/, keys: [['materials', 'id', 'packing_materials']] },
-  { re: /^\/api\/billing\/products\/?$/, keys: [['products', 'id', 'products']] },
-  { re: /^\/api\/billing\/items\/?$/, keys: [['products', 'id', 'products'], ['materials', 'id', 'packing_materials']] },
-  { re: /^\/api\/packing\/bom\/?$/, keys: [['bom', 'id', 'products', 'product']] }, // bom[i].product.{id,name}
+  { re: /^\/api\/products\/?$/, keys: [{ key: 'products', id: 'id', table: P }] },
+  { re: /^\/api\/inventory\/?$/, keys: [{ key: 'items', id: 'product_id', table: P }] },
+  { re: /^\/api\/packing\/materials\/?$/, keys: [{ key: 'materials', id: 'id', table: M }] },
+  { re: /^\/api\/packing\/bom\/?$/, keys: [{ key: 'bom', id: 'id', table: P, sub: 'product' }] }, // bom[i].product.{id,name}
+  { re: /^\/api\/billing\/products\/?$/, keys: [{ key: 'products', id: 'id', table: P }] },
+  { re: /^\/api\/billing\/items\/?$/, keys: [{ key: 'products', id: 'id', table: P }, { key: 'materials', id: 'id', table: M }] },
+  { re: /^\/api\/billing\/invoices\/\d+\/?$/, keys: [{ key: 'items', id: 'product_id', table: P }] },
+  { re: /^\/api\/billing\/purchases\/\d+\/?$/, keys: [{ key: 'items', id: 'item_id', typeField: 'item_type', tables: { product: P, material: M } }] },
+  { re: /^\/api\/dispatch\/\d+\/?$/, keys: [{ key: 'items', id: 'product_id', table: P }] },
+  { re: /^\/api\/production\/batches\/?$/, keys: [{ key: 'batches', id: 'product_id', table: P }] },
+  { re: /^\/api\/adjustments\/?$/, keys: [{ key: 'adjustments', id: 'product_id', table: P }] },
+  // reports: {columns:[…], rows:[[…]]} — an "Item Code" column is inserted after the Product / Material / Item name column
+  { re: /^\/api\/reports\/[A-Za-z0-9_-]+\/?$/, report: true },
 ];
+const NAME_COLS = ['product', 'material', 'item', 'product name', 'material name', 'item name', 'name'];
+function enrichReport(body) {
+  if (!body || !Array.isArray(body.columns) || !Array.isArray(body.rows) || !body.rows.length) return;
+  const cols = body.columns.map((c) => String(c == null ? '' : c).trim().toLowerCase());
+  if (cols.includes('item code') || cols.includes('code')) return;
+  let at = -1;
+  for (const n of NAME_COLS) { at = cols.indexOf(n); if (at >= 0) break; }
+  if (at < 0) return;
+  const tables = cols[at].includes('material') ? [M] : cols[at].includes('product') ? [P] : [M, P]; // later table wins ties → products
+  const byName = {};
+  for (const t of tables) for (const r of safe(() => db().prepare('SELECT name, item_code FROM ' + t).all(), [])) if (r.item_code) byName[String(r.name == null ? '' : r.name).trim().toLowerCase()] = r.item_code;
+  let hits = 0;
+  const codes = body.rows.map((row) => {
+    if (!Array.isArray(row)) return '';
+    const c = byName[String(row[at] == null ? '' : row[at]).trim().toLowerCase()] || '';
+    if (c) hits++;
+    return c;
+  });
+  if (!hits) return;
+  body.columns.splice(at + 1, 0, 'Item Code');
+  body.rows.forEach((row, i) => { if (Array.isArray(row)) row.splice(at + 1, 0, codes[i]); });
+  if (Array.isArray(body.moneyColumns)) body.moneyColumns = body.moneyColumns.map((m) => (typeof m === 'number' && m > at ? m + 1 : m));
+}
 function codeMap(table) {
   const m = {};
   for (const r of safe(() => db().prepare('SELECT id, item_code FROM ' + table).all(), [])) m[r.id] = r.item_code || '';
@@ -142,13 +180,17 @@ function codeMap(table) {
 }
 function enrich(body, spec) {
   if (!body || typeof body !== 'object') return;
-  for (const [key, idField, table, sub] of spec.keys) {
-    const arr = body[key];
+  if (spec.report) return enrichReport(body);
+  const maps = {};
+  const mapFor = (t) => (maps[t] = maps[t] || codeMap(t));
+  for (const k of spec.keys) {
+    const arr = body[k.key];
     if (!Array.isArray(arr) || !arr.length) continue;
-    const map = codeMap(table);
     for (const entry of arr) {
-      const row = sub ? (entry && entry[sub]) : entry;
-      if (row && typeof row === 'object' && row.item_code == null) row.item_code = map[row[idField]] || '';
+      const row = k.sub ? (entry && entry[k.sub]) : entry;
+      if (!row || typeof row !== 'object' || row.item_code != null) continue;
+      const table = k.tables ? k.tables[String(row[k.typeField] || '')] : k.table;
+      row.item_code = table ? (mapFor(table)[row[k.id]] || '') : '';
     }
   }
 }
