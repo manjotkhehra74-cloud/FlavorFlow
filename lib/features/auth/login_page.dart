@@ -326,8 +326,14 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 onChanged: (v) {
                   final code = v.trim().toLowerCase();
+                  final auth = context.read<AuthController>();
                   if (code.isNotEmpty) {
-                    context.read<AuthController>().setServerBase('https://app.flavorflow.co.in/t/$code/api');
+                    auth.setServerBase('https://app.flavorflow.co.in/t/$code/api');
+                  } else if ((auth.serverBase ?? '').contains('/t/')) {
+                    // Code cleared → back to the own / factory server (the
+                    // APK's built-in default). Before this, the last demo
+                    // tenant URL stayed saved and "leave blank" did nothing.
+                    auth.setServerBase(null);
                   }
                 },
               ),
