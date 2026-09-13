@@ -45,7 +45,7 @@ class _ReportsPageState extends State<ReportsPage> {
 
   static bool _reportVisible(Map<String, dynamic> r) {
     final key = '${r['id'] ?? ''} ${r['title'] ?? ''}'.toLowerCase();
-    if (key.contains('loss')) return false; // Packing Loss % sheet retired for every industry
+    if (!CompanyProfile.usesLossPct && key.contains('loss')) return false; // Loss % sheet switched off for this company
     if (!CompanyProfile.usesRecipes && key.contains('recipe')) return false;
     if (!CompanyProfile.usesTrays && RegExp(r'\btrays?\b').hasMatch(key)) return false;
     if (!CompanyProfile.usesProduction && (key.contains('production') || key.contains('batch'))) return false;

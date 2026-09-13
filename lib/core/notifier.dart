@@ -4,6 +4,8 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
+import 'company.dart';
+
 /// Shared unread badge state. Server polling remains authoritative, while local
 /// read actions update this immediately instead of waiting up to 20 seconds.
 class NotificationBadge {
@@ -131,7 +133,8 @@ class PhoneNotifier {
 
 /// ---------------- Daily reminders (exact alarms) ----------------
 /// 1) Daily production-entry reminder at a chosen hour (default 5 PM)
-/// 2) Month-end reminder (last day, 6 PM): closing-stock check + export.
+/// 2) Month-end reminder (last day, 6 PM): closing-stock check + export
+///    (+ close the Packing Loss % sheet where the company runs it).
 class Reminders {
   static const _idDaily = 900001;
   static const _idMonthEnd = 900002;
@@ -184,7 +187,9 @@ class Reminders {
       await plugin.zonedSchedule(
         _idMonthEnd,
         'FlavorFlow ERP — month end',
-        'Month end — closing stock check karke Stock Ledger / reports export kar lao.',
+        CompanyProfile.usesLossPct
+            ? 'Month end — Loss% sheet export karke month close kar lao (closing → next opening) + Stock Ledger / reports export.'
+            : 'Month end — closing stock check karke Stock Ledger / reports export kar lao.',
         lastDay,
         const NotificationDetails(
           android: AndroidNotificationDetails('ff_reminders', 'Reminders',

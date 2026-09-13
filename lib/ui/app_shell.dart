@@ -183,6 +183,13 @@ class _AppShellState extends State<AppShell> {
       final at = pi != -1 ? pi + 1 : nav.length;
       nav.insert(at, {'path': '/raw', 'label': 'Raw Material', 'icon': 'science', 'group': pi != -1 ? nav[pi]['group'] : 'Operations'});
     }
+    // Packing Loss % sheet: right below Raw Material when the company has it
+    // on (servers patched by ff-lossretire no longer send this entry).
+    if (!nav.any((e) => e['path'] == '/loss') && auth.canOr('loss.view', 'packing.view') && CompanyProfile.usesLossPct) {
+      final ri = nav.indexWhere((e) => e['path'] == '/raw');
+      final at = ri != -1 ? ri + 1 : nav.length;
+      nav.insert(at, {'path': '/loss', 'label': 'Packing Loss %', 'icon': 'percent', 'group': ri != -1 ? nav[ri]['group'] : 'Operations'});
+    }
     // Stock Ledger (SAP-style movement register): client-side entry right after
     // Inventory for everyone who can see stock.
     if (!nav.any((e) => e['path'] == '/stock') && auth.can('inventory.view')) {
@@ -197,9 +204,9 @@ class _AppShellState extends State<AppShell> {
       final at = di != -1 ? di + 1 : nav.length;
       nav.insert(at, {'path': '/billing', 'label': 'Billing', 'icon': 'receipt_long', 'group': di != -1 ? nav[di]['group'] : 'Operations'});
     }
-    // Industry gating: the server nav is the same for every company — drop
-    // every section this industry never uses (production for trading-only
-    // profiles) and the retired Packing Loss % sheet older servers still send.
+    // Industry / company gating: the server nav is the same for every company —
+    // drop every section this company does not use (Loss % sheet switched off,
+    // production for trading-only profiles).
     nav.removeWhere((e) => !CompanyProfile.sectionVisible(e['path'] as String));
     // Settings entry at the end of the menu for every user.
     if (!nav.any((e) => e['path'] == '/settings')) {
@@ -793,6 +800,8 @@ class _CompanyProfileDialogState extends State<CompanyProfileDialog> {
   late final TextEditingController address;
   late final TextEditingController tax;
   late String industry;
+  /// Packing Loss % sheet: null = industry default, true / false = override.
+  bool? lossSheet;
   bool saving = false;
 
   @override
@@ -803,7 +812,10 @@ class _CompanyProfileDialogState extends State<CompanyProfileDialog> {
     address = TextEditingController(text: p.address);
     tax = TextEditingController(text: p.taxLine);
     industry = p.industry;
+    lossSheet = p.lossSheet;
   }
+
+  bool get _lossOn => lossSheet ?? CompanyProfile.lossPctDefault(industry);
 
   @override
   void dispose() { name.dispose(); address.dispose(); tax.dispose(); super.dispose(); }
@@ -817,6 +829,7 @@ class _CompanyProfileDialogState extends State<CompanyProfileDialog> {
       if (f['trays'] == false) 'Tray columns',
       if (f['production'] == false) 'Production',
       if (f['bom'] == false) 'BOM',
+      if (f['lossPct'] == false) 'Loss % (default)',
     ];
     return hidden.isEmpty ? 'all sections on' : 'hides ${hidden.join(', ')}';
   }
@@ -844,6 +857,7 @@ class _CompanyProfileDialogState extends State<CompanyProfileDialog> {
         cartonShort: changed ? row[3] : p.cartonShort,
         trayLabel: changed ? row[4] : p.trayLabel,
         pieceLabel: changed ? row[5] : p.pieceLabel,
+        lossSheet: lossSheet,
       ),
       context.read<AuthController>().api,
     );
@@ -916,6 +930,28 @@ class _CompanyProfileDialogState extends State<CompanyProfileDialog> {
                     style: TextStyle(fontSize: 12, color: sub)),
               ]),
             ),
+            const SizedBox(height: 14),
+            Text('SECTIONS', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, letterSpacing: 1.1, color: sub)),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              value: _lossOn,
+              title: Text(tr('Packing Loss %'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              subtitle: Text(
+                '${tr('Monthly sheet: projection vs production, BOM vs extra consumption, loss % per material')}'
+                '${lossSheet == null ? ' · ${tr('industry default')}' : ''}',
+                style: TextStyle(fontSize: 11.5, color: sub),
+              ),
+              onChanged: (v) => setState(() => lossSheet = v),
+            ),
+            if (lossSheet != null && lossSheet != CompanyProfile.lossPctDefault(industry))
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () => setState(() => lossSheet = null),
+                  child: Text(tr('Use industry default'), style: const TextStyle(fontSize: 12)),
+                ),
+              ),
           ]),
         ),
       ),

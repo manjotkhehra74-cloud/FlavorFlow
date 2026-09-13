@@ -22,6 +22,11 @@ class CompanyProfile {
   String cartonShort; // e.g. CB / Bale / Box
   String trayLabel; // e.g. Tray / Roll / Strip
   String pieceLabel; // e.g. Bottles / Meters / Units / Pieces
+  /// Monthly Packing Loss % sheet (projection vs production, BOM vs extra
+  /// consumption, loss % per material). null = industry default
+  /// ([industryFeatures] 'lossPct'), true/false = the admin's own choice
+  /// (Settings → Company details). Stored as `lossSheet` on the server.
+  bool? lossSheet;
 
   CompanyProfile({
     required this.name,
@@ -32,6 +37,7 @@ class CompanyProfile {
     this.cartonShort = 'CB',
     this.trayLabel = 'Trays',
     this.pieceLabel = 'Bottles',
+    this.lossSheet,
   });
 
   /// Industry presets: id, label, carton/short/tray/piece unit names.
@@ -80,33 +86,35 @@ class CompanyProfile {
   /// Sections NOT listed here (Products, Inventory, Packing, Raw Material,
   /// Production, Dispatch, Adjustments, Reports, Users, Audit) are the
   /// universal backbone — every industry keeps them.
+  ///   lossPct  → DEFAULT for the monthly Packing Loss % sheet (bottling /
+  ///              packing lines where label, cap, sleeve and carton wastage is
+  ///              tracked per material). ON for process industries that pack
+  ///              on a line, OFF for discrete / bulk trades — and every
+  ///              company can override it in Settings → Company details.
   static const Map<String, Map<String, bool>> industryFeatures = {
-    //              recipes  trays   production  bom
-    'food':      {'recipes': true,  'trays': true,  'production': true, 'bom': true},
-    'dairy':     {'recipes': true,  'trays': true,  'production': true, 'bom': true},
-    'oil':       {'recipes': true,  'trays': false, 'production': true, 'bom': true},
-    'bakery':    {'recipes': true,  'trays': true,  'production': true, 'bom': true},
-    'water':     {'recipes': true,  'trays': true,  'production': true, 'bom': true},
-    'soap':      {'recipes': true,  'trays': false, 'production': true, 'bom': true},
-    'cosmetics': {'recipes': true,  'trays': false, 'production': true, 'bom': true},
-    'paint':     {'recipes': true,  'trays': false, 'production': true, 'bom': true},
-    'agro':      {'recipes': true,  'trays': false, 'production': true, 'bom': true},
-    'pharma':    {'recipes': true,  'trays': true,  'production': true, 'bom': true},
-    'textile':   {'recipes': false, 'trays': true,  'production': true, 'bom': true},
-    'mill':      {'recipes': false, 'trays': false, 'production': true, 'bom': true},
-    'footwear':  {'recipes': false, 'trays': true,  'production': true, 'bom': true},
-    'plastic':   {'recipes': false, 'trays': true,  'production': true, 'bom': true},
-    'hardware':  {'recipes': false, 'trays': true,  'production': true, 'bom': true},
-    'general':   {'recipes': true,  'trays': true,  'production': true, 'bom': true},
+    //              recipes  trays   production  bom   lossPct
+    'food':      {'recipes': true,  'trays': true,  'production': true, 'bom': true, 'lossPct': true},
+    'dairy':     {'recipes': true,  'trays': true,  'production': true, 'bom': true, 'lossPct': true},
+    'oil':       {'recipes': true,  'trays': false, 'production': true, 'bom': true, 'lossPct': true},
+    'bakery':    {'recipes': true,  'trays': true,  'production': true, 'bom': true, 'lossPct': true},
+    'water':     {'recipes': true,  'trays': true,  'production': true, 'bom': true, 'lossPct': true},
+    'soap':      {'recipes': true,  'trays': false, 'production': true, 'bom': true, 'lossPct': true},
+    'cosmetics': {'recipes': true,  'trays': false, 'production': true, 'bom': true, 'lossPct': true},
+    'paint':     {'recipes': true,  'trays': false, 'production': true, 'bom': true, 'lossPct': true},
+    'agro':      {'recipes': true,  'trays': false, 'production': true, 'bom': true, 'lossPct': true},
+    'pharma':    {'recipes': true,  'trays': true,  'production': true, 'bom': true, 'lossPct': true},
+    'textile':   {'recipes': false, 'trays': true,  'production': true, 'bom': true, 'lossPct': false},
+    'mill':      {'recipes': false, 'trays': false, 'production': true, 'bom': true, 'lossPct': false},
+    'footwear':  {'recipes': false, 'trays': true,  'production': true, 'bom': true, 'lossPct': false},
+    'plastic':   {'recipes': false, 'trays': true,  'production': true, 'bom': true, 'lossPct': true},
+    'hardware':  {'recipes': false, 'trays': true,  'production': true, 'bom': true, 'lossPct': false},
+    'general':   {'recipes': true,  'trays': true,  'production': true, 'bom': true, 'lossPct': true},
   };
 
   /// Menu sections an industry never needs (hidden from nav, bottom bar,
   /// dashboard shortcuts and deep links). Paths are the app routes.
   static List<String> get hiddenSections => [
-        // Packing Loss % sheet is retired for every industry (Sep 2026):
-        // older servers still send its nav entry / dashboard tile / report,
-        // so the path stays permanently hidden here.
-        '/loss',
+        if (!usesLossPct) '/loss',
         if (!usesProduction) '/production',
       ];
 
@@ -115,6 +123,15 @@ class CompanyProfile {
 
   /// Does the active industry use recipe-based raw material consumption?
   static bool get usesRecipes => industryFeatures[current.industry]?['recipes'] ?? true;
+
+  /// Monthly Packing Loss % sheet on for this company? The admin's switch
+  /// (Settings → Company details) wins; otherwise the industry default.
+  /// Never retired globally again (Sep 2026): the food factory that lives on
+  /// this sheet lost it for two days — gate per industry / company only.
+  static bool get usesLossPct => current.lossSheet ?? lossPctDefault(current.industry);
+
+  /// Industry default for the Packing Loss % sheet.
+  static bool lossPctDefault(String industry) => industryFeatures[industry]?['lossPct'] ?? true;
 
   /// Does the active industry use the secondary tray/roll/strip unit?
   static bool get usesTrays => industryFeatures[current.industry]?['trays'] ?? true;
@@ -222,6 +239,7 @@ class CompanyProfile {
       cartonShort: prefs.getString('unit_carton_short') ?? 'CB',
       trayLabel: prefs.getString('unit_tray') ?? 'Trays',
       pieceLabel: prefs.getString('unit_piece') ?? 'Bottles',
+      lossSheet: prefs.containsKey('loss_sheet') ? prefs.getBool('loss_sheet') : null,
     );
     p.trayLabel = _trayFor(p.industry, p.trayLabel);
     if (api != null) {
@@ -244,6 +262,9 @@ class CompanyProfile {
             cartonShort: hasUnits ? (j['cartonShort'] ?? row[3]).toString() : row[3],
             trayLabel: hasUnits ? _trayFor(ind, (j['trayLabel'] ?? row[4]).toString()) : row[4],
             pieceLabel: hasUnits ? (j['pieceLabel'] ?? row[5]).toString() : row[5],
+            // Server copy wins, incl. the Loss % switch; a server that does
+            // not store it (older patch) falls back to the local choice.
+            lossSheet: _boolOrNull(j['lossSheet']) ?? p.lossSheet,
           );
           await _persist(prefs, p);
         } else if (j is Map && (j['industry'] ?? '').toString().isNotEmpty) {
@@ -254,6 +275,7 @@ class CompanyProfile {
           p = CompanyProfile(
             name: p.name, address: p.address, taxLine: p.taxLine,
             industry: ind, cartonLabel: row[2], cartonShort: row[3], trayLabel: row[4], pieceLabel: row[5],
+            lossSheet: _boolOrNull(j['lossSheet']) ?? p.lossSheet,
           );
           await _persist(prefs, p);
         }
@@ -281,9 +303,19 @@ class CompanyProfile {
           'cartonShort': p.cartonShort,
           'trayLabel': p.trayLabel,
           'pieceLabel': p.pieceLabel,
+          'lossSheet': p.lossSheet, // null → industry default (server drops the key)
         });
       } catch (_) {/* server route optional */}
     }
+  }
+
+  static bool? _boolOrNull(Object? v) {
+    if (v is bool) return v;
+    if (v is num) return v != 0;
+    final s = '$v'.toLowerCase();
+    if (s == 'true' || s == '1' || s == 'on' || s == 'yes') return true;
+    if (s == 'false' || s == '0' || s == 'off' || s == 'no') return false;
+    return null;
   }
 
   static Future<void> _persist(SharedPreferences prefs, CompanyProfile p) async {
@@ -295,6 +327,11 @@ class CompanyProfile {
     await prefs.setString('unit_carton_short', p.cartonShort);
     await prefs.setString('unit_tray', p.trayLabel);
     await prefs.setString('unit_piece', p.pieceLabel);
+    if (p.lossSheet == null) {
+      await prefs.remove('loss_sheet');
+    } else {
+      await prefs.setBool('loss_sheet', p.lossSheet!);
+    }
   }
 }
 

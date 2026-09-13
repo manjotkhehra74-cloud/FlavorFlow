@@ -752,6 +752,12 @@ class _TxnDialogState extends State<_TxnDialog> {
       materialId == null ? null : materials.firstWhere((m) => m['id'] == materialId, orElse: () => materials.first);
 
   Future<void> _save() async {
+    // With the Packing Loss % sheet on, every extra consumption must belong
+    // to a product — that is the sheet's "Extra" column.
+    if (!isReceive && !widget.rawOnly && productId == null && CompanyProfile.usesLossPct) {
+      showErr(context, tr('Choose which product this consumption is for (Loss% sheet).'));
+      return;
+    }
     setState(() => busy = true);
     try {
       await context.read<AuthController>().api.post('/packing/${isReceive ? 'receive' : 'consume'}', {
@@ -797,7 +803,10 @@ class _TxnDialogState extends State<_TxnDialog> {
                         key: ValueKey('prodpick-$materialId-$productId'),
                         initialValue: productId,
                         isExpanded: true,
-                        decoration: InputDecoration(labelText: tr('For product (optional)'), helperText: tr('Tags the consumption to a product in the stock ledger')),
+                        decoration: InputDecoration(
+                          labelText: CompanyProfile.usesLossPct ? tr('For product * (Loss% sheet)') : tr('For product (optional)'),
+                          helperText: CompanyProfile.usesLossPct ? tr('Counts as Extra in this month\'s Packing Loss % sheet') : tr('Tags the consumption to a product in the stock ledger'),
+                        ),
                         items: [for (final p in _productChoices) DropdownMenuItem(value: p['id'] as int, child: Text(ItemCode.pick(p), overflow: TextOverflow.ellipsis))],
                         onChanged: (v) => setState(() => productId = v),
                       ),

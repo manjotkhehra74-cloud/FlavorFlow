@@ -77,6 +77,7 @@ try {
     const u = req.user;
     if (!u || (u.role !== 'super_admin' && u.role !== 'admin')) { res.status(403).json({ error: 'Only Admin/Super Admin can change company settings.' }); return; }
     const b = req.body || {};
+    const prev = _getSet();
     const val = {
       name: String(b.name || '').slice(0, 120),
       address: String(b.address || '').slice(0, 200),
@@ -87,6 +88,7 @@ try {
       trayLabel: String(b.trayLabel || 'Trays').slice(0, 30),
       pieceLabel: String(b.pieceLabel || 'Bottles').slice(0, 30),
       industryConfirmed: true,
+      /* ffLossSheet */ ...(typeof b.lossSheet === 'boolean' ? { lossSheet: b.lossSheet } : (b.lossSheet !== null && (prev.lossSheet === true || prev.lossSheet === false)) ? { lossSheet: prev.lossSheet } : {}),
     };
     _sdb.prepare("INSERT INTO app_settings (key, value) VALUES ('company', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify(val));
     res.json({ ok: true });
@@ -99,6 +101,24 @@ try {
     else { src = src.replace(/app\.listen\(/, CODE + '\napp.listen('); touched = true; console.log('CORE: settings route added'); }
   } else {
     console.log('CORE: settings route present ✓');
+    // Packing Loss % switch (app: Settings → Company details) — PUT must keep it,
+    // otherwise every save of the company details would drop the admin's choice.
+    if (!src.includes('/* ffLossSheet */')) {
+      const lines = src.split('\n');
+      let n = 0;
+      for (let i = 0; i < lines.length; i++) {
+        if (/^\s*industryConfirmed: true,\s*$/.test(lines[i])) {
+          // `prev` exists in the v2 block; the v1 block reads the row here.
+          const hasPrev = lines.slice(Math.max(0, i - 15), i).some((l) => /const prev = _getSet\(\);/.test(l));
+          const ind = (lines[i].match(/^\s*/) || [''])[0];
+          const prevExpr = hasPrev ? 'prev' : '_getSet()';
+          lines.splice(i + 1, 0, ind + "/* ffLossSheet */ ...(typeof b.lossSheet === 'boolean' ? { lossSheet: b.lossSheet } : (b.lossSheet !== null && (" + prevExpr + ".lossSheet === true || " + prevExpr + ".lossSheet === false)) ? { lossSheet: " + prevExpr + ".lossSheet } : {}),");
+          n++; i++;
+        }
+      }
+      if (n) { src = lines.join('\n'); touched = true; console.log('CORE: PUT keeps lossSheet (Packing Loss % switch) ✓ (' + n + ' block(s))'); }
+      else console.log('CORE: PUT shape different — lossSheet not persisted server-side (app keeps the switch per device)');
+    } else console.log('CORE: PUT keeps lossSheet ✓');
     // admin's explicit PUT marks the industry as confirmed (boot seed then never overrides)
     if (!src.includes('industryConfirmed')) {
       const m = src.match(/pieceLabel: String\(b\.pieceLabel \|\| 'Bottles'\)\.slice\(0, 30\),/);
@@ -246,6 +266,7 @@ try {
       trayLabel: String(b.trayLabel || 'Trays').slice(0, 30),
       pieceLabel: String(b.pieceLabel || 'Bottles').slice(0, 30),
       industryConfirmed: true,
+      /* ffLossSheet */ ...(typeof b.lossSheet === 'boolean' ? { lossSheet: b.lossSheet } : (b.lossSheet !== null && (prev.lossSheet === true || prev.lossSheet === false)) ? { lossSheet: prev.lossSheet } : {}),
     };
     _sdb.prepare("INSERT INTO app_settings (key, value) VALUES ('company', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify(val));
     res.json({ ok: true });

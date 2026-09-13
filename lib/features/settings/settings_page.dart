@@ -6,6 +6,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../core/app_settings.dart';
 import '../../core/biometric.dart';
+import '../../core/company.dart';
 import '../../core/notifier.dart';
 import '../../core/i18n.dart';
 import '../../state/auth.dart';
@@ -199,7 +200,7 @@ class _SettingsPageState extends State<SettingsPage> {
         icon: Icons.alarm_rounded,
         title: 'Daily entry reminder',
         subtitle: settings.dailyReminder
-            ? 'ON — roz ${settings.dailyReminderHour > 12 ? settings.dailyReminderHour - 12 : settings.dailyReminderHour} ${settings.dailyReminderHour >= 12 ? 'PM' : 'AM'} vaje yaad karauga (+ month-end stock closing)'
+            ? 'ON — roz ${settings.dailyReminderHour > 12 ? settings.dailyReminderHour - 12 : settings.dailyReminderHour} ${settings.dailyReminderHour >= 12 ? 'PM' : 'AM'} vaje yaad karauga (+ month-end ${CompanyProfile.usesLossPct ? 'Loss% close' : 'stock closing'})'
             : 'OFF — production/dispatch entry da roz da reminder',
         trailing: Switch(
           value: settings.dailyReminder,
