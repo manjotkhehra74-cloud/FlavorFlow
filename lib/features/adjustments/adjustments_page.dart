@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../core/i18n.dart';
+import '../../core/item_code.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 
@@ -173,7 +174,8 @@ class _AdjustmentFormDialogState extends State<AdjustmentFormDialog> {
                 DropdownButtonFormField<int>(
                   initialValue: productId,
                   decoration: InputDecoration(labelText: tr('Product *')),
-                  items: [for (final p in products) DropdownMenuItem(value: p['id'] as int, child: Text(p['name'] as String))],
+                  isExpanded: true,
+                  items: [for (final p in products) DropdownMenuItem(value: p['id'] as int, child: Text(ItemCode.pick(p), overflow: TextOverflow.ellipsis))],
                   onChanged: (v) => setState(() => productId = v),
                 ),
                 if (_product != null)

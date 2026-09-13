@@ -10,7 +10,7 @@
 #   → 2-3 min baad result browser vich:  https://flavorflow.co.in/download/boot-status.txt
 #   (poora log: VM → "Serial port 1 (console)" ya /var/log/ff-boot.log)
 #
-# Steps (arg naal chuno, default sab):  fixssh industry billing stockledger lossretire saasbilling demo web apk
+# Steps (arg naal chuno, default sab):  fixssh industry billing stockledger codes lossretire saasbilling demo web apk
 #   fixssh   — memory/OOM/swap snapshot, swap ensure, google-guest-agent + sshd restart
 #              (SSH-in-browser "Connection failed… retrying" aksar guest-agent/RAM karke)
 #   industry — tools/ff-saasindustry.sh (idempotent) + tenant /api/settings/company verify
@@ -31,7 +31,7 @@ main() {
   WEB="${FF_WEB:-/opt/flavorflow-saas/web}"
   LOG=/var/log/ff-boot.log
   STATUS="$WEB/download/boot-status.txt"
-  STEPS="${*:-fixssh industry billing stockledger lossretire saasbilling demo web apk}"
+  STEPS="${*:-fixssh industry billing stockledger codes lossretire saasbilling demo web apk}"
   mkdir -p "$WEB/download"
   exec > >(tee -a "$LOG") 2>&1
   : > "$STATUS"; chmod 644 "$STATUS"
@@ -113,6 +113,19 @@ main() {
       fi
       st "[stockledger] rc=$RC"
     else st "[stockledger] koi server.js nahi — skip"; fi
+  fi
+
+  # ---------- codes (SAP-style item codes FG/RM/PM: itemcodes.js + db.js boot + early middleware) ----------
+  if [[ " $STEPS " == *" codes "* ]]; then
+    if [ -f /opt/flavorflow-saas/core/server.js ] || [ -f /opt/flavorflow/server/server.js ]; then
+      OUT=""; RC=1
+      if fetch "$RAW/ff-saascodes.sh" /tmp/ff-saascodes.sh; then OUT=$(bash /tmp/ff-saascodes.sh </dev/null 2>&1); RC=$?; fi
+      if [ -z "$OUT" ]; then st "[codes] script download FAIL (GitHub reach nahi hoya?)"; else
+        echo "$OUT"
+        echo "$OUT" | grep -E '^(CORE|DBJS|SERVER|TENANT|FACTORY|LOG|SAASCODES|ITEMCODES|FATAL)' | cut -c1-200 | sed 's/^/[codes] /' | tee -a "$STATUS"
+      fi
+      st "[codes] rc=$RC"
+    else st "[codes] koi server.js nahi — skip"; fi
   fi
 
   # ---------- lossretire (Packing Loss % sheet removed for every industry — server nav entry) ----------

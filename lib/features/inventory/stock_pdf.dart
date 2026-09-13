@@ -45,8 +45,10 @@ class StockPdf {
         );
 
     final trays = CompanyProfile.usesTrays;
-    final headers = ['#', tr('Product'), '${tr(U.carton)} (${U.cb})', if (trays) tr(U.tray), '${tr('Total')} ${tr(U.piece)}', tr('Gross kg'), '${tr('Min')} (${U.cb})', tr('Status')];
-    final last = headers.length - 1; // status column index (7 with trays, 6 without)
+    final codes = items.any((it) => (it['item_code'] ?? '').toString().isNotEmpty);
+    final headers = ['#', if (codes) tr('Item Code'), tr('Product'), '${tr(U.carton)} (${U.cb})', if (trays) tr(U.tray), '${tr('Total')} ${tr(U.piece)}', tr('Gross kg'), '${tr('Min')} (${U.cb})', tr('Status')];
+    final last = headers.length - 1; // status column index
+    final first = codes ? 2 : 1; // product-name column index
     double sumCb = 0, sumTrays = 0, sumBottles = 0, sumGross = 0;
     final rows = <List<Object>>[];
     for (var i = 0; i < items.length; i++) {
@@ -57,6 +59,7 @@ class StockPdf {
       sumGross += (it['gross_kg'] as num).toDouble();
       rows.add([
         '${i + 1}',
+        if (codes) '${it['item_code'] ?? ''}',
         '${it['name']}',
         n(it['qty_cb']),
         if (trays) n(it['qty_trays']),
@@ -116,37 +119,30 @@ class StockPdf {
         pw.SizedBox(height: 16),
         pw.Table(
           border: pw.TableBorder.all(color: lineCol, width: 0.7),
-          columnWidths: trays
-              ? {
-                  0: const pw.FixedColumnWidth(26),
-                  1: const pw.FlexColumnWidth(2.6),
-                  2: const pw.FlexColumnWidth(1.1),
-                  3: const pw.FlexColumnWidth(0.9),
-                  4: const pw.FlexColumnWidth(1.1),
-                  5: const pw.FlexColumnWidth(1.0),
-                  6: const pw.FlexColumnWidth(0.95),
-                  7: const pw.FixedColumnWidth(48),
-                }
-              : {
-                  0: const pw.FixedColumnWidth(26),
-                  1: const pw.FlexColumnWidth(2.9),
-                  2: const pw.FlexColumnWidth(1.1),
-                  3: const pw.FlexColumnWidth(1.1),
-                  4: const pw.FlexColumnWidth(1.0),
-                  5: const pw.FlexColumnWidth(0.95),
-                  6: const pw.FixedColumnWidth(48),
-                },
+          columnWidths: {
+            // #, [item code], product, qty…, status — the code column shifts the rest by one
+            for (var i = 0; i < headers.length; i++)
+              i: i == 0
+                  ? const pw.FixedColumnWidth(26)
+                  : (codes && i == 1)
+                      ? const pw.FixedColumnWidth(74)
+                      : i == first
+                          ? pw.FlexColumnWidth(trays ? 2.6 : 2.9)
+                          : i == last
+                              ? const pw.FixedColumnWidth(48)
+                              : const pw.FlexColumnWidth(1.05),
+          },
           children: [
             pw.TableRow(
               repeat: true,
               decoration: const pw.BoxDecoration(color: headerBg),
-              children: [for (var i = 0; i < headers.length; i++) cell(headers[i], header: true, right: i >= 2 && i < last)],
+              children: [for (var i = 0; i < headers.length; i++) cell(headers[i], header: true, right: i > first && i < last)],
             ),
             for (final r in rows)
               pw.TableRow(children: [
                 for (var i = 0; i < r.length; i++)
                   cell(i == last ? tr('${r[i]}') : '${r[i]}',
-                      right: i >= 2 && i < last,
+                      right: i > first && i < last,
                       bold: i == last,
                       color: i == last ? (r[i] == 'LOW' ? lowRed : null) : null),
               ]),
@@ -154,6 +150,7 @@ class StockPdf {
               decoration: const pw.BoxDecoration(color: headerBg),
               children: [
                 cell('', color: primary),
+                if (codes) cell('', color: primary),
                 cell(tr('Total').toUpperCase(), bold: true, color: primary),
                 cell(n(sumCb), bold: true, right: true, color: primary),
                 if (trays) cell(n(sumTrays), bold: true, right: true, color: primary),

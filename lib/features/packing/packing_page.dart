@@ -9,6 +9,7 @@ import '../../core/download.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../core/i18n.dart';
+import '../../core/item_code.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 import '../billing/item_history_page.dart' show showItemHistory;
@@ -133,6 +134,13 @@ class _StockTab extends StatefulWidget {
 class _StockTabState extends State<_StockTab> {
   late bool _lowOnly;
   String _category = '';
+  final _q = TextEditingController();
+
+  @override
+  void dispose() {
+    _q.dispose();
+    super.dispose();
+  }
   Future<Map<String, dynamic>>? _future;
   bool _first = true;
 
@@ -184,14 +192,15 @@ class _StockTabState extends State<_StockTab> {
     setState(() => _exporting = true);
     try {
       final date = todayYmd();
+      final codes = ItemCode.anyIn(items);
       if (pdf) {
         final bytes = await ReportPdf.build(
           title: 'Raw Material Stock',
           desc: 'Current balance of every raw material (recipe consumption draws from here).',
-          columns: const ['Material', 'Unit', 'Balance', 'Minimum', 'Status'],
+          columns: [if (codes) 'Item Code', 'Material', 'Unit', 'Balance', 'Minimum', 'Status'],
           rows: [
             for (final m in items)
-              [m['name'], m['unit'], m['stock'], m['min_stock'], (m['low'] as int? ?? 0) == 1 ? 'LOW' : 'OK'],
+              [if (codes) ItemCode.of(m), m['name'], m['unit'], m['stock'], m['min_stock'], (m['low'] as int? ?? 0) == 1 ? 'LOW' : 'OK'],
           ],
         );
         await Printing.sharePdf(bytes: bytes, filename: 'flavorflow-raw-material-$date.pdf');
@@ -255,7 +264,8 @@ class _StockTabState extends State<_StockTab> {
         final s = (snap.data!['summary'] as Map).cast<String, dynamic>();
         final lowCount = all.where((m) => (m['low'] as int? ?? 0) == 1).length;
         final categories = <String>{for (final m in all) m['category'] as String};
-        final rows = _category.isEmpty ? all : all.where((m) => m['category'] == _category).toList();
+        final hasCodes = ItemCode.anyIn(all);
+        final rows = (_category.isEmpty ? all : all.where((m) => m['category'] == _category).toList()).where((m) => ItemCode.matches(m, _q.text)).toList();
         // Pair every "Tray (X)" with its "Tray Cap (X)" right below it —
         // e.g. Tray (740/610) → Tray Cap (740/610), Tray (1.3/1 Ltr) → Tray Cap (1.3/1 Ltr).
         String pairKey(Map<String, dynamic> m) {
@@ -371,7 +381,21 @@ class _StockTabState extends State<_StockTab> {
                 ),
             ],
           ]),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: 360,
+            child: TextField(
+              controller: _q,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                isDense: true,
+                prefixIcon: const Icon(Icons.search_rounded, size: 18),
+                hintText: hasCodes ? tr('Search name / item code') : tr('Search material'),
+                suffixIcon: _q.text.isEmpty ? null : IconButton(icon: const Icon(Icons.clear_rounded, size: 18), onPressed: () => setState(_q.clear)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           SectionCard(
             title: widget.rawOnly
                 ? (_lowOnly ? 'Low Stock Raw Material' : 'Raw Material Stock')
@@ -383,10 +407,11 @@ class _StockTabState extends State<_StockTab> {
                         ? 'No raw material yet — tap “New Material” to add what you consume (${IndustryPack.eg(IndustryPack.current.rawExamples, 3)}).'
                         : 'No packing material yet — tap “New Material” to add what you pack with (${IndustryPack.eg(IndustryPack.current.packingExamples, 3)}).'))
                 : AppDataTable(
-                    columns: const ['Material', 'Category', 'In Stock', 'Unit', 'Min Stock', 'Status', ''],
+                    columns: [if (hasCodes) 'Item Code', 'Material', 'Category', 'In Stock', 'Unit', 'Min Stock', 'Status', ''],
                     rows: [
                       for (final m in rows)
                         [
+                          if (hasCodes) ItemCodeChip(ItemCode.of(m)),
                           Text(m['name'] as String, style: const TextStyle(fontWeight: FontWeight.w600)),
                           tr('${m['category']}'),
                           Text(qtyInt(m['stock']), style: TextStyle(fontWeight: FontWeight.w700, color: (m['low'] as int) == 1 ? AppColors.red : null)),
@@ -481,7 +506,7 @@ class _BomTabState extends State<_BomTab> {
             ),
           for (final entry in bom) ...[
             SectionCard(
-              title: entry['product']['name'] as String,
+              title: ItemCode.label((entry['product'] as Map).cast<String, dynamic>()),
               trailing: Text('${qtyInt(entry['product']['bottles_per_cb'])}/${U.cb}'
                   '${(entry['product']['bottles_per_tray'] as num) > 0 ? ' · ${qtyInt(entry['product']['bottles_per_tray'])}/${U.trayLc}' : ''}',
                   style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
@@ -746,7 +771,7 @@ class _TxnDialogState extends State<_TxnDialog> {
                       isExpanded: true,
                       decoration: InputDecoration(labelText: tr('Material *')),
                       // Raw screen: category suffix skipped so the full name fits.
-                      items: [for (final m in materials) DropdownMenuItem(value: m['id'] as int, child: Text(widget.rawOnly ? '${m['name']}' : '${m['name']} (${m['category']})', overflow: TextOverflow.ellipsis))],
+                      items: [for (final m in materials) DropdownMenuItem(value: m['id'] as int, child: Text(widget.rawOnly ? ItemCode.pick(m) : '${ItemCode.pick(m)} (${m['category']})', overflow: TextOverflow.ellipsis))],
                       onChanged: (v) => setState(() { materialId = v; _autoTagProduct(); }),
                     ),
                     if (widget.kind == 'consume' && !widget.rawOnly) ...[
@@ -756,7 +781,7 @@ class _TxnDialogState extends State<_TxnDialog> {
                         initialValue: productId,
                         isExpanded: true,
                         decoration: InputDecoration(labelText: tr('For product (optional)'), helperText: tr('Tags the consumption to a product in the stock ledger')),
-                        items: [for (final p in _productChoices) DropdownMenuItem(value: p['id'] as int, child: Text(p['name'] as String, overflow: TextOverflow.ellipsis))],
+                        items: [for (final p in _productChoices) DropdownMenuItem(value: p['id'] as int, child: Text(ItemCode.pick(p), overflow: TextOverflow.ellipsis))],
                         onChanged: (v) => setState(() => productId = v),
                       ),
                     ],
@@ -890,6 +915,7 @@ class _MaterialFormDialogState extends State<_MaterialFormDialog> {
   late String unit = widget.material?['unit']?.toString() ?? (widget.rawOnly ? IndustryPack.current.rawUnits.first : 'pcs');
   late final TextEditingController stock = TextEditingController(text: widget.material != null ? '${widget.material!['stock']}' : '0');
   late final TextEditingController minStock = TextEditingController(text: widget.material != null ? '${widget.material!['min_stock']}' : '0');
+  late final TextEditingController code = TextEditingController(text: ItemCode.of(widget.material));
   bool busy = false;
 
   bool get editing => widget.material != null;
@@ -925,7 +951,10 @@ class _MaterialFormDialogState extends State<_MaterialFormDialog> {
         'unit': unit,
         'stock': num.tryParse(stock.text) ?? 0,
         'minStock': num.tryParse(minStock.text) ?? 0,
+        'itemCode': ItemCode.normalize(code.text),
       };
+      final codeErr = ItemCode.validate(code.text);
+      if (codeErr != null) throw '${tr('Item code')}: $codeErr';
       if (editing) {
         await context.read<AuthController>().api.put('/packing/materials/${widget.material!['id']}', body);
       } else {
@@ -963,6 +992,8 @@ class _MaterialFormDialogState extends State<_MaterialFormDialog> {
                 hintText: IndustryPack.eg(isRaw ? IndustryPack.current.rawExamples : IndustryPack.current.packingExamples),
               ),
             ),
+            const SizedBox(height: 12),
+            ItemCodeField(controller: code, seriesPrefix: isRaw ? 'RM' : 'PM', editing: editing),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               key: ValueKey('cat-$category'),

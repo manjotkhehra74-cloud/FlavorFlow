@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../core/i18n.dart';
+import '../../core/item_code.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
@@ -407,7 +408,7 @@ class _InvoiceFormPageState extends State<InvoiceFormPage> {
               decoration: InputDecoration(labelText: '${tr('Item')} ${i + 1}'),
               items: [
                 DropdownMenuItem<int>(value: 0, child: Text(tr('Other / free text'))),
-                for (final p in products) DropdownMenuItem<int>(value: p['id'] as int, child: Text(p['name'] as String, overflow: TextOverflow.ellipsis)),
+                for (final p in products) DropdownMenuItem<int>(value: p['id'] as int, child: Text(ItemCode.pick(p), overflow: TextOverflow.ellipsis)),
               ],
               onChanged: (v) => _applyProduct(l, v == null || v == 0 ? null : v),
             ),

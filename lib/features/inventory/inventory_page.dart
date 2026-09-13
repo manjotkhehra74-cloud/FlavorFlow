@@ -9,6 +9,7 @@ import '../../core/industry_pack.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../core/i18n.dart';
+import '../../core/item_code.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 import '../billing/item_history_page.dart' show showItemHistory;
@@ -28,6 +29,13 @@ class _InventoryPageState extends State<InventoryPage> {
   late bool _lowOnly;
   bool _first = true;
   Future<Map<String, dynamic>>? _future;
+  final _q = TextEditingController();
+
+  @override
+  void dispose() {
+    _q.dispose();
+    super.dispose();
+  }
 
   @override
   void didChangeDependencies() {
@@ -86,7 +94,9 @@ class _InventoryPageState extends State<InventoryPage> {
       builder: (context, snap) {
         if (snap.hasError) return ErrorState(snap.error!, onRetry: _reload);
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        final items = (snap.data!['items'] as List).cast<Map<String, dynamic>>();
+        final allItems = (snap.data!['items'] as List).cast<Map<String, dynamic>>();
+        final hasCodes = ItemCode.anyIn(allItems);
+        final items = allItems.where((it) => ItemCode.matches(it, _q.text)).toList();
         final s = (snap.data!['summary'] as Map).cast<String, dynamic>();
         return ListView(padding: const EdgeInsets.all(20), children: [
           LayoutBuilder(builder: (context, c) {
@@ -153,16 +163,31 @@ class _InventoryPageState extends State<InventoryPage> {
               label: Text(tr('Stock Excel')),
             ),
           ]),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: 360,
+            child: TextField(
+              controller: _q,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                isDense: true,
+                prefixIcon: const Icon(Icons.search_rounded, size: 18),
+                hintText: hasCodes ? tr('Search name / item code') : tr('Search product'),
+                suffixIcon: _q.text.isEmpty ? null : IconButton(icon: const Icon(Icons.clear_rounded, size: 18), onPressed: () => setState(_q.clear)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           SectionCard(
             title: _lowOnly ? 'Low Stock Products' : 'Stock on Hand',
             child: items.isEmpty
                 ? EmptyState(_lowOnly ? 'No products below minimum stock 🎉' : 'No inventory yet — add products in Products, then receive opening stock or complete a production batch.')
                 : AppDataTable(
-                    columns: ['Product', '${U.carton} (${U.cb})', if (CompanyProfile.usesTrays) U.tray, 'Total ${U.piece}', 'Gross kg', 'Min (${U.cb})', 'Status', ''],
+                    columns: [if (hasCodes) 'Item Code', 'Product', '${U.carton} (${U.cb})', if (CompanyProfile.usesTrays) U.tray, 'Total ${U.piece}', 'Gross kg', 'Min (${U.cb})', 'Status', ''],
                     rows: [
                       for (final it in items)
                         [
+                          if (hasCodes) ItemCodeChip(ItemCode.of(it)),
                           Text(it['name'] as String, style: const TextStyle(fontWeight: FontWeight.w600)),
                           qtyInt(it['qty_cb']),
                           if (CompanyProfile.usesTrays) qtyInt(it['qty_trays']),
@@ -463,7 +488,7 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                     DropdownButtonFormField<int>(
                       initialValue: productId,
                       decoration: InputDecoration(labelText: tr('Product *')),
-                      items: [for (final p in products) DropdownMenuItem(value: p['id'] as int, child: Text(p['name'] as String))],
+                      items: [for (final p in products) DropdownMenuItem(value: p['id'] as int, child: Text(ItemCode.pick(p), overflow: TextOverflow.ellipsis))],
                       onChanged: (v) => setState(() => productId = v),
                     ),
                     const SizedBox(height: 12),

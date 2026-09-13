@@ -15,6 +15,7 @@ import '../../core/industry_pack.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../core/i18n.dart';
+import '../../core/item_code.dart';
 import '../../state/auth.dart';
 import '../../ui/scan_page.dart';
 import '../../ui/widgets.dart';
@@ -136,7 +137,7 @@ class _LinesEditor extends StatelessWidget {
                   initialValue: lines[i].productId,
                   isExpanded: true,
                   decoration: InputDecoration(labelText: tr('Product ${i + 1} *')),
-                  items: [for (final p in products) DropdownMenuItem(value: p['id'] as int, child: Text(p['name'] as String, overflow: TextOverflow.ellipsis))],
+                  items: [for (final p in products) DropdownMenuItem(value: p['id'] as int, child: Text(ItemCode.pick(p), overflow: TextOverflow.ellipsis))],
                   onChanged: (v) { lines[i].productId = v; onChanged(); },
                 ),
               ),

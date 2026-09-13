@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../core/i18n.dart';
+import '../../core/item_code.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
@@ -432,7 +433,7 @@ class _PurchaseFormPageState extends State<PurchaseFormPage> {
                       for (final p in choices)
                         DropdownMenuItem<int>(
                           value: p['id'] as int,
-                          child: Text(l.itemType == 'material' && (p['category'] as String? ?? '').isNotEmpty ? '${p['name']}  ·  ${tr(p['category'] as String)}' : p['name'] as String, overflow: TextOverflow.ellipsis),
+                          child: Text(l.itemType == 'material' && (p['category'] as String? ?? '').isNotEmpty ? '${ItemCode.pick(p)}  ·  ${tr(p['category'] as String)}' : ItemCode.pick(p), overflow: TextOverflow.ellipsis),
                         ),
                     ],
                     onChanged: (v) => _applyItem(l, v == null || v == 0 ? null : v),

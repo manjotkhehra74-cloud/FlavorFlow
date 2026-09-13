@@ -5,6 +5,7 @@ import '../../core/company.dart';
 import '../../core/industry_pack.dart';
 import '../../core/format.dart';
 import '../../core/i18n.dart';
+import '../../core/item_code.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 import '../billing/item_history_page.dart' show showItemHistory;
@@ -18,6 +19,13 @@ class ProductsPage extends StatefulWidget {
 
 class _ProductsPageState extends State<ProductsPage> {
   late Future<List<Map<String, dynamic>>> _future;
+  final _q = TextEditingController();
+
+  @override
+  void dispose() {
+    _q.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -70,11 +78,13 @@ class _ProductsPageState extends State<ProductsPage> {
       builder: (context, snap) {
         if (snap.hasError) return ErrorState(snap.error!, onRetry: _reload);
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        final products = snap.data!;
+        final all = snap.data!;
+        final hasCodes = ItemCode.anyIn(all);
+        final products = all.where((p) => ItemCode.matches(p, _q.text)).toList();
         return ListView(padding: const EdgeInsets.all(20), children: [
           Row(children: [
             Expanded(
-              child: Text('${products.length} ${tr('finished goods')} · ${U.carton.toLowerCase()} ${CompanyProfile.usesTrays ? '& ${U.trayLc} ' : ''}${tr('weights')}, ${U.piece.toLowerCase()} ${tr('packing')}',
+              child: Text('${all.length} ${tr('finished goods')} · ${U.carton.toLowerCase()} ${CompanyProfile.usesTrays ? '& ${U.trayLc} ' : ''}${tr('weights')}, ${U.piece.toLowerCase()} ${tr('packing')}',
                   style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
             ),
             if (auth.canManageBilling)
@@ -99,14 +109,29 @@ class _ProductsPageState extends State<ProductsPage> {
                 label: Text(tr('Add Product')),
               ),
           ]),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: 360,
+            child: TextField(
+              controller: _q,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                isDense: true,
+                prefixIcon: const Icon(Icons.search_rounded, size: 18),
+                hintText: hasCodes ? tr('Search name / item code') : tr('Search product'),
+                suffixIcon: _q.text.isEmpty ? null : IconButton(icon: const Icon(Icons.clear_rounded, size: 18), onPressed: () => setState(_q.clear)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           SectionCard(
             title: IndustryPack.current.productsTitle,
             child: AppDataTable(
-              columns: ['Product', 'Wt per ${U.cb} (kg)', 'Wt w/o ${U.cb} (kg)', '${U.piece} / ${U.cb}', if (CompanyProfile.usesTrays) '${U.piece} / ${U.tray}', if (CompanyProfile.usesTrays) '${U.tray} Wt (kg)', 'Min Stock (${U.cb})', 'Stock (${U.cb})', if (CompanyProfile.usesTrays) U.tray, ''],
+              columns: [if (hasCodes) 'Item Code', 'Product', 'Wt per ${U.cb} (kg)', 'Wt w/o ${U.cb} (kg)', '${U.piece} / ${U.cb}', if (CompanyProfile.usesTrays) '${U.piece} / ${U.tray}', if (CompanyProfile.usesTrays) '${U.tray} Wt (kg)', 'Min Stock (${U.cb})', 'Stock (${U.cb})', if (CompanyProfile.usesTrays) U.tray, ''],
               rows: [
                 for (var i = 0; i < products.length; i++)
                   [
+                    if (hasCodes) ItemCodeChip(ItemCode.of(products[i])),
                     Text(products[i]['name'] as String, style: const TextStyle(fontWeight: FontWeight.w600)),
                     qty(products[i]['weight_per_cb']),
                     qty(products[i]['weight_without_cb']),
@@ -169,6 +194,7 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
   late final TextEditingController trayWt = TextEditingController(
       text: (widget.product?['tray_weight'] as num?) == 0 ? '' : widget.product?['tray_weight']?.toString() ?? '');
   late final TextEditingController minStock = TextEditingController(text: widget.product?['min_stock_cb']?.toString() ?? '0');
+  late final TextEditingController code = TextEditingController(text: ItemCode.of(widget.product));
   bool busy = false;
 
   Future<void> _save() async {
@@ -182,7 +208,14 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
       'bottlesPerTray': CompanyProfile.usesTrays ? (int.tryParse(bpt.text) ?? 0) : 0,
       'trayWeight': CompanyProfile.usesTrays ? (num.tryParse(trayWt.text) ?? 0) : 0,
       'minStockCb': int.tryParse(minStock.text) ?? 0,
+      'itemCode': ItemCode.normalize(code.text),
     };
+    final codeErr = ItemCode.validate(code.text);
+    if (codeErr != null) {
+      showErr(context, '${tr('Item code')}: $codeErr');
+      setState(() => busy = false);
+      return;
+    }
     try {
       if (widget.product == null) {
         await api.post('/products', body);
@@ -205,6 +238,8 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
         width: 460,
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           TextField(controller: name, textCapitalization: TextCapitalization.words, decoration: InputDecoration(labelText: tr('Product name *'), hintText: IndustryPack.eg(IndustryPack.current.productExamples))),
+          const SizedBox(height: 12),
+          ItemCodeField(controller: code, seriesPrefix: 'FG', editing: widget.product != null),
           const SizedBox(height: 12),
           Row(children: [
             Expanded(child: TextField(controller: wcb, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('Weight per ${U.cb} (kg) *')))),
@@ -326,7 +361,7 @@ class _ProductRatesDialogState extends State<ProductRatesDialog> {
                           final p = rows[i];
                           final id = p['id'] as int;
                           return Wrap(spacing: 10, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-                            SizedBox(width: 200, child: Text(p['name'] as String, style: const TextStyle(fontWeight: FontWeight.w600), maxLines: 2, overflow: TextOverflow.ellipsis)),
+                            SizedBox(width: 200, child: ItemNameCell(name: p['name'] as String, code: ItemCode.of(p))),
                             SizedBox(width: 100, child: TextField(controller: hsn[id], keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'HSN', isDense: true))),
                             SizedBox(
                               width: 100,
