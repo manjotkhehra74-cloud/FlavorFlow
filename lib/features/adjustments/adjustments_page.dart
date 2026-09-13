@@ -84,7 +84,7 @@ class _AdjustmentsPageState extends State<AdjustmentsPage> {
                       for (final a in rows)
                         [
                           Text(a['code'] as String, style: const TextStyle(fontWeight: FontWeight.w700)),
-                          ItemNameCell(name: '${a['product_name']}', code: ItemCode.of(a)),
+                          ItemNameCell(name: '${a['product_name']}', code: '${a['item_code'] ?? ''}'), // not ItemCode.of — a['code'] is the ADJ code
                           StatusChip(a['adj_type'] as String),
                           qtyInt(a['qty_cb']),
                           a['reason'],

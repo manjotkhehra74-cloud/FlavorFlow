@@ -80,7 +80,7 @@ class _ProductionPageState extends State<ProductionPage> {
                       for (final b in rows)
                         [
                           Text(b['code'] as String, style: const TextStyle(fontWeight: FontWeight.w700)),
-                          ItemNameCell(name: '${b['product_name']}', code: ItemCode.of(b)),
+                          ItemNameCell(name: '${b['product_name']}', code: '${b['item_code'] ?? ''}'), // not ItemCode.of — b['code'] is the batch code
                           qtyInt(b['planned_cb']),
                           qtyInt(b['produced_cb']),
                           if (CompanyProfile.usesTrays) qtyInt(b['produced_trays'] ?? 0),
