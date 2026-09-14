@@ -8,6 +8,7 @@ import '../../core/theme.dart';
 import '../../core/i18n.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
+import '../hrmate/hrmate_widgets.dart';
 
 /// Production batch detail — deep link target of "Production Completed" notifications.
 class ProductionDetailPage extends StatefulWidget {
@@ -85,6 +86,10 @@ class _ProductionDetailPageState extends State<ProductionDetailPage> {
                   ? '${qtyInt(b['produced_cb'])} ${U.cb} + ${qtyInt(b['produced_trays'])} ${U.trayLc}'
                   : '${qtyInt(b['produced_cb'])} ${U.cb}'),
               _row('Planned date', b['planned_date'] == null ? '—' : fmtDateWithDay(b['planned_date'])),
+              // Workers present that day per HRMate (read-only bridge); the
+              // widget renders nothing when HRMate is off / unreachable.
+              if (b['planned_date'] != null)
+                HrBatchPresence(date: '${b['planned_date']}'.split(' ').first.split('T').first, plannedQty: b['planned_cb'] as num?),
               if ((b['remarks'] as String?)?.isNotEmpty ?? false) _row('Remarks', b['remarks'] as String),
               const SizedBox(height: 8),
               ClipRRect(

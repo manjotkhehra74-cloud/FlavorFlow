@@ -7,11 +7,15 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../core/app_settings.dart';
 import '../../core/biometric.dart';
 import '../../core/company.dart';
+import '../../core/format.dart';
+import '../../core/hrmate.dart';
 import '../../core/notifier.dart';
 import '../../core/i18n.dart';
+import '../../core/theme.dart';
 import '../../state/auth.dart';
 import '../../ui/app_shell.dart' show LanguageDialog, CompanyProfileDialog;
 import '../../ui/widgets.dart';
+import '../hrmate/hrmate_widgets.dart';
 
 /// Settings — one place for every per-user option:
 /// language · biometric login · two-factor auth (authenticator app) ·
@@ -297,6 +301,32 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ],
 
+      _section('HRMATE (ATTENDANCE)'),
+      Builder(builder: (context) {
+        final hr = context.watch<HrMate>();
+        final today = hr.cached();
+        return Column(children: [
+          _tile(
+            icon: Icons.badge_outlined,
+            title: hr.configured ? 'HRMate connected' : 'Connect HRMate',
+            subtitle: hr.configured
+                ? '${hr.host}${today == null || today.present == null ? '' : ' · ${tr('Present today')}: ${qtyInt(today.present)}${today.total == null ? '' : ' / ${qtyInt(today.total)}'}'}'
+                : 'Attendance, leaves & punch-in app — shows today\'s head-count on the dashboard and per batch (read-only)',
+            trailing: hr.configured
+                ? const Icon(Icons.check_circle_rounded, color: AppColors.green)
+                : const Icon(Icons.add_link_rounded),
+            onTap: () => showDialog(context: context, builder: (_) => const HrMateConnectDialog()),
+          ),
+          if (hr.configured)
+            _tile(
+              icon: Icons.open_in_new_rounded,
+              title: 'Open HRMate',
+              subtitle: 'Punch-in, leave requests, attendance registers',
+              onTap: () => openHrMate(context),
+            ),
+        ]);
+      }),
+
       _section('CONNECTION'),
       _tile(
         icon: Icons.dns_outlined,
@@ -448,6 +478,172 @@ class _TotpSetupDialogState extends State<_TotpSetupDialog> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
         FilledButton(onPressed: busy ? null : _confirm, child: Text(busy ? 'Checking…' : 'Turn on 2FA')),
+      ],
+    );
+  }
+}
+
+
+/// Connect / test / disconnect the HRMate attendance bridge (per device).
+class HrMateConnectDialog extends StatefulWidget {
+  const HrMateConnectDialog({super.key});
+  @override
+  State<HrMateConnectDialog> createState() => _HrMateConnectDialogState();
+}
+
+class _HrMateConnectDialogState extends State<HrMateConnectDialog> {
+  late final TextEditingController _base;
+  late final TextEditingController _token;
+  late final TextEditingController _wage;
+  bool _busy = false;
+  bool _hideToken = true;
+  String? _result; // last test outcome (already translated)
+  bool _resultOk = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final hr = HrMate.instance;
+    _base = TextEditingController(text: hr.configured ? hr.base : HrMate.defaultBase);
+    _token = TextEditingController(text: hr.token);
+    _wage = TextEditingController(text: hr.wage > 0 ? hr.wage.toStringAsFixed(hr.wage % 1 == 0 ? 0 : 2) : '');
+  }
+
+  @override
+  void dispose() {
+    _base.dispose();
+    _token.dispose();
+    _wage.dispose();
+    super.dispose();
+  }
+
+  Future<void> _test() async {
+    setState(() { _busy = true; _result = null; });
+    final r = await HrMate.fetch(_base.text, _token.text, todayYmd());
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _resultOk = r.summary != null;
+      if (r.summary != null) {
+        final s = r.summary!;
+        _result = '${tr('Connection OK')} · ${tr('Present today')}: ${qtyInt(s.present ?? 0)}'
+            '${s.total == null ? '' : ' / ${qtyInt(s.total)}'}'
+            '${(s.onLeave ?? 0) > 0 ? ' · ${tr('On leave')}: ${qtyInt(s.onLeave)}' : ''}';
+      } else {
+        _result = '${tr(r.error ?? 'Could not reach HRMate')}${r.detail == null ? '' : ' (${r.detail})'}';
+      }
+    });
+  }
+
+  Future<void> _save() async {
+    if (HrMate.normalizeBase(_base.text).isEmpty) {
+      showErr(context, tr('HRMate address missing'));
+      return;
+    }
+    final wage = double.tryParse(_wage.text.trim().replaceAll(',', '')) ?? 0;
+    await HrMate.instance.save(_base.text, _token.text, wage: wage);
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    Navigator.pop(context);
+    messenger?.showSnackBar(SnackBar(content: Text(tr('HRMate connected'))));
+  }
+
+  Future<void> _disconnect() async {
+    await HrMate.instance.disconnect();
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    Navigator.pop(context);
+    messenger?.showSnackBar(SnackBar(content: Text(tr('HRMate disconnected'))));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final connected = HrMate.instance.configured;
+    return AlertDialog(
+      title: Row(children: [
+        const Icon(Icons.badge_outlined, size: 22),
+        const SizedBox(width: 10),
+        Expanded(child: Text(tr(connected ? 'HRMate connected' : 'Connect HRMate'))),
+      ]),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(tr('FlavorFlow only READS the daily head-count from HRMate (present / absent / on leave). Nothing is written back. Leave the key empty if your HRMate does not need one.'),
+                style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
+            const SizedBox(height: 14),
+            TextField(
+              controller: _base,
+              keyboardType: TextInputType.url,
+              autocorrect: false,
+              decoration: InputDecoration(labelText: tr('HRMate address'), hintText: HrMate.defaultBase, prefixIcon: const Icon(Icons.link_rounded)),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _token,
+              obscureText: _hideToken,
+              autocorrect: false,
+              enableSuggestions: false,
+              decoration: InputDecoration(
+                labelText: '${tr('API key')} (${tr('optional')})',
+                prefixIcon: const Icon(Icons.vpn_key_outlined),
+                suffixIcon: IconButton(
+                  icon: Icon(_hideToken ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20),
+                  onPressed: () => setState(() => _hideToken = !_hideToken),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _wage,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                labelText: '${tr('Average daily wage per worker')} (₹, ${tr('optional')})',
+                prefixIcon: const Icon(Icons.currency_rupee_rounded),
+                helperText: U.ize(tr('Used only for the approximate labour cost per carton shown on a batch')),
+                helperMaxLines: 2,
+              ),
+            ),
+            if (_result != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
+                decoration: BoxDecoration(
+                  color: (_resultOk ? AppColors.green : scheme.error).withValues(alpha: 0.09),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(children: [
+                  Icon(_resultOk ? Icons.check_circle_rounded : Icons.error_outline_rounded, size: 18, color: _resultOk ? AppColors.green : scheme.error),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(_result!, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
+                ]),
+              ),
+            ],
+          ]),
+        ),
+      ),
+      actionsAlignment: MainAxisAlignment.spaceBetween,
+      actions: [
+        if (connected)
+          TextButton.icon(
+            onPressed: _busy ? null : _disconnect,
+            style: TextButton.styleFrom(foregroundColor: scheme.error),
+            icon: const Icon(Icons.link_off_rounded, size: 18),
+            label: Text(tr('Disconnect')),
+          )
+        else
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('Cancel'))),
+        Wrap(spacing: 6, children: [
+          OutlinedButton.icon(
+            onPressed: _busy ? null : _test,
+            icon: _busy
+                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.network_check_rounded, size: 18),
+            label: Text(tr('Test connection')),
+          ),
+          FilledButton(onPressed: _busy ? null : _save, child: Text(tr('Save'))),
+        ]),
       ],
     );
   }

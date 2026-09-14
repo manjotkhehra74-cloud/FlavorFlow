@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/app_settings.dart';
 import 'core/company.dart';
+import 'core/hrmate.dart';
 import 'core/i18n.dart';
 import 'core/theme.dart';
 import 'router.dart';
@@ -25,12 +26,14 @@ void main() async {
   auth.restore();
   L10n.instance.load();
   AppSettings.instance.load();
+  HrMate.instance.load(); // optional HRMate attendance bridge (per-device address + key)
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: auth),
         ChangeNotifierProvider.value(value: L10n.instance),
         ChangeNotifierProvider.value(value: AppSettings.instance),
+        ChangeNotifierProvider.value(value: HrMate.instance),
       ],
       child: const ErpApp(),
     ),
