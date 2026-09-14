@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'api.dart';
 import 'format.dart';
 
 /// One-way, READ-ONLY bridge to HRMate — FlavorFlow's sister product for
@@ -80,14 +81,35 @@ class HrMate extends ChangeNotifier {
   static const cacheTtl = Duration(minutes: 3);
   static const _retryAfterFail = Duration(seconds: 45);
 
+  // ── per-DEVICE settings (fallback when the ERP server is not patched) ──
   String base = '';
   String token = '';
   /// Average daily wage per worker (₹) — optional, only for the approximate
   /// "labour cost per carton" figure. 0 = not set.
   double wage = 0;
 
-  bool get configured => base.isNotEmpty;
-  String get host => Uri.tryParse(base)?.host ?? base;
+  // ── COMPANY settings (ERP server: GET/PUT /api/settings/hrmate) ──
+  /// Set once by an admin; every user of the company then gets the numbers
+  /// through the ERP server (`GET /api/hrmate/summary`) — the HRMate key
+  /// never leaves the server. null = server not patched / not asked yet.
+  bool? companySupported;
+  String companyBase = '';
+  double companyWage = 0;
+  bool companyHasKey = false;
+  String? companyUpdatedBy;
+  String? companyUpdatedAt;
+  ApiClient? _api;
+
+  /// Company link active on this server (numbers come via the ERP proxy).
+  bool get viaCompany => companySupported == true && companyBase.isNotEmpty;
+  bool get configured => viaCompany || base.isNotEmpty;
+  /// Effective HRMate site (company link wins) — for "Open HRMate".
+  String get effectiveBase => viaCompany ? companyBase : base;
+  String get host => Uri.tryParse(effectiveBase)?.host ?? effectiveBase;
+  /// Effective daily wage (company link wins).
+  double get effectiveWage => viaCompany ? companyWage : wage;
+  /// Changes whenever the effective connection changes (widgets refetch).
+  String get connectionKey => viaCompany ? 'co|$companyBase|$companyUpdatedAt' : 'dev|$base|$token';
 
   final Map<String, HrSummary> _cache = {};
   final Map<String, DateTime> _failedAt = {};
@@ -101,6 +123,127 @@ class HrMate extends ChangeNotifier {
       wage = p.getDouble('set_hrmate_wage') ?? 0;
       notifyListeners();
     } catch (_) {}
+  }
+
+  /// After login (and on Settings open): read the company-level link from the
+  /// ERP server. A server without the ff-hrmate patch answers 404 → device
+  /// mode. Never throws.
+  Future<void> syncCompany(ApiClient api) async {
+    _api = api;
+    try {
+      final j = await api.get('/settings/hrmate');
+      if (j is! Map) throw const FormatException();
+      _applyCompany(j);
+      companySupported = true;
+    } on ApiException catch (e) {
+      // 404 = route not patched; 401 = session gone — keep the device mode,
+      // but do not flag the server as unsupported on a transient error.
+      if (e.status == 404 || e.status == -2) companySupported = false;
+    } catch (_) {}
+    _cache.clear();
+    _failedAt.clear();
+    _inflight.clear();
+    notifyListeners();
+  }
+
+  /// Session ended → forget the company link (next login re-syncs).
+  void clearCompany() {
+    companySupported = null;
+    companyBase = '';
+    companyWage = 0;
+    companyHasKey = false;
+    companyUpdatedBy = null;
+    companyUpdatedAt = null;
+    _api = null;
+    _cache.clear();
+    _failedAt.clear();
+    _inflight.clear();
+    notifyListeners();
+  }
+
+  void _applyCompany(Map j) {
+    companyBase = j['configured'] == true ? normalizeBase('${j['base'] ?? ''}') : '';
+    companyWage = (j['wage'] is num) ? (j['wage'] as num).toDouble() : double.tryParse('${j['wage'] ?? ''}') ?? 0;
+    companyHasKey = j['hasKey'] == true;
+    companyUpdatedBy = j['updatedBy']?.toString();
+    companyUpdatedAt = j['updatedAt']?.toString();
+  }
+
+  /// Admin: save the company-level link on the ERP server. Returns null on
+  /// success, else an error message. [key] empty + [keepKey] → server keeps
+  /// the stored key.
+  Future<String?> saveCompany({required String rawBase, required String key, required double wage, bool keepKey = true}) async {
+    final api = _api;
+    if (api == null) return 'Not signed in';
+    try {
+      final j = await api.put('/settings/hrmate', {
+        'base': normalizeBase(rawBase),
+        'key': key.trim(),
+        'keepKey': keepKey,
+        'wage': wage.isFinite && wage > 0 ? wage : 0,
+      });
+      if (j is Map) _applyCompany(j);
+      companySupported = true;
+      _cache.clear();
+      _failedAt.clear();
+      _inflight.clear();
+      notifyListeners();
+      return null;
+    } catch (e) {
+      return '$e';
+    }
+  }
+
+  Future<String?> disconnectCompany() async {
+    final api = _api;
+    if (api == null) return 'Not signed in';
+    try {
+      await api.delete('/settings/hrmate');
+      companyBase = '';
+      companyWage = 0;
+      companyHasKey = false;
+      _cache.clear();
+      _failedAt.clear();
+      _inflight.clear();
+      notifyListeners();
+      return null;
+    } catch (e) {
+      return '$e';
+    }
+  }
+
+  /// Admin "Test connection" through the ERP server (the server calls
+  /// HRMate, so the stored key can be re-used without re-typing it).
+  Future<HrFetchResult> testCompany({required String rawBase, required String key, String? date}) async {
+    final api = _api;
+    if (api == null) return (summary: null, error: 'Could not reach HRMate', detail: 'not signed in');
+    final d = date ?? todayYmd();
+    try {
+      final j = await api.post('/settings/hrmate/test', {'base': normalizeBase(rawBase), 'key': key.trim(), 'date': d});
+      return _fromProxy(j, d);
+    } catch (e) {
+      return (summary: null, error: 'Could not reach HRMate', detail: '$e');
+    }
+  }
+
+  /// Interpret a proxy answer (test or summary): HRMate JSON, or
+  /// `{ok:false, error}` from the server / HRMate.
+  static HrFetchResult _fromProxy(dynamic j, String date) {
+    if (j is Map && j['ok'] == false) {
+      final msg = '${j['error'] ?? j['message'] ?? ''}';
+      final lower = msg.toLowerCase();
+      final err = lower.contains('unauthori') || lower.contains('api key') || lower.contains('forbidden')
+          ? 'HRMate rejected the API key'
+          : lower.contains('not found') && lower.contains('summary')
+              ? 'HRMate summary API not found — update HRMate'
+              : lower.contains('not connected')
+                  ? 'HRMate address missing'
+                  : 'Could not reach HRMate';
+      return (summary: null, error: err, detail: msg.isEmpty ? null : msg);
+    }
+    final s = parse(j, date);
+    if (s == null) return (summary: null, error: 'Unexpected reply from HRMate', detail: null);
+    return (summary: s, error: null, detail: null);
   }
 
   /// `hr.flavorflow.co.in/` → `https://hr.flavorflow.co.in`; a pasted API
@@ -172,11 +315,11 @@ class HrMate extends ChangeNotifier {
   }
 
   Future<HrSummary?> _fetchInto(String d) async {
-    final b = base, t = token;
+    final b = base, t = token, viaCo = viaCompany;
     try {
-      final r = await fetch(b, t, d);
+      final r = viaCo ? await _fetchViaCompany(d) : await fetch(b, t, d);
       // Settings changed while the request was in flight → stale answer.
-      if (b != base || t != token) return null;
+      if (viaCo != viaCompany || b != base || t != token) return null;
       if (r.summary != null) {
         _cache[d] = r.summary!;
         _failedAt.remove(d);
@@ -190,8 +333,32 @@ class HrMate extends ChangeNotifier {
     }
   }
 
-  /// Raw call — also used by Settings → "Test connection" with unsaved values.
-  /// [error] is an i18n key (wrap with `tr()`), [detail] a raw hint (HTTP code).
+  /// Company mode: the ERP server proxies HRMate (`GET /api/hrmate/summary`),
+  /// key stays on the server. 502 + `{ok:false}` when HRMate is down/refuses.
+  Future<HrFetchResult> _fetchViaCompany(String date) async {
+    final api = _api;
+    if (api == null) return (summary: null, error: 'Could not reach HRMate', detail: 'not signed in');
+    try {
+      final j = await api.get('/hrmate/summary?date=$date');
+      return _fromProxy(j, date);
+    } on ApiException catch (e) {
+      if (e.status == 404) {
+        // Link removed by an admin (or server rolled back) → device/none mode
+        // until the next syncCompany(); the widgets hide themselves.
+        companyBase = '';
+        notifyListeners();
+        return (summary: null, error: 'HRMate address missing', detail: e.message);
+      }
+      // 502 carries HRMate's own {ok:false,error} → classify like a direct reply.
+      return _fromProxy({'ok': false, 'error': e.message}, date);
+    } catch (e) {
+      return (summary: null, error: 'Could not reach HRMate', detail: '$e');
+    }
+  }
+
+  /// Raw DEVICE-mode call — also used by Settings → "Test connection" with
+  /// unsaved values. [error] is an i18n key (wrap with `tr()`), [detail] a
+  /// raw hint (HTTP code).
   static Future<HrFetchResult> fetch(String rawBase, String rawToken, String date) async {
     final b = normalizeBase(rawBase);
     if (b.isEmpty) return (summary: null, error: 'HRMate address missing', detail: null);

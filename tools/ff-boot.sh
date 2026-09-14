@@ -10,12 +10,14 @@
 #   → 2-3 min baad result browser vich:  https://flavorflow.co.in/download/boot-status.txt
 #   (poora log: VM → "Serial port 1 (console)" ya /var/log/ff-boot.log)
 #
-# Steps (arg naal chuno, default sab):  fixssh industry billing stockledger codes lossrestore saasbilling demo web apk
+# Steps (arg naal chuno, default sab):  fixssh industry billing stockledger codes lossrestore hrmate saasbilling demo web apk
 #   fixssh   — memory/OOM/swap snapshot, swap ensure, google-guest-agent + sshd restart
 #              (SSH-in-browser "Connection failed… retrying" aksar guest-agent/RAM karke)
 #   industry — tools/ff-saasindustry.sh (idempotent) + tenant /api/settings/company verify
 #   billing  — tools/ff-billing.sh: GST sales invoices module in the core (/api/billing)
 #   lossrestore — tools/ff-lossrestore.sh: Packing Loss % sheet back on the server menu (app gates it per industry / company)
+#   hrmate   — tools/ff-hrmate.sh: company-level HRMate attendance link in the core
+#              (/api/settings/hrmate admin-only + /api/hrmate/summary read-only proxy; key stays on the server)
 #   saasbilling — tools/ff-saasbilling.sh: subscription plans + cheque activation + owner
 #              console API in the gateway (admin key from GCE metadata `ff-admin-key`)
 #   demo     — tools/ff-saasdemo.sh (16 demo-<industry> tenants, same demo login)
@@ -31,7 +33,7 @@ main() {
   WEB="${FF_WEB:-/opt/flavorflow-saas/web}"
   LOG=/var/log/ff-boot.log
   STATUS="$WEB/download/boot-status.txt"
-  STEPS="${*:-fixssh industry billing stockledger codes lossrestore saasbilling demo web apk}"
+  STEPS="${*:-fixssh industry billing stockledger codes lossrestore hrmate saasbilling demo web apk}"
   mkdir -p "$WEB/download"
   exec > >(tee -a "$LOG") 2>&1
   : > "$STATUS"; chmod 644 "$STATUS"
@@ -139,6 +141,19 @@ main() {
       fi
       st "[lossrestore] rc=$RC"
     else st "[lossrestore] koi rbac.js nahi — skip"; fi
+  fi
+
+  # ---------- hrmate (company-level HRMate link: settings route + read-only attendance proxy) ----------
+  if [[ " $STEPS " == *" hrmate "* ]]; then
+    if [ -f /opt/flavorflow-saas/core/server.js ] || [ -f /opt/flavorflow/server/server.js ]; then
+      OUT=""; RC=1
+      if fetch "$RAW/ff-hrmate.sh" /tmp/ff-hrmate.sh; then OUT=$(bash /tmp/ff-hrmate.sh </dev/null 2>&1); RC=$?; fi
+      if [ -z "$OUT" ]; then st "[hrmate] script download FAIL (GitHub reach nahi hoya?)"; else
+        echo "$OUT"
+        echo "$OUT" | grep -E '^(CORE|BACKUP|SERVER|TENANT|FACTORY|HRMATE|SKIP|FATAL)' | cut -c1-200 | sed 's/^/[hrmate] /' | tee -a "$STATUS"
+      fi
+      st "[hrmate] rc=$RC"
+    else st "[hrmate] koi server.js nahi — skip"; fi
   fi
 
   # ---------- saasbilling (subscription plans, cheque activation, admin console API) ----------

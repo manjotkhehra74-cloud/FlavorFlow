@@ -5,6 +5,7 @@ import '../core/api.dart';
 import '../core/subscription.dart';
 import '../core/biometric.dart';
 import '../core/company.dart';
+import '../core/hrmate.dart';
 
 class UserSession {
   final int id;
@@ -95,6 +96,7 @@ class AuthController extends ChangeNotifier {
           final json = await api.get('/auth/me');
           session = UserSession.fromJson((json as Map).cast<String, dynamic>());
           subscription.refresh(api);
+          HrMate.instance.syncCompany(api); // company-level HRMate link (fire-and-forget)
         }
       }
     } catch (_) {
@@ -126,6 +128,7 @@ class AuthController extends ChangeNotifier {
       // company shows mill units the moment a rice mill signs in.
       try { await CompanyProfile.load(api); } catch (_) {/* server route optional */}
       subscription.refresh(api); // fire-and-forget (cloud tenants only)
+      HrMate.instance.syncCompany(api); // company-level HRMate link (fire-and-forget, never throws)
       return null;
     } on ApiException catch (e) {
       return e.message;
@@ -153,6 +156,7 @@ class AuthController extends ChangeNotifier {
     api.token = null;
     session = null;
     subscription.clear();
+    HrMate.instance.clearCompany();
     // In-memory credentials are dropped; the saved passkey (secure storage)
     // stays so "Login with passkey" keeps working on the login screen.
     BiometricAuth.forgetSession();

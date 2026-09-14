@@ -42,7 +42,7 @@ class _HrPresenceStripState extends State<HrPresenceStrip> {
   void _ask() {
     final hr = HrMate.instance;
     if (!hr.configured) return;
-    final key = '${hr.base}|${hr.token}';
+    final key = hr.connectionKey;
     if (_waiting && key == _askedFor) return;
     _askedFor = key;
     _waiting = true;
@@ -59,7 +59,7 @@ class _HrPresenceStripState extends State<HrPresenceStrip> {
     final hr = context.watch<HrMate>();
     if (!hr.configured) return const SizedBox.shrink();
     // Connected / key changed from Settings → the cache was cleared → refetch.
-    if ('${hr.base}|${hr.token}' != _askedFor) _ask();
+    if (hr.connectionKey != _askedFor) _ask();
     final s = hr.cached();
     if (s == null || !s.hasAny) return const SizedBox.shrink();
     return Padding(
@@ -205,8 +205,9 @@ class _HrBatchPresenceState extends State<HrBatchPresence> {
     ];
     final qty = widget.plannedQty;
     String? cost;
-    if (hr.wage > 0 && qty != null && qty > 0 && present > 0) {
-      cost = '${inr(hr.wage * present / qty)} / ${U.cb}';
+    final wage = hr.effectiveWage;
+    if (wage > 0 && qty != null && qty > 0 && present > 0) {
+      cost = '${inr(wage * present / qty)} / ${U.cb}';
     }
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 7),
@@ -224,7 +225,7 @@ class _HrBatchPresenceState extends State<HrBatchPresence> {
             if (cost != null)
               Padding(
                 padding: const EdgeInsets.only(top: 2),
-                child: Text('≈ ${tr('Labour cost')} $cost (${tr('daily wage')} ${inr(hr.wage, decimals: false)} × ${qtyInt(present)} ÷ ${qtyInt(qty)} ${U.cb})',
+                child: Text('≈ ${tr('Labour cost')} $cost (${tr('daily wage')} ${inr(wage, decimals: false)} × ${qtyInt(present)} ÷ ${qtyInt(qty)} ${U.cb})',
                     style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
               ),
           ]),
@@ -244,7 +245,7 @@ String ymdHms(DateTime d) {
 /// or the HRMate app. Falls back to a snackbar with the address.
 Future<void> openHrMate(BuildContext context) async {
   final hr = HrMate.instance;
-  final url = hr.configured ? hr.base : HrMate.defaultBase;
+  final url = hr.configured ? hr.effectiveBase : HrMate.defaultBase;
   final ok = await openExternalUrl(url);
   if (!ok && context.mounted) {
     ScaffoldMessenger.of(context)

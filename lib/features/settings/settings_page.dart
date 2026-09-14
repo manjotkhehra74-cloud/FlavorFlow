@@ -46,6 +46,7 @@ class _SettingsPageState extends State<SettingsPage> {
       final j = await context.read<AuthController>().api.get('/auth/totp/status');
       totp = (j as Map)['enabled'] == true;
     } catch (_) {/* server route optional until patched */}
+    if (mounted) HrMate.instance.syncCompany(context.read<AuthController>().api); // company HRMate link (optional route)
     if (!mounted) return;
     setState(() { _bioAvailable = avail; _bioEnabled = enabled; _totpEnabled = totp; });
   }
@@ -305,17 +306,33 @@ class _SettingsPageState extends State<SettingsPage> {
       Builder(builder: (context) {
         final hr = context.watch<HrMate>();
         final today = hr.cached();
+        final isAdmin = session != null && (session.role == 'super_admin' || session.role == 'admin');
+        final companyMode = hr.companySupported == true; // ERP server has the ff-hrmate patch
+        final canEdit = companyMode ? isAdmin : true; // device mode: anyone on this phone
+        final todayTxt = today == null || today.present == null
+            ? ''
+            : ' · ${tr('Present today')}: ${qtyInt(today.present)}${today.total == null ? '' : ' / ${qtyInt(today.total)}'}';
+        final String subtitle;
+        if (hr.viaCompany) {
+          subtitle = '${hr.host} · ${tr('Whole company')}${hr.companyUpdatedBy == null ? '' : ' · ${tr('set by')} ${hr.companyUpdatedBy}'}$todayTxt';
+        } else if (hr.configured) {
+          subtitle = '${hr.host} · ${tr('This device only')}$todayTxt';
+        } else if (companyMode && !isAdmin) {
+          subtitle = 'Not connected yet — ask your Admin to connect HRMate for the company';
+        } else {
+          subtitle = 'Attendance, leaves & punch-in app — shows today\'s head-count on the dashboard and per batch (read-only)';
+        }
         return Column(children: [
           _tile(
             icon: Icons.badge_outlined,
             title: hr.configured ? 'HRMate connected' : 'Connect HRMate',
-            subtitle: hr.configured
-                ? '${hr.host}${today == null || today.present == null ? '' : ' · ${tr('Present today')}: ${qtyInt(today.present)}${today.total == null ? '' : ' / ${qtyInt(today.total)}'}'}'
-                : 'Attendance, leaves & punch-in app — shows today\'s head-count on the dashboard and per batch (read-only)',
+            subtitle: subtitle,
             trailing: hr.configured
                 ? const Icon(Icons.check_circle_rounded, color: AppColors.green)
-                : const Icon(Icons.add_link_rounded),
-            onTap: () => showDialog(context: context, builder: (_) => const HrMateConnectDialog()),
+                : canEdit
+                    ? const Icon(Icons.add_link_rounded)
+                    : null,
+            onTap: canEdit ? () => showDialog(context: context, builder: (_) => const HrMateConnectDialog()) : null,
           ),
           if (hr.configured)
             _tile(
@@ -500,13 +517,19 @@ class _HrMateConnectDialogState extends State<HrMateConnectDialog> {
   String? _result; // last test outcome (already translated)
   bool _resultOk = false;
 
+  /// Company mode = the ERP server stores the link for every user (ff-hrmate
+  /// patch present); device mode = this phone only (unpatched server).
+  bool get _company => HrMate.instance.companySupported == true;
+
   @override
   void initState() {
     super.initState();
     final hr = HrMate.instance;
-    _base = TextEditingController(text: hr.configured ? hr.base : HrMate.defaultBase);
-    _token = TextEditingController(text: hr.token);
-    _wage = TextEditingController(text: hr.wage > 0 ? hr.wage.toStringAsFixed(hr.wage % 1 == 0 ? 0 : 2) : '');
+    final base = _company ? hr.companyBase : hr.base;
+    final wage = _company ? hr.companyWage : hr.wage;
+    _base = TextEditingController(text: base.isNotEmpty ? base : HrMate.defaultBase);
+    _token = TextEditingController(text: _company ? '' : hr.token);
+    _wage = TextEditingController(text: wage > 0 ? wage.toStringAsFixed(wage % 1 == 0 ? 0 : 2) : '');
   }
 
   @override
@@ -519,7 +542,11 @@ class _HrMateConnectDialogState extends State<HrMateConnectDialog> {
 
   Future<void> _test() async {
     setState(() { _busy = true; _result = null; });
-    final r = await HrMate.fetch(_base.text, _token.text, todayYmd());
+    // Company mode tests THROUGH the ERP server (stored key re-used when the
+    // field is left empty); device mode calls HRMate straight from the phone.
+    final r = _company
+        ? await HrMate.instance.testCompany(rawBase: _base.text, key: _token.text)
+        : await HrMate.fetch(_base.text, _token.text, todayYmd());
     if (!mounted) return;
     setState(() {
       _busy = false;
@@ -541,16 +568,36 @@ class _HrMateConnectDialogState extends State<HrMateConnectDialog> {
       return;
     }
     final wage = double.tryParse(_wage.text.trim().replaceAll(',', '')) ?? 0;
-    await HrMate.instance.save(_base.text, _token.text, wage: wage);
-    if (!mounted) return;
+    if (_company) {
+      if (_token.text.trim().isEmpty && !HrMate.instance.companyHasKey) {
+        showErr(context, tr('API key missing'));
+        return;
+      }
+      setState(() => _busy = true);
+      final err = await HrMate.instance.saveCompany(rawBase: _base.text, key: _token.text, wage: wage, keepKey: true);
+      if (!mounted) return;
+      setState(() => _busy = false);
+      if (err != null) { showErr(context, err); return; }
+    } else {
+      await HrMate.instance.save(_base.text, _token.text, wage: wage);
+      if (!mounted) return;
+    }
     final messenger = ScaffoldMessenger.maybeOf(context);
     Navigator.pop(context);
-    messenger?.showSnackBar(SnackBar(content: Text(tr('HRMate connected'))));
+    messenger?.showSnackBar(SnackBar(content: Text(_company ? tr('HRMate connected for the whole company') : tr('HRMate connected'))));
   }
 
   Future<void> _disconnect() async {
-    await HrMate.instance.disconnect();
-    if (!mounted) return;
+    if (_company) {
+      setState(() => _busy = true);
+      final err = await HrMate.instance.disconnectCompany();
+      if (!mounted) return;
+      setState(() => _busy = false);
+      if (err != null) { showErr(context, err); return; }
+    } else {
+      await HrMate.instance.disconnect();
+      if (!mounted) return;
+    }
     final messenger = ScaffoldMessenger.maybeOf(context);
     Navigator.pop(context);
     messenger?.showSnackBar(SnackBar(content: Text(tr('HRMate disconnected'))));
@@ -559,7 +606,9 @@ class _HrMateConnectDialogState extends State<HrMateConnectDialog> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final connected = HrMate.instance.configured;
+    final hr = HrMate.instance;
+    final connected = _company ? hr.viaCompany : hr.base.isNotEmpty;
+    final keyHint = _company && hr.companyHasKey ? tr('saved on the server — leave empty to keep') : tr('optional');
     return AlertDialog(
       title: Row(children: [
         const Icon(Icons.badge_outlined, size: 22),
@@ -572,7 +621,20 @@ class _HrMateConnectDialogState extends State<HrMateConnectDialog> {
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(tr('FlavorFlow only READS the daily head-count from HRMate (present / absent / on leave). Nothing is written back. Leave the key empty if your HRMate does not need one.'),
                 style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
-            const SizedBox(height: 14),
+            const SizedBox(height: 8),
+            Row(children: [
+              Icon(_company ? Icons.apartment_rounded : Icons.phone_android_rounded, size: 16, color: scheme.primary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  _company
+                      ? tr('Whole company — saved on your ERP server; every user sees the numbers, the key never leaves the server')
+                      : tr('This device only — your ERP server is not updated for a company-wide link yet'),
+                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: scheme.primary),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 12),
             TextField(
               controller: _base,
               keyboardType: TextInputType.url,
@@ -586,7 +648,7 @@ class _HrMateConnectDialogState extends State<HrMateConnectDialog> {
               autocorrect: false,
               enableSuggestions: false,
               decoration: InputDecoration(
-                labelText: '${tr('API key')} (${tr('optional')})',
+                labelText: '${tr('API key')} ($keyHint)',
                 prefixIcon: const Icon(Icons.vpn_key_outlined),
                 suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
                   IconButton(
