@@ -22,6 +22,19 @@ import 'format.dart';
 ///   • the JSON shape is parsed tolerantly (snake/camel keys, `data`/`summary`
 ///     envelopes, lists of employee rows) because HRMate's contract may still
 ///     evolve — a changed field name must never break the ERP.
+/// Per-department slice of the day (HRMate `byDepartment`).
+class HrDept {
+  final String name;
+  final int? total, present, absent, onLeave;
+  const HrDept({required this.name, this.total, this.present, this.absent, this.onLeave});
+
+  /// Shop-floor department (Production / Manufacturing / Packing / Plant…).
+  bool get isProduction {
+    final n = name.toLowerCase();
+    return n.contains('produc') || n.contains('manufact') || n.contains('packing') || n.contains('plant') || n.contains('shop floor') || n.contains('floor');
+  }
+}
+
 class HrSummary {
   /// YYYY-MM-DD the numbers are for.
   final String date;
@@ -29,6 +42,7 @@ class HrSummary {
   /// Server's own "as of" stamp, when it sends one (raw string).
   final String? updatedAt;
   final DateTime fetchedAt;
+  final List<HrDept> departments;
 
   const HrSummary({
     required this.date,
@@ -40,9 +54,18 @@ class HrSummary {
     this.total,
     this.updatedAt,
     required this.fetchedAt,
+    this.departments = const [],
   });
 
   bool get hasAny => present != null || absent != null || onLeave != null || lateIn != null;
+
+  /// The production-floor department, when HRMate breaks the day down.
+  HrDept? get production {
+    for (final d in departments) {
+      if (d.isProduction && d.present != null) return d;
+    }
+    return null;
+  }
 }
 
 typedef HrFetchResult = ({HrSummary? summary, String? error, String? detail});
@@ -172,21 +195,34 @@ class HrMate extends ChangeNotifier {
   static Future<HrFetchResult> fetch(String rawBase, String rawToken, String date) async {
     final b = normalizeBase(rawBase);
     if (b.isEmpty) return (summary: null, error: 'HRMate address missing', detail: null);
-    final uri = Uri.tryParse('$b$summaryPath?date=$date');
-    if (uri == null) return (summary: null, error: 'HRMate address missing', detail: rawBase);
     final t = rawToken.trim();
+    // HRMate accepts the key as `?api_key=` (verified on hr.flavorflow.co.in).
+    // The query form is a CORS "simple request" — no preflight — so the web
+    // build works with any Access-Control-Allow-Origin setup. On Android/iOS
+    // (no CORS) the key also travels as Bearer / X-API-Key headers so a
+    // header-only HRMate build keeps working.
+    final uri = Uri.tryParse('$b$summaryPath')?.replace(queryParameters: {
+      'date': date,
+      if (t.isNotEmpty) 'api_key': t,
+    });
+    if (uri == null) return (summary: null, error: 'HRMate address missing', detail: rawBase);
     try {
-      // Only `Authorization: Bearer` — one non-safelisted header keeps the
-      // browser CORS preflight simple (web build). Empty key → plain GET.
       final res = await http.get(uri, headers: {
         'Accept': 'application/json',
-        if (t.isNotEmpty) 'Authorization': 'Bearer $t',
+        if (!kIsWeb && t.isNotEmpty) 'Authorization': 'Bearer $t',
+        if (!kIsWeb && t.isNotEmpty) 'X-API-Key': t,
       }).timeout(requestTimeout);
       final code = res.statusCode;
       if (code == 401 || code == 403) return (summary: null, error: 'HRMate rejected the API key', detail: 'HTTP $code');
       if (code == 404) return (summary: null, error: 'HRMate summary API not found — update HRMate', detail: 'HTTP 404');
       if (code >= 400) return (summary: null, error: 'Could not reach HRMate', detail: 'HTTP $code');
       final body = jsonDecode(utf8.decode(res.bodyBytes));
+      if (body is Map && body['ok'] == false) {
+        // HRMate style: {ok:false, error:"Unauthorized. Invalid or missing API key."}
+        final msg = '${body['error'] ?? body['message'] ?? ''}';
+        final unauthorized = msg.toLowerCase().contains('unauthori') || msg.toLowerCase().contains('api key') || msg.toLowerCase().contains('forbidden');
+        return (summary: null, error: unauthorized ? 'HRMate rejected the API key' : 'Unexpected reply from HRMate', detail: msg.isEmpty ? null : msg);
+      }
       final s = parse(body, date);
       if (s == null) return (summary: null, error: 'Unexpected reply from HRMate', detail: null);
       return (summary: s, error: null, detail: null);
@@ -248,8 +284,9 @@ class HrMate extends ChangeNotifier {
     final lateIn = _int(_find(root, const ['late', 'late_count', 'lateCount', 'late_comers', 'latecomers', 'late_arrivals']));
     final halfDay = _int(_find(root, const ['half_day', 'halfDay', 'half_days', 'halfDays', 'half_day_count']));
     var total = _int(_find(root, const [
-      'total', 'total_employees', 'totalEmployees', 'total_staff', 'totalStaff', 'headcount', 'head_count', 'strength',
-      'employees', 'staff', 'active_employees', 'activeEmployees', 'workforce', 'expected',
+      'total', 'total_active', 'totalActive', 'total_employees', 'totalEmployees', 'total_staff', 'totalStaff',
+      'headcount', 'head_count', 'strength', 'employees', 'staff', 'active', 'active_count', 'activeCount',
+      'active_employees', 'activeEmployees', 'workforce', 'expected',
     ]));
     final upd = _find(root, const ['updated_at', 'updatedAt', 'generated_at', 'generatedAt', 'as_of', 'asOf', 'timestamp', 'computed_at']);
 
@@ -259,6 +296,9 @@ class HrMate extends ChangeNotifier {
       if (rows is List && rows.isNotEmpty && rows.first is Map) return _fromRows(rows, date, now);
       return null;
     }
+    // A total smaller than the present count is not the head-count (some
+    // nested figure) — rebuild it from the parts or drop it.
+    if (total != null && present != null && total < present) total = null;
     if (total == null && present != null && absent != null) total = present + absent + (onLeave ?? 0);
     return HrSummary(
       date: date,
@@ -270,7 +310,40 @@ class HrMate extends ChangeNotifier {
       total: total,
       updatedAt: upd == null ? null : '$upd',
       fetchedAt: now,
+      departments: _departments(root),
     );
+  }
+
+  /// `byDepartment: {Production: {total: 2, present: 2, onLeave: 0, absent: 0}, …}`
+  /// or a list `[{name/department: 'Production', present: 2, …}, …]`.
+  static List<HrDept> _departments(Map root) {
+    final raw = _find(root, const ['by_department', 'byDepartment', 'departments', 'by_dept', 'byDept', 'department_wise', 'departmentWise'], descend: true);
+    final out = <HrDept>[];
+    HrDept? one(String name, Object? v) {
+      if (v is! Map || name.trim().isEmpty) return null;
+      final present = _int(v['present'] ?? v['present_count'] ?? v['presentCount']);
+      if (present == null) return null;
+      return HrDept(
+        name: name.trim(),
+        total: _int(v['total'] ?? v['total_active'] ?? v['totalActive'] ?? v['strength'] ?? v['headcount']),
+        present: present,
+        absent: _int(v['absent'] ?? v['absent_count'] ?? v['absentCount']),
+        onLeave: _int(v['on_leave'] ?? v['onLeave'] ?? v['leave']),
+      );
+    }
+    if (raw is Map) {
+      for (final e in raw.entries) {
+        final d = one('${e.key}', e.value);
+        if (d != null) out.add(d);
+      }
+    } else if (raw is List) {
+      for (final v in raw) {
+        if (v is! Map) continue;
+        final d = one('${v['name'] ?? v['department'] ?? v['dept'] ?? v['title'] ?? ''}', v);
+        if (d != null) out.add(d);
+      }
+    }
+    return out.length > 24 ? out.sublist(0, 24) : out;
   }
 
   static const _dateKeys = ['date', 'for_date', 'forDate', 'attendance_date', 'attendanceDate', 'day', 'on', 'as_of_date'];
@@ -300,8 +373,10 @@ class HrMate extends ChangeNotifier {
   /// Breadth-first lookup (depth ≤ 4) of the first key matching any of
   /// [names] after normalisation (`present_count` == `presentCount`).
   /// Scalars, maps ({count: n}) and lists (→ length) are all accepted; the
-  /// shallowest match wins so `total` beats `present.total`.
-  static Object? _find(Map root, List<String> names) {
+  /// shallowest match wins so `total` beats `present.total`. Breakdown
+  /// containers (`byDepartment`, `byShift`, `departments`…) are never
+  /// entered — a department's own `total` must not pose as the head-count.
+  static Object? _find(Map root, List<String> names, {bool descend = false}) {
     final want = names.map(_norm).toSet();
     var level = <Map>[root];
     for (var depth = 0; depth < 4 && level.isNotEmpty; depth++) {
@@ -312,13 +387,20 @@ class HrMate extends ChangeNotifier {
           if (v == null) continue;
           if (want.contains(_norm('${e.key}'))) return v;
         }
-        for (final v in node.values) {
-          if (v is Map) next.add(v);
+        for (final e in node.entries) {
+          final v = e.value;
+          if (v is Map && (descend || !_isBreakdownKey('${e.key}'))) next.add(v);
         }
       }
       level = next;
     }
     return null;
+  }
+
+  static bool _isBreakdownKey(String k) {
+    final n = _norm(k);
+    return n.startsWith('by') || n.contains('department') || n.contains('dept') || n.contains('shift') ||
+        n.contains('breakdown') || n.contains('wise') || n.contains('group') || n.contains('team') || n.contains('site');
   }
 
   static int? _int(Object? v) {

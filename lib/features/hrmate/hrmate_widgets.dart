@@ -129,6 +129,15 @@ class _HrCard extends StatelessWidget {
                   const SizedBox(height: 7),
                   Wrap(spacing: 6, runSpacing: 4, children: chips),
                 ],
+                if (s.departments.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    [for (final d in s.departments) '${d.name} ${qtyInt(d.present)}${d.total != null ? '/${qtyInt(d.total)}' : ''}'].join(' · '),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: scheme.onSurfaceVariant),
+                  ),
+                ],
                 const SizedBox(height: 4),
                 Text(
                   '${fmtDateWithDay(s.date)} · ${tr('Updated')} ${fmtAgo(ymdHms(s.fetchedAt))}',
@@ -182,27 +191,40 @@ class _HrBatchPresenceState extends State<HrBatchPresence> {
     final s = hr.cached(widget.date);
     if (s == null || s.present == null) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
+    // Shop-floor head-count when HRMate breaks the day down by department
+    // (office staff must not inflate the labour cost); else the whole plant.
+    final prod = s.production;
+    final present = prod?.present ?? s.present!;
+    final total = prod?.total ?? s.total;
+    final onLeave = prod?.onLeave ?? s.onLeave;
+    final absent = prod?.absent ?? s.absent;
     final parts = <String>[
-      '${qtyInt(s.present)}${s.total != null ? ' / ${qtyInt(s.total)}' : ''} ${tr('present')}',
-      if ((s.onLeave ?? 0) > 0) '${qtyInt(s.onLeave)} ${tr('on leave')}',
-      if ((s.absent ?? 0) > 0) '${qtyInt(s.absent)} ${tr('absent')}',
+      '${qtyInt(present)}${total != null ? ' / ${qtyInt(total)}' : ''} ${tr('present')}',
+      if ((onLeave ?? 0) > 0) '${qtyInt(onLeave)} ${tr('on leave')}',
+      if ((absent ?? 0) > 0) '${qtyInt(absent)} ${tr('absent')}',
     ];
     final qty = widget.plannedQty;
     String? cost;
-    if (hr.wage > 0 && qty != null && qty > 0 && s.present! > 0) {
-      cost = '${inr(hr.wage * s.present! / qty)} / ${U.cb}';
+    if (hr.wage > 0 && qty != null && qty > 0 && present > 0) {
+      cost = '${inr(hr.wage * present / qty)} / ${U.cb}';
     }
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 7),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        SizedBox(width: 150, child: Text('${tr('Workers')} (HRMate)', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13))),
+        SizedBox(width: 150, child: Text('${tr('Workers')} (${prod?.name ?? 'HRMate'})', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13))),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(parts.join(' · '), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5)),
+            if (prod != null && s.present != null && s.present != present)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text('${tr('All staff')}: ${qtyInt(s.present)}${s.total != null ? ' / ${qtyInt(s.total)}' : ''} ${tr('present')} · HRMate',
+                    style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
+              ),
             if (cost != null)
               Padding(
                 padding: const EdgeInsets.only(top: 2),
-                child: Text('≈ ${tr('Labour cost')} $cost (${tr('daily wage')} ${inr(hr.wage, decimals: false)} × ${qtyInt(s.present)} ÷ ${qtyInt(qty)} ${U.cb})',
+                child: Text('≈ ${tr('Labour cost')} $cost (${tr('daily wage')} ${inr(hr.wage, decimals: false)} × ${qtyInt(present)} ÷ ${qtyInt(qty)} ${U.cb})',
                     style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
               ),
           ]),

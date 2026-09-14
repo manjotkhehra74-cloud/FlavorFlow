@@ -588,10 +588,21 @@ class _HrMateConnectDialogState extends State<HrMateConnectDialog> {
               decoration: InputDecoration(
                 labelText: '${tr('API key')} (${tr('optional')})',
                 prefixIcon: const Icon(Icons.vpn_key_outlined),
-                suffixIcon: IconButton(
-                  icon: Icon(_hideToken ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20),
-                  onPressed: () => setState(() => _hideToken = !_hideToken),
-                ),
+                suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
+                  IconButton(
+                    tooltip: tr('Paste'),
+                    icon: const Icon(Icons.content_paste_rounded, size: 19),
+                    onPressed: () async {
+                      final d = await Clipboard.getData(Clipboard.kTextPlain);
+                      final v = d?.text?.trim() ?? '';
+                      if (v.isNotEmpty) setState(() => _token.text = v);
+                    },
+                  ),
+                  IconButton(
+                    icon: Icon(_hideToken ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20),
+                    onPressed: () => setState(() => _hideToken = !_hideToken),
+                  ),
+                ]),
               ),
             ),
             const SizedBox(height: 10),

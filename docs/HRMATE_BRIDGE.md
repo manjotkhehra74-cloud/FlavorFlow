@@ -11,10 +11,14 @@ breaks because of HR.
 ## What FlavorFlow calls
 
 ```
-GET {HRMATE_BASE}/api/v1/attendance/summary?date=YYYY-MM-DD
+GET {HRMATE_BASE}/api/v1/attendance/summary?date=YYYY-MM-DD&api_key=<key>
 Accept: application/json
-Authorization: Bearer <api key>          (only when a key is set in Settings)
+Authorization: Bearer <key>   +   X-API-Key: <key>     (Android/iOS only; the web build sends the query form only)
 ```
+
+The `?api_key=` query form is what HRMate accepts today (verified on
+hr.flavorflow.co.in, 2026-09-14) and it is a CORS *simple request* — no
+pre-flight — so the browser build works regardless of allowed headers.
 
 * `HRMATE_BASE` default: `https://hr.flavorflow.co.in` (user can type any
   address, e.g. `https://gdfoods.duckdns.org`).
@@ -23,20 +27,31 @@ Authorization: Bearer <api key>          (only when a key is set in Settings)
 * Timeout 8 s. Cached 3 min per date; after a failure FlavorFlow waits 45 s
   before retrying — HRMate is never polled aggressively.
 
-## Recommended reply (HRMate side)
+## Live reply (HRMate Workforce Gateway, 2026-09-14)
 
 ```json
 {
+  "ok": true,
+  "service": "HRMate Workforce Gateway",
   "date": "2026-09-14",
-  "present": 42,
-  "absent": 5,
-  "on_leave": 3,
-  "late": 2,
-  "half_day": 1,
-  "total": 50,
-  "updated_at": "2026-09-14T10:32:11+05:30"
+  "present": 3, "absent": 2, "onLeave": 0, "totalActive": 5, "attendanceRatePct": 60,
+  "summary": { "total_active": 5, "present": 3, "absent": 2, "on_leave": 0, "attendance_rate_pct": 60 },
+  "byDepartment": {
+    "Production":   { "total": 2, "present": 2, "onLeave": 0, "absent": 0 },
+    "Quality - Lab":{ "total": 1, "present": 1, "onLeave": 0, "absent": 0 }
+  },
+  "timestamp": 1789380748081
 }
 ```
+
+FlavorFlow reads `present` / `absent` / `onLeave` / `totalActive` for the
+headline and `byDepartment` for the split. The **Production** department
+(name containing production / manufacturing / packing / plant / floor) is
+what a batch uses for its worker count and labour cost — office staff never
+inflate the per-carton figure. Missing key / wrong key →
+`{"ok":false,"error":"Unauthorized…"}` → the app says "HRMate rejected the
+API key". Optional extras FlavorFlow would also show if added: `late`,
+`half_day`, `updated_at`.
 
 Only `present` is strictly required — the others are optional. FlavorFlow is
 tolerant about naming (snake_case or camelCase, e.g. `presentCount`,
@@ -64,11 +79,12 @@ Allow-list: `https://app.flavorflow.co.in`, `https://flavorflow.co.in`,
 `https://flavorflow.duckdns.org` (and `http://localhost:*` for dev). Answer
 the `OPTIONS` pre-flight with `204` + the same headers.
 
-## Auth suggestion
+## Auth
 
-A per-company read-only API key issued in HRMate (Settings → Integrations →
-"FlavorFlow key"), sent as `Authorization: Bearer <key>`. The key only unlocks
-the summary route. Phase 3 (SSO / one company code) replaces this.
+A read-only API key issued by HRMate, entered once per device in FlavorFlow
+→ Settings → HRMATE (ATTENDANCE) (there is a paste button). It only unlocks
+the summary route. Phase 3 (SSO / one company code) replaces this. Keep the
+key out of Git — it lives in the phone's preferences only.
 
 ## Where it shows in FlavorFlow
 

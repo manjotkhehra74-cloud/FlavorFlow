@@ -48,6 +48,8 @@ class L10n extends ChangeNotifier {
 
   static const Map<String, Map<String, String>> _tr = {
     'pa': {
+      'Paste': 'ਪੇਸਟ',
+      'All staff': 'ਸਾਰਾ ਸਟਾਫ਼',
       'Present today': 'ਅੱਜ ਹਾਜ਼ਰ',
       'Present': 'ਹਾਜ਼ਰ',
       'present': 'ਹਾਜ਼ਰ',
@@ -903,6 +905,8 @@ class L10n extends ChangeNotifier {
       'No item with code': 'ਇਸ ਕੋਡ ਵਾਲੀ ਕੋਈ ਆਈਟਮ ਨਹੀਂ',
     },
     'hi': {
+      'Paste': 'पेस्ट',
+      'All staff': 'सभी स्टाफ',
       'Present today': 'आज उपस्थित',
       'Present': 'उपस्थित',
       'present': 'उपस्थित',
@@ -1758,6 +1762,8 @@ class L10n extends ChangeNotifier {
       'No item with code': 'इस कोड की कोई आइटम नहीं',
     },
   'gu': {
+      'Paste': 'પેસ્ટ',
+      'All staff': 'બધો સ્ટાફ',
       'Present today': 'આજે હાજર',
       'Present': 'હાજર',
       'present': 'હાજર',
@@ -2599,6 +2605,8 @@ class L10n extends ChangeNotifier {
       'No item with code': 'આ કોડવાળી કોઈ આઇટમ નથી',
     },
     'mr': {
+      'Paste': 'पेस्ट',
+      'All staff': 'सर्व कर्मचारी',
       'Present today': 'आज उपस्थित',
       'Present': 'उपस्थित',
       'present': 'उपस्थित',
@@ -3439,6 +3447,8 @@ class L10n extends ChangeNotifier {
       'No item with code': 'या कोडची कोणतीही आयटम नाही',
     },
     'bn': {
+      'Paste': 'পেস্ট',
+      'All staff': 'সব কর্মী',
       'Present today': 'আজ উপস্থিত',
       'Present': 'উপস্থিত',
       'present': 'উপস্থিত',
@@ -4279,6 +4289,8 @@ class L10n extends ChangeNotifier {
       'No item with code': 'এই কোডের কোনো আইটেম নেই',
     },
     'ta': {
+      'Paste': 'ஒட்டு',
+      'All staff': 'அனைத்து ஊழியர்கள்',
       'Present today': 'இன்று வருகை',
       'Present': 'வருகை',
       'present': 'வருகை',
@@ -5119,6 +5131,8 @@ class L10n extends ChangeNotifier {
       'No item with code': 'இந்தக் குறியீட்டில் பொருள் இல்லை',
     },
     'te': {
+      'Paste': 'అతికించు',
+      'All staff': 'మొత్తం సిబ్బంది',
       'Present today': 'నేడు హాజరు',
       'Present': 'హాజరు',
       'present': 'హాజరు',
