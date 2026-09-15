@@ -93,12 +93,12 @@ ThemeData buildTheme() {
         textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
       ),
     ),
-    chipTheme: ChipThemeData(
-      shape: const StadiumBorder(),
-      side: const BorderSide(color: HrBrand.border),
+    chipTheme: const ChipThemeData(
+      shape: StadiumBorder(),
+      side: BorderSide(color: HrBrand.border),
       backgroundColor: Colors.white,
-      labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: HrBrand.ink),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      labelStyle: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: HrBrand.ink),
+      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
     ),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: Colors.white,
