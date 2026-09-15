@@ -11,6 +11,9 @@ app/api/v1/mobile/
   auth/login/route.ts       ← POST {login, password, deviceId, deviceName} → {ok, token, expiresAt, user}
   auth/logout/route.ts      ← POST (bearer) → {ok:true}; revokes the device token
   me/route.ts               ← GET  (bearer) → {ok:true, user}
+  attendance/today/route.ts ← Phase 1: GET → status/firstIn/lastOut/workedMinutes/shift/onLeave/holiday/geofence
+  announcements/route.ts    ← Phase 1: GET → {items:[…]} (return [] if the webapp has no announcements)
+  leaves/balance/route.ts   ← Phase 1: GET → {available, pending, balances:[…]}
 ```
 
 Rules that every later route must follow (copy from `me/route.ts`):
@@ -44,4 +47,14 @@ curl -s https://hr.flavorflow.co.in/api/v1/mobile/me -H 'authorization: Bearer e
 
 # no token
 curl -s -o /dev/null -w '%{http_code}\n' https://hr.flavorflow.co.in/api/v1/mobile/me   # → 401
+```
+
+## Phase 1 verify
+
+```bash
+T=<token from login>
+curl -s https://hr.flavorflow.co.in/api/v1/mobile/attendance/today -H "authorization: Bearer $T"
+# → {"ok":true,"status":"in","firstIn":"2026-09-16T03:32:00.000Z","lastOut":null,"workedMinutes":142,"shift":{"name":"General","start":"09:00","end":"18:00"},"onLeave":false,"holiday":false,"holidayName":null,"geofence":{"lat":31.42225,"lng":75.08436,"radiusM":150}}
+curl -s https://hr.flavorflow.co.in/api/v1/mobile/announcements -H "authorization: Bearer $T"      # → {"ok":true,"items":[…]}
+curl -s https://hr.flavorflow.co.in/api/v1/mobile/leaves/balance -H "authorization: Bearer $T"     # → {"ok":true,"available":12,"pending":1,"balances":[…]}
 ```

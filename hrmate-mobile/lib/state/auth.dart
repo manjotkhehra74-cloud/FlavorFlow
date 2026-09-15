@@ -32,7 +32,7 @@ class HrUser {
         code: (j['code'] ?? j['employeeCode'] ?? '').toString(),
         name: (j['name'] ?? '').toString(),
         email: (j['email'] ?? '').toString(),
-        role: (j['role'] ?? 'employee').toString().toLowerCase(),
+        role: (j['role'] ?? 'employee').toString().toLowerCase().replaceAll(RegExp(r'[\s_-]+'), ''),
         department: (j['department'] ?? '').toString(),
         avatarUrl: j['avatarUrl']?.toString(),
         permissions: ((j['permissions'] as List?) ?? const []).map((e) => e.toString()).toSet(),
@@ -51,8 +51,15 @@ class HrUser {
 
   bool can(String perm) => permissions.contains(perm);
 
+  /// "superadmin" → "Super Admin", "hr" → "HR", "employee" → "Employee".
+  String get roleLabel {
+    const known = {'superadmin': 'Super Admin', 'admin': 'Admin', 'manager': 'Manager', 'hr': 'HR', 'hradmin': 'HR Admin', 'employee': 'Employee', 'owner': 'Owner'};
+    if (known.containsKey(role)) return known[role]!;
+    return role.isEmpty ? 'Employee' : '${role[0].toUpperCase()}${role.substring(1)}';
+  }
+
   /// Team tab is shown for roles that manage people (server still decides).
-  bool get isManager => const {'manager', 'admin', 'superadmin', 'super admin', 'hr'}.contains(role) || can('team.view');
+  bool get isManager => const {'manager', 'admin', 'superadmin', 'hr', 'hradmin', 'owner'}.contains(role) || can('team.view');
 }
 
 /// Session controller — restore from secure storage, login, logout.

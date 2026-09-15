@@ -15,6 +15,9 @@ class Fmt {
   static String weekday(DateTime d) => _weekday.format(d.toLocal());
   static String iso(DateTime d) => _iso.format(d);
 
+  /// 12 → "12", 1.5 → "1.5" (leave balances, counts).
+  static String num(num v) => v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(1);
+
   /// "7h 45m" from minutes.
   static String duration(int? minutes) {
     if (minutes == null || minutes <= 0) return '0m';

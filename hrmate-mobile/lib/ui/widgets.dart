@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/api.dart';
+import '../core/format.dart';
 import '../core/i18n.dart';
 import '../core/theme.dart';
 
@@ -156,4 +157,22 @@ void showOk(BuildContext context, String msg) {
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(content: Text(msg), backgroundColor: const Color(0xFF07945D)));
+}
+
+/// "Offline · last updated hh:mm" — shown whenever a screen renders cached
+/// data because the network call failed (ARCHITECTURE.md §6).
+class OfflineChip extends StatelessWidget {
+  final DateTime since;
+  const OfflineChip({super.key, required this.since});
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(color: HrBrand.amberContainer, borderRadius: BorderRadius.circular(999)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.wifi_off_rounded, size: 14, color: Color(0xFFB26A00)),
+          const SizedBox(width: 6),
+          Text(tr('Offline · last updated %s').arg(Fmt.time(since)),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFFB26A00))),
+        ]),
+      );
 }
