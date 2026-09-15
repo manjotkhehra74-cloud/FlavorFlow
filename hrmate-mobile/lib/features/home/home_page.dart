@@ -24,7 +24,6 @@ class HomePage extends StatelessWidget {
         slivers: [
           SliverAppBar(
             pinned: true,
-            expandedHeight: 0,
             title: Row(children: [
               Avatar(name: user?.name ?? '', url: user?.avatarUrl, size: 40),
               const SizedBox(width: 12),
