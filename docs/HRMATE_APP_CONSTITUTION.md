@@ -6,6 +6,10 @@ file. If a task conflicts with this file: **STOP and ask the owner** — never d
 
 > Hosted in the FlavorFlow repository (sister product, same owner) so any agent can fetch it.
 > Canonical copy inside the HRMate repository: `mobile/ARCHITECTURE.md` (committed verbatim).
+>
+> **Phase 0 is already written**: the folder `hrmate-mobile/` next to this file (FlavorFlow repo,
+> branch `arena/01a0858b-flavorflow`) contains the complete foundation — app code, Android
+> project, server route reference, tests, RELEASE.md. Copy it to `mobile/` as-is; do not rebuild it.
 
 ---
 
