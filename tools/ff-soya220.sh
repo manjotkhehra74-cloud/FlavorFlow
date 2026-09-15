@@ -71,8 +71,9 @@ for (const need of ['product_id', 'material_id', 'qty_per_cb', 'qty_per_tray']) 
 const extraReq = bcols.filter((c) => !['product_id', 'material_id', 'qty_per_cb', 'qty_per_tray'].includes(c.name) && c.notnull && c.dflt_value == null && !c.pk);
 if (extraReq.length) stop('packing_bom vich hor NOT NULL columns ne (' + extraReq.map((c) => c.name).join(', ') + ') — mainu dasso');
 
-const products = db.prepare('SELECT * FROM products').all()
-  .filter((p) => !pcols.includes('active') || p.active == null || Number(p.active) === 1);
+const allProducts = db.prepare('SELECT * FROM products').all();
+const products = allProducts.filter((p) => !pcols.includes('active') || p.active == null || Number(p.active) === 1);
+const inactive = allProducts.filter((p) => !products.includes(p));
 const materials = db.prepare('SELECT * FROM packing_materials').all();
 const bomOf = (pid) => db.prepare('SELECT b.material_id, b.qty_per_cb, b.qty_per_tray, m.name mname, m.unit, m.stock, m.category FROM packing_bom b JOIN packing_materials m ON m.id = b.material_id WHERE b.product_id = ? ORDER BY m.name').all(pid);
 const show = (rows) => {
@@ -94,7 +95,12 @@ function pick(kind, arr, idKey, re, prefer) {
 
 // ---------- 1) target product ----------
 let tc = pick('target', products, 'FF_TARGET_ID', RX.target, /dark/i);
-if (tc.length === 0) { console.log('TARGET: koi product "' + RX.target.source + '" naal match nahi — products:'); list(products); stop('target product nahi labhya (FF_TARGET_ID=<id> de ke chalao)'); }
+if (tc.length === 0) {
+  console.log('TARGET: koi product "' + RX.target.source + '" naal match nahi — products:'); list(products);
+  if (inactive.length) { console.log('      (inactive/hidden products:)'); list(inactive, () => '  [inactive]'); }
+  console.log('TARGET: je "Dark Soya 220" product ajje banaya nahi ta pehla app vich Products → + naal banao (naam vich "Soya" te "220" hove), fer eho command dobara chalao');
+  stop('target product nahi labhya (ya FF_TARGET_ID=<id> de ke chalao je kise hor naam naal hai)');
+}
 if (tc.length > 1) { console.log('TARGET: ' + tc.length + ' products match:'); list(tc); stop('target ambiguous (FF_TARGET_ID=<id>)'); }
 const target = tc[0];
 console.log('TARGET: #' + target.id + ' ' + target.name + ' (' + fmt(target.bottles_per_cb) + '/CB' + (num(target.bottles_per_tray) > 0 ? ', ' + fmt(target.bottles_per_tray) + '/tray' : '') + ')');
