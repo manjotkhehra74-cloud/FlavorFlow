@@ -16,6 +16,7 @@
 #     FF_SOURCE FF_DROP FF_CORK FF_LABEL)
 #   Idempotent — dobara chalao ta "already set ✓" (koi change nahi).
 #
+#   Uses the server's own db.js (like ff-packfix) — works with better-sqlite3 OR node:sqlite.
 #   Factory VM (flavorflow.duckdns.org) te chalauna:
 #     curl -s https://raw.githubusercontent.com/manjotkhehra74-cloud/FlavorFlow/arena/01a0858b-flavorflow/tools/ff-soya220.sh | sudo bash
 #   Override naal:
@@ -23,27 +24,27 @@
 set -u
 echo "=== FF-SOYA220 $(date) ==="
 
-if [ -n "${FF_DB:-}" ]; then
-  DBP="$FF_DB"; DIR="$(cd "$(dirname "$DBP")/.." && pwd)"
-elif [ -f /opt/flavorflow/server/data/erp.db ]; then
-  DIR=/opt/flavorflow/server; DBP=$DIR/data/erp.db
-else
-  echo "FATAL: factory DB nahi labhi (/opt/flavorflow/server/data/erp.db) — FF_DB=/path/erp.db de ke chalao"; exit 1
+# Server da apna db.js use karde haan (ohi jo ff-packfix / ff-lossfix ne kita) —
+# eh better-sqlite3 hove ya node:sqlite, prepare/run/get/all/exec ikko jehe ne.
+if [ -n "${FF_DIR:-}" ] && [ -f "$FF_DIR/db.js" ]; then DIR="$FF_DIR"
+elif [ -f /opt/flavorflow/server/db.js ]; then DIR=/opt/flavorflow/server
+else echo "FATAL: factory server (/opt/flavorflow/server/db.js) nahi labhya — eh script FACTORY VM (flavorflow.duckdns.org) te chalao"; exit 1
 fi
-NM=""
-for d in "$DIR/node_modules" /opt/flavorflow/server/node_modules /opt/flavorflow-saas/core/node_modules "${FF_NM:-/nonexistent}"; do
-  if [ -d "$d/better-sqlite3" ]; then NM="$d"; break; fi
-done
-if [ -z "$NM" ]; then echo "FATAL: better-sqlite3 (node_modules) nahi labhi"; exit 1; fi
+cd "$DIR" || exit 1
 BK="${FF_BACKUP_DIR:-/opt/flavorflow/backups}"
-[ -n "${FF_DB:-}" ] && BK="${FF_BACKUP_DIR:-$(dirname "$DBP")/backups}"
+[ -n "${FF_DIR:-}" ] && BK="${FF_BACKUP_DIR:-$DIR/backups}"
 mkdir -p "$BK" 2>/dev/null
-echo "DB: $DBP"
+echo "SERVER: $DIR"
 
-export FF_DBPATH="$DBP" FF_NMDIR="$NM" FF_BKDIR="$BK" FF_TS="$(date +%s)"
+export FF_BKDIR="$BK" FF_TS="$(date +%s)"
 node - <<'JS'
-const Database = require(process.env.FF_NMDIR + '/better-sqlite3');
-const db = new Database(process.env.FF_DBPATH);
+const fs = require('fs');
+let mod = require(process.cwd() + '/db');
+let db = mod && typeof mod.prepare === 'function' ? mod : (mod && (mod.db || mod.default));
+if (!db || typeof db.prepare !== 'function') {
+  console.log('FATAL: db.js ne DB handle export nahi kita (keys: ' + Object.keys(mod || {}).join(', ') + ') — mainu eh line bhejo');
+  process.exit(1);
+}
 const BK = process.env.FF_BKDIR + '/erp.db.bak-soya220-' + process.env.FF_TS;
 
 const rx = (env, def) => new RegExp(process.env[env] || def, 'i');
@@ -170,20 +171,34 @@ if (same) { console.log('BOM: ' + target.name + ' di BOM pehla hi eho hai — al
 console.log('BEFORE: ' + target.name + ' di purani BOM (' + before.length + ' lines):');
 show(before);
 
-(async () => {
-  try { await db.backup(BK); console.log('DB BACKUP: ' + BK); } catch (e) { console.log('FATAL: backup fail (' + e.message + ') — kuch nahi badleya'); process.exit(1); }
-  const del = db.prepare('DELETE FROM packing_bom WHERE product_id = ?');
-  const ins = db.prepare('INSERT INTO packing_bom (product_id, material_id, qty_per_cb, qty_per_tray) VALUES (?, ?, ?, ?)');
-  const tx = db.transaction(() => {
-    del.run(target.id);
-    for (const [mid, q] of desired) ins.run(target.id, mid, q.cb, q.tray);
-  });
-  try { tx(); } catch (e) { console.log('FATAL: write fail — rolled back (' + e.message + ')'); process.exit(1); }
-  const after = bomOf(target.id);
-  console.log('AFTER: ' + target.name + ' di navi BOM (' + after.length + ' lines):');
-  show(after);
-  console.log('SOYA220 DONE ✓ — ' + target.name + ' da batch complete karan te (Deduct packing ticked) eho material stock vicho katega');
-})();
+// backup: consistent snapshot (VACUUM INTO), fallback = file copy of the live DB
+let backed = false;
+try { db.exec("VACUUM INTO '" + BK.replace(/'/g, "''") + "'"); backed = true; } catch (_) {}
+if (!backed) {
+  try {
+    const row = db.prepare('PRAGMA database_list').all().find((r) => r.name === 'main');
+    const src = row && row.file ? row.file : 'data/erp.db';
+    try { db.exec('PRAGMA wal_checkpoint(TRUNCATE)'); } catch (_) {}
+    fs.copyFileSync(src, BK); backed = true;
+  } catch (e) { console.log('FATAL: backup fail (' + e.message + ') — kuch nahi badleya'); process.exit(1); }
+}
+console.log('DB BACKUP: ' + BK);
+
+const del = db.prepare('DELETE FROM packing_bom WHERE product_id = ?');
+const ins = db.prepare('INSERT INTO packing_bom (product_id, material_id, qty_per_cb, qty_per_tray) VALUES (?, ?, ?, ?)');
+db.exec('BEGIN');
+try {
+  del.run(target.id);
+  for (const [mid, q] of desired) ins.run(target.id, mid, q.cb, q.tray);
+  db.exec('COMMIT');
+} catch (e) {
+  try { db.exec('ROLLBACK'); } catch (_) {}
+  console.log('FATAL: write fail — rolled back (' + e.message + ')'); process.exit(1);
+}
+const after = bomOf(target.id);
+console.log('AFTER: ' + target.name + ' di navi BOM (' + after.length + ' lines):');
+show(after);
+console.log('SOYA220 DONE ✓ — ' + target.name + ' da batch complete karan te (Deduct packing ticked) eho material stock vicho katega');
 JS
 RC=$?
 echo ""
