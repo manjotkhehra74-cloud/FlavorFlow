@@ -31,6 +31,12 @@ Workflow `hrmate-beta` in `.circleci/config.yml` (this repo): push → `approve-
 the existing `ANDROID_KEYSTORE_*` project variables; if they are absent the job still
 produces a debug-signed APK (installable, not updatable over a release build).
 
+## Toolchain pin (do not "upgrade" casually)
+
+Gradle **8.10.2** · AGP **8.7.3** · Kotlin **2.1.0** · Java 17 — compatible with Flutter 3.27 → 3.35
+(Codemagic image uses 3.29; CircleCI uses stable). Gradle 9 / AGP 9 break Flutter ≤3.35's
+gradle plugin (`groovy.xml.QName` error at `:gradle:compileGroovy`).
+
 ## Versioning
 
 `pubspec.yaml` `version: 2.0.0+20` — bump the build number (+1) in every phase commit;
