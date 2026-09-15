@@ -10,6 +10,10 @@
 #     3) Crown Cork line jodda hai  (qty = source de PLUG wali line; nahi ta bottles/CB)
 #        Dark Soya 220 Label line   (qty = source de LABEL wali line; nahi ta bottles/CB)
 #     4) target di purani BOM di thaan navi BOM likhda hai (transaction; DB backup pehlan)
+#     5) COMMON materials (jo 180 te 220 dono vich ne) da NAAM "180" → "180/220" kar dinda hai
+#        (jiven "Bottle 180ml" → "Bottle 180/220ml") taan list vich dikhe ki eh dono layi use hunda —
+#        sirf ohi jinhan de naam vich "180" hai (generic BOPP tape etc. nahi); sirf naam badalda hai,
+#        ID/stock/history same rehndi hai.  FF_RENAME=0 → eh step skip.
 #   Kuch vi ambiguous (2 products match, crown cork / label nahi labhda…) → STOP,
 #   kuch nahi badalda, candidates print karda hai. Fer ID de ke dobara chalao:
 #     FF_TARGET_ID / FF_SOURCE_ID / FF_CORK_ID / FF_LABEL_ID   (ya regex: FF_TARGET
@@ -170,12 +174,34 @@ desired.set(cork.id, { cb: corkQ.cb, tray: corkQ.tray });
 desired.set(label.id, { cb: lblQ.cb, tray: lblQ.tray });
 if (![...desired.values()].some((q) => q.cb > 0 || q.tray > 0)) stop('navi BOM di saari qty 0 hai — kuch galat hai');
 
+// ---------- 5) common materials → naam vich "180/220" ----------
+// Sirf ohi lines jo 180 ton copy hoyian (bottle, carton, tray…) — cork/label nahi, dropped label/plug nahi.
+const tTag = (String(target.name).match(/(\d{2,4})/) || [])[1] || '220';     // "220"
+const sTag = (String(source.name).match(/(\d{2,4})/) || [])[1] || '180';     // "180"
+const bothTag = sTag + '/' + tTag;                                             // "180/220"
+const renameOf = (name) => {
+  const n = String(name || '');
+  if (n.includes(bothTag) || n.includes(tTag + '/' + sTag)) return null;       // already tagged
+  const m = n.match(new RegExp('(^|[^0-9])' + sTag + '(?![0-9])'));           // standalone "180"
+  if (m) return n.replace(new RegExp('(^|[^0-9])' + sTag + '(?![0-9])'), '$1' + bothTag);
+  return null;   // generic item (BOPP Tape, Strapping…) — naam vich "180" hi nahi, ohnu chhad do
+};
+const renames = process.env.FF_RENAME === '0' ? [] : keep
+  .map((l) => ({ id: l.material_id, from: l.mname, to: renameOf(l.mname) }))
+  .filter((r) => r.to && r.to !== r.from);
+const matNames = new Set(materials.map((m) => String(m.name).toLowerCase()));
+const clash = renames.filter((r) => matNames.has(r.to.toLowerCase()));
+if (clash.length) { console.log('WARN: eh naam pehla hi kise hor material de ne, rename skip: ' + clash.map((r) => r.to).join(', ')); }
+const doRenames = renames.filter((r) => !clash.includes(r));
+
 const before = bomOf(target.id);
 const same = before.length === desired.size && before.every((l) => { const d = desired.get(l.material_id); return d && fmt(d.cb) === fmt(l.qty_per_cb) && fmt(d.tray) === fmt(l.qty_per_tray); });
-if (same) { console.log('BOM: ' + target.name + ' di BOM pehla hi eho hai — already set ✓ (koi change nahi)'); show(before); console.log('SOYA220 DONE ✓'); process.exit(0); }
+if (same && !doRenames.length) { console.log('BOM: ' + target.name + ' di BOM pehla hi eho hai — already set ✓ (koi change nahi)'); show(before); console.log('SOYA220 DONE ✓'); process.exit(0); }
+if (same) console.log('BOM: ' + target.name + ' di BOM pehla hi eho hai ✓ — sirf naam update honge');
+if (doRenames.length) { console.log('RENAME: ' + doRenames.length + ' common material(s) da naam → "' + bothTag + '":'); for (const r of doRenames) console.log('      #' + r.id + '  ' + r.from + '  →  ' + r.to); }
+else console.log('RENAME: koi naam badalna nahi (pehla hi "' + bothTag + '" lagga hai ya FF_RENAME=0)');
 
-console.log('BEFORE: ' + target.name + ' di purani BOM (' + before.length + ' lines):');
-show(before);
+if (!same) { console.log('BEFORE: ' + target.name + ' di purani BOM (' + before.length + ' lines):'); show(before); }
 
 // backup: consistent snapshot (VACUUM INTO), fallback = file copy of the live DB
 let backed = false;
@@ -192,10 +218,14 @@ console.log('DB BACKUP: ' + BK);
 
 const del = db.prepare('DELETE FROM packing_bom WHERE product_id = ?');
 const ins = db.prepare('INSERT INTO packing_bom (product_id, material_id, qty_per_cb, qty_per_tray) VALUES (?, ?, ?, ?)');
+const ren = db.prepare('UPDATE packing_materials SET name = ? WHERE id = ?');
 db.exec('BEGIN');
 try {
-  del.run(target.id);
-  for (const [mid, q] of desired) ins.run(target.id, mid, q.cb, q.tray);
+  if (!same) {
+    del.run(target.id);
+    for (const [mid, q] of desired) ins.run(target.id, mid, q.cb, q.tray);
+  }
+  for (const r of doRenames) ren.run(r.to, r.id);
   db.exec('COMMIT');
 } catch (e) {
   try { db.exec('ROLLBACK'); } catch (_) {}
@@ -204,6 +234,7 @@ try {
 const after = bomOf(target.id);
 console.log('AFTER: ' + target.name + ' di navi BOM (' + after.length + ' lines):');
 show(after);
+if (doRenames.length) console.log('RENAMED: ' + doRenames.length + ' material(s) — hun Packing list vich "' + bothTag + '" naal dikhange (dono products di BOM vich ohi ID hai, stock/history same)');
 console.log('SOYA220 DONE ✓ — ' + target.name + ' da batch complete karan te (Deduct packing ticked) eho material stock vicho katega');
 JS
 RC=$?
