@@ -171,8 +171,9 @@ against `https://hr.flavorflow.co.in`), then build the screen that uses it.
 - **Versioning & identity:** native app started at `2.0.0+20`, build number +1 per phase
   (the WebView shell was 1.x). Phases 0–4 shipped as a **beta** with `applicationIdSuffix
   ".beta"` and label "HRMate Beta" next to the live app. Phase 5 builds `--flavor prod`
-  (no suffix) as **3.0.0+28**, signed with the v1.0.4 keystore so it installs as an update.
-  If that keystore is not available, say so — users will then uninstall the shell once.
+  (no suffix) as **3.0.0+28** with a **new private release key** held only in Codemagic
+  (env group `hrmate_release`). The shell (`com.gdfoods.hrmate`, key committed in the public
+  repo → compromised) is retired; users uninstall it once. See `mobile/RELEASE.md`.
 - Secrets (keystore, passwords, server secret) are never committed.
 
 ---
@@ -196,7 +197,7 @@ show the commit hash the APK was built from, and that hash must contain the phas
 | **P2 Punch** | location + geofence check with distance, native biometric confirm, punch in/out, result sheet, today's punches — **app code already written upstream** (`hrmate-mobile/lib/features/punch/`, `core/geo.dart`); server routes in `server-reference/…/attendance/punch`, `attendance/history` | API `attendance/punch`, `attendance/history`; 409 GEOFENCE shown clearly; a mobile punch shows up in the webapp attendance page |
 | **P3 Leaves** | balance chips, list with status filters, apply form (type, dates, half-day, reason), manager approve / reject — **app code already written upstream** (`hrmate-mobile/lib/features/leaves/`); server routes in `server-reference/…/leaves/`, `leaves/[id]/approve`, `leaves/[id]/reject` | leaves endpoints live; a request applied from the app appears on the webapp Leaves page and approving it changes `leaves/balance` |
 | **P4 Team** | manager today view (present / absent / on leave / late counts as filters), member search, member day detail with date switcher — **app code already written upstream** (`hrmate-mobile/lib/features/team/`); server routes in `server-reference/…/team/` | team endpoints live; tab hidden for non-managers and 403 on the server; counts match the webapp dashboard for the same day |
-| **P5 More + Release 3.0.0** | profile, holidays, attendance calendar (month grid on `attendance/history`), payslips (if any), language, biometric setting, about (version), logout — **app code already written upstream** (`hrmate-mobile/lib/features/more/`); server routes in `server-reference/…/me` (profile block), `holidays`, `payslips` · build `--flavor prod` (no `.beta`), sign with the v1.0.4 keystore, `3.0.0+28`, publish on `/download`, update download page copy | native app replaces the WebView shell: installs OVER it as an update (same applicationId + certificate) |
+| **P5 More + Release 3.0.0** | profile, holidays, attendance calendar (month grid on `attendance/history`), payslips (if any), language, biometric setting, about (version), logout — **app code already written upstream** (`hrmate-mobile/lib/features/more/`); server routes in `server-reference/…/me` (profile block), `holidays`, `payslips` · build `--flavor prod` (no `.beta`), sign with the v1.0.4 keystore, `3.0.0+28`, publish on `/download`, update download page copy | native app replaces the WebView shell (different package + new private key → the shell is uninstalled once); `apksigner` fingerprint recorded in RELEASE.md |
 | **P6 Push** | FCM: punch reminders, leave decisions, announcements; `devices/push-token` | notifications arrive with the app closed |
 | **P7 Polish** | dark theme, tablet layout, accessibility, crash reporting | — |
 

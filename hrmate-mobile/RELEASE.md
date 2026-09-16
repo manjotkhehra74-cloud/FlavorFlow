@@ -7,7 +7,7 @@ Same pipeline pattern as FlavorFlow (CircleCI, approval-gated). Nothing is built
 | Track | Flavor | applicationId | Label | Signed with | Who installs |
 |---|---|---|---|---|---|
 | Beta (Phases 0–4) | `beta` | `in.flavorflow.hrmate.beta` | HRMate Beta | FlavorFlow upload key (CircleCI env) | owner + testers, next to the live app |
-| Release (Phase 5+) | `prod` | `in.flavorflow.hrmate` | HRMate | v1.0.4 keystore (`HRMATE_KEYSTORE_*` env) | everyone via `hr.flavorflow.co.in/download` |
+| Release (Phase 5+) | `prod` | `in.flavorflow.hrmate` | HRMate | **HRMate release key** — Codemagic env group `hrmate_release` (`HRMATE_KEYSTORE_BASE64`, `HRMATE_KEYSTORE_PASSWORD`, `HRMATE_KEY_ALIAS`, `HRMATE_KEY_PASSWORD`), never in git | everyone via `hr.flavorflow.co.in/download` |
 
 ## Commands (what CI runs)
 
@@ -49,11 +49,32 @@ proves which build runs. Actual history: 2.0.0+20 P0 · 2.1.0+21 P1 · 2.2.0+22 
 
 ## Phase 5 (release track) checklist
 
-1. Obtain the v1.0.4 upload keystore + passwords from wherever the WebView shell was built;
-   add them in Codemagic as `HRMATE_KEYSTORE_BASE64 / HRMATE_KEYSTORE_PASSWORD /
-   HRMATE_KEY_ALIAS / HRMATE_KEY_PASSWORD` (secure group `hrmate_release`), and in the
-   workflow, before the build step, write `android/key.properties`:
+**Why the native app does NOT update the old shell.** The live WebView shell (v1.0.4/1.0.5) is
+package `com.gdfoods.hrmate`, signed with `hrmate-release.keystore`. That keystore *and its
+password* are committed in the public HRMate repo (root, `android/app/`, `public/` — i.e. also
+downloadable from the website) and printed in `PLAYSTORE_RELEASE.md`, so the key is compromised.
+Android only updates an app in place when package name **and** certificate match — neither does.
+Decision: the native app is `in.flavorflow.hrmate` (product identity, not the employer's), signed
+with a **new private key**; the shell is retired and users uninstall it once (a handful of staff).
+
+1. **New key, kept only in Codemagic.** Generate once, outside any repo, and never `git add` it:
    ```bash
+   keytool -genkeypair -v -keystore hrmate-release-3.jks -storetype JKS -keyalg RSA -keysize 2048 \
+     -validity 10000 -alias hrmate3 -dname "CN=HRMate, O=FlavorFlow, L=Amritsar, C=IN"
+   base64 -w0 hrmate-release-3.jks        # → HRMATE_KEYSTORE_BASE64
+   keytool -list -v -keystore hrmate-release-3.jks -alias hrmate3 | grep SHA256   # record below
+   ```
+   Codemagic → app → Environment variables → group **`hrmate_release`** (all *secure*):
+   `HRMATE_KEYSTORE_BASE64`, `HRMATE_KEYSTORE_PASSWORD`, `HRMATE_KEY_ALIAS` (=`hrmate3`),
+   `HRMATE_KEY_PASSWORD`. The owner also keeps the four values in a password manager — losing
+   them means every future update is a fresh install. Delete `public/hrmate-release.keystore`.
+2. **Prod workflow** (`flutter-android-prod`, manual start only — no push trigger):
+   `environment.groups: [hrmate_release]`; steps `flutter pub get` → `flutter analyze` →
+   `flutter test` → keystore step → `flutter build apk --release --flavor prod`. The keystore
+   step must **fail** when `HRMATE_KEYSTORE_BASE64` is empty — no fallback to any keystore in
+   the repo, no default passwords:
+   ```bash
+   set -e; [ -n "$HRMATE_KEYSTORE_BASE64" ] || { echo "hrmate_release env group missing"; exit 1; }
    echo "$HRMATE_KEYSTORE_BASE64" | base64 --decode > "$CM_BUILD_DIR/mobile/android/app/upload.keystore"
    cat > "$CM_BUILD_DIR/mobile/android/key.properties" <<EOF2
    storeFile=upload.keystore
@@ -62,15 +83,16 @@ proves which build runs. Actual history: 2.0.0+20 P0 · 2.1.0+21 P1 · 2.2.0+22 
    keyPassword=$HRMATE_KEY_PASSWORD
    EOF2
    ```
-   (`storeFile` is resolved relative to `android/app/`.) If the keystore is lost, say so
-   explicitly: users uninstall the shell once; the download page must explain it.
-2. Build `flutter build apk --release --flavor prod` → `app-prod-release.apk`. Verify with
-   `apksigner verify --print-certs app-prod-release.apk`: the SHA-256 must equal the shell's
-   certificate; `aapt dump badging … | grep package` → `name='in.flavorflow.hrmate'
-   versionCode='28' versionName='3.0.0'`. Only then does it install OVER the shell as an update.
-3. Publish on `hr.flavorflow.co.in/download` as `HRMate-3.0.0.apk` (+ `apk-info.txt`: version,
+   (`storeFile` is resolved relative to `android/app/`.)
+3. **Verify the artifact** `app-prod-release.apk`: `apksigner verify --print-certs` → SHA-256 must
+   equal the fingerprint recorded in step 1 (write it here once known:
+   `HRMate release key SHA-256: <fill in>`); `aapt dump badging … | grep package` →
+   `name='in.flavorflow.hrmate' versionCode='28' versionName='3.0.0'`. Same check for every
+   later build — a different fingerprint means the APK will not install as an update.
+4. Publish on `hr.flavorflow.co.in/download` as `HRMate-3.0.0.apk` (+ `apk-info.txt`: version,
    build, commit, date) and update the page copy: "HRMate 3.0.0 — native app; fingerprint punch,
-   leaves, team, holidays, payslips". Keep the beta build installable side-by-side (different id)
-   until testers have moved; then stop building `beta`.
-4. From now on every phase commit is built with `--flavor prod` (3.0.x / 3.1.0 …). The beta
+   leaves, team, holidays" plus one line: *"Using HRMate 1.x? Uninstall it first, then install
+   3.0.0 (one time)."* Keep the beta build installable side-by-side until testers have moved;
+   then stop building `beta`.
+5. From now on every phase commit is built with `--flavor prod` (3.0.x / 3.1.0 …). The beta
    flavor stays in the Gradle file for internal test builds only.
