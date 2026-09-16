@@ -85,8 +85,10 @@ with a **new private key**; the shell is retired and users uninstall it once (a 
    ```
    (`storeFile` is resolved relative to `android/app/`.)
 3. **Verify the artifact** `app-prod-release.apk`: `apksigner verify --print-certs` → SHA-256 must
-   equal the fingerprint recorded in step 1 (write it here once known:
-   `HRMate release key SHA-256: <fill in>`); `aapt dump badging … | grep package` →
+   equal the fingerprint recorded in step 1:
+   `HRMate release key SHA-256: 43:AC:7B:E5:76:D0:C1:A2:4E:5F:EE:85:A8:7C:6E:35:1B:E2:BB:9C:60:F2:F3:E1:5A:22:F8:27:EA:AE:37:DD`
+   (alias `hrmate3`, generated 2026-09-16, held only in Codemagic group `hrmate_release`);
+   `aapt dump badging … | grep package` →
    `name='in.flavorflow.hrmate' versionCode='29' versionName='3.0.0'`. Same check for every
    later build — a different fingerprint means the APK will not install as an update.
 4. Publish on `hr.flavorflow.co.in/download` as `HRMate-3.0.0.apk` (+ `apk-info.txt`: version,
