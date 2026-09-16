@@ -14,6 +14,8 @@ app/api/v1/mobile/
   attendance/today/route.ts ← Phase 1: GET → status/firstIn/lastOut/workedMinutes/shift/onLeave/holiday/geofence
   announcements/route.ts    ← Phase 1: GET → {items:[…]} (return [] if the webapp has no announcements)
   leaves/balance/route.ts   ← Phase 1: GET → {available, pending, balances:[…]}
+  attendance/punch/route.ts ← Phase 2: POST {type,lat,lng,accuracyM,mocked,method,deviceId} → {punch} · 409 GEOFENCE/CONFLICT
+  attendance/history/route.ts ← Phase 2: GET ?from&to → {days:[{date,status,firstIn,lastOut,workedMinutes,punches[]}]}
 ```
 
 Rules that every later route must follow (copy from `me/route.ts`):
@@ -57,4 +59,19 @@ curl -s https://hr.flavorflow.co.in/api/v1/mobile/attendance/today -H "authoriza
 # → {"ok":true,"status":"in","firstIn":"2026-09-16T03:32:00.000Z","lastOut":null,"workedMinutes":142,"shift":{"name":"General","start":"09:00","end":"18:00"},"onLeave":false,"holiday":false,"holidayName":null,"geofence":{"lat":31.42225,"lng":75.08436,"radiusM":150}}
 curl -s https://hr.flavorflow.co.in/api/v1/mobile/announcements -H "authorization: Bearer $T"      # → {"ok":true,"items":[…]}
 curl -s https://hr.flavorflow.co.in/api/v1/mobile/leaves/balance -H "authorization: Bearer $T"     # → {"ok":true,"available":12,"pending":1,"balances":[…]}
+```
+
+## Phase 2 verify
+
+```bash
+T=<token>
+# today's punches (empty list before the first punch)
+curl -s "https://hr.flavorflow.co.in/api/v1/mobile/attendance/history?from=$(date +%F)&to=$(date +%F)" -H "authorization: Bearer $T"
+# punch from OUTSIDE the geofence → must be 409 GEOFENCE
+curl -s -w '\n%{http_code}\n' -X POST https://hr.flavorflow.co.in/api/v1/mobile/attendance/punch -H "authorization: Bearer $T" -H 'content-type: application/json' \
+  -d '{"type":"in","lat":31.63,"lng":74.87,"accuracyM":10,"mocked":false,"method":"biometric","deviceId":"curl-1"}'
+# punch from INSIDE (site centre) → 200 {"ok":true,"punch":{…}}; a second identical call → 409 CONFLICT
+curl -s -w '\n%{http_code}\n' -X POST https://hr.flavorflow.co.in/api/v1/mobile/attendance/punch -H "authorization: Bearer $T" -H 'content-type: application/json' \
+  -d '{"type":"in","lat":31.4222459,"lng":75.0843618,"accuracyM":8,"mocked":false,"method":"biometric","deviceId":"curl-1"}'
+# the punch must now appear in the webapp's attendance page too (same store) — screenshot it
 ```

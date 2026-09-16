@@ -113,7 +113,7 @@ class _MorePageState extends State<MorePage> {
               ListTile(
                 leading: const Icon(Icons.info_outline_rounded, color: HrBrand.blue),
                 title: Text(tr('About')),
-                subtitle: Text(tr('Native app · Phase 1 Home')),
+                subtitle: Text(tr('Native app · Phase 2 Punch')),
                 trailing: Text(_version.isEmpty ? '' : '${tr('Version')} $_version', style: Theme.of(context).textTheme.bodySmall),
               ),
             ]),
