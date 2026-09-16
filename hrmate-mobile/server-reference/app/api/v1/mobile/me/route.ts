@@ -20,7 +20,7 @@ type Profile = {
   joinedOn: string | null;                       // date of joining, YYYY-MM-DD
   phone: string | null;
   manager: { id: string; name: string } | null;  // reporting manager
-  shift: { name: string; start: string; end: string } | null; // the SAME shift attendance/today returns
+  shift: { name: string; start: string; end: string } | null; // the employee's ASSIGNED shift (users.shift_id) — null when none is assigned; do NOT fall back to the time-of-day / first shift like attendance/today does (a profile must not change between morning and night)
   site: string | null;                           // work location / unit name
 };
 

@@ -45,7 +45,7 @@ release of the native app (the WebView shell was 1.x, so 3.0.0 is guaranteed hig
 installed `versionCode`/`versionName`). After P5: 3.0.x for fixes, 3.1.0 P6 push, 3.2.0 P7.
 The About row in More shows `version (build)` from `package_info_plus`, so a screenshot
 proves which build runs. Actual history: 2.0.0+20 P0 · 2.1.0+21 P1 · 2.2.0+22 P2 ·
-2.3.0+24 P3 · 2.4.0+27 P4 · **3.0.0+28 P5 (prod)**.
+2.3.0+24 P3 · 2.4.0+27 P4 · **3.0.0+29 P5 (prod)**.
 
 ## Phase 5 (release track) checklist
 
@@ -87,7 +87,7 @@ with a **new private key**; the shell is retired and users uninstall it once (a 
 3. **Verify the artifact** `app-prod-release.apk`: `apksigner verify --print-certs` → SHA-256 must
    equal the fingerprint recorded in step 1 (write it here once known:
    `HRMate release key SHA-256: <fill in>`); `aapt dump badging … | grep package` →
-   `name='in.flavorflow.hrmate' versionCode='28' versionName='3.0.0'`. Same check for every
+   `name='in.flavorflow.hrmate' versionCode='29' versionName='3.0.0'`. Same check for every
    later build — a different fingerprint means the APK will not install as an update.
 4. Publish on `hr.flavorflow.co.in/download` as `HRMate-3.0.0.apk` (+ `apk-info.txt`: version,
    build, commit, date) and update the page copy: "HRMate 3.0.0 — native app; fingerprint punch,

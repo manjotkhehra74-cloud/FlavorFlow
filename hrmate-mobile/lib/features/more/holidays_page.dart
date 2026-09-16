@@ -10,6 +10,7 @@ import '../../ui/widgets.dart';
 import 'more_models.dart';
 
 /// Holidays — `GET holidays?year=`; upcoming first, past ones greyed below.
+/// `optional:true` = observance only (factory works) → "Working day"; else "Day off".
 class HolidaysPage extends StatefulWidget {
   const HolidaysPage({super.key});
   @override
@@ -144,7 +145,7 @@ class _HolidayRow extends StatelessWidget {
       ),
       title: Text(h.name, style: t.titleMedium),
       subtitle: Text(Fmt.weekday(h.date), style: t.bodySmall),
-      trailing: h.optional ? StatusPill.warning(tr('Optional')) : null,
+      trailing: h.optional ? StatusPill.warning(tr('Working day')) : StatusPill.success(tr('Day off')),
     );
   }
 }

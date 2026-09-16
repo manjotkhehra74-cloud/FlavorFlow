@@ -129,6 +129,7 @@ T=<token>
 # profile block on /me (every field may be null; the app hides null rows)
 curl -s https://hr.flavorflow.co.in/api/v1/mobile/me -H "authorization: Bearer $T"
 # → {"ok":true,"user":{…},"profile":{"designation":"…","joinedOn":"2021-04-01","phone":"…","manager":{"id":"u_…","name":"…"},"shift":{"name":"Season Day Shift","start":"07:00","end":"19:00"},"site":"…"}}
+#   profile.shift = ASSIGNED shift only (null when the user has no shift_id) — must be the same at 8 AM and 11 PM
 # holidays of this year — same list as the webapp holiday calendar
 curl -s "https://hr.flavorflow.co.in/api/v1/mobile/holidays?year=$(date +%Y)" -H "authorization: Bearer $T"
 # → {"ok":true,"year":2026,"items":[{"date":"2026-10-02","name":"Gandhi Jayanti","type":"public","optional":false},…]}
