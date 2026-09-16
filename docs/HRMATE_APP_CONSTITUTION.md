@@ -144,7 +144,7 @@ permission model — no second user table, no duplicated business rules.
 | `GET attendance/today` | `{status:"in"\|"out"\|"none", firstIn, lastOut, workedMinutes, shift{name,start,end}, geofence{lat,lng,radiusM}}` |
 | `POST attendance/punch {type:"in"\|"out", lat, lng, accuracyM, method:"biometric"\|"password", deviceId}` | 200 record · 409 `GEOFENCE` with `distanceM` |
 | `GET attendance/history?from&to` | day rows for calendar / list |
-| `GET leaves/balance` · `GET leaves?status=` · `POST leaves {type, from, to, halfDay, reason}` | employee leaves |
+| `GET leaves/balance` · `GET leaves?status=&scope=mine\|team` · `POST leaves {type, from, to, halfDay, reason}` | employee leaves (`scope=team` = requests the caller may approve) |
 | `POST leaves/:id/approve` · `POST leaves/:id/reject {reason}` | manager actions |
 | `GET team/today` · `GET team/members?q=` · `GET team/members/:id/day?date=` | manager views |
 | `GET holidays` · `GET announcements` · `GET payslips` (only if the webapp has payslips) | More tab |
@@ -189,7 +189,7 @@ changed · **Deviations: none**.
 | **P0 Foundation** | `mobile/` project, this file, `RELEASE.md`, theme (§4), `ApiClient`, `AuthController`, `secure.dart`, router + shell with 5 placeholder tabs, login screen, splash, Mobile API `auth/login` + `me` + `auth/logout` | real login against `hr.flavorflow.co.in` works; Home placeholder shows the logged-in user's name and role; fingerprint unlock toggle works; beta APK installs beside the live app |
 | **P1 Home** | today card (status, first in / last out, worked), quick tiles, announcements, pull-to-refresh — **app code already written upstream** (`hrmate-mobile/lib/features/home/`, `core/cache.dart`); server routes in `server-reference/…/attendance/today`, `announcements`, `leaves/balance` | API `attendance/today`, `announcements`, `leaves/balance` live; offline chip works |
 | **P2 Punch** | location + geofence check with distance, native biometric confirm, punch in/out, result sheet, today's punches — **app code already written upstream** (`hrmate-mobile/lib/features/punch/`, `core/geo.dart`); server routes in `server-reference/…/attendance/punch`, `attendance/history` | API `attendance/punch`, `attendance/history`; 409 GEOFENCE shown clearly; a mobile punch shows up in the webapp attendance page |
-| **P3 Leaves** | balance chips, list with status filters, apply form (type, dates, half-day, reason), manager approve / reject | leaves endpoints live |
+| **P3 Leaves** | balance chips, list with status filters, apply form (type, dates, half-day, reason), manager approve / reject — **app code already written upstream** (`hrmate-mobile/lib/features/leaves/`); server routes in `server-reference/…/leaves/`, `leaves/[id]/approve`, `leaves/[id]/reject` | leaves endpoints live; a request applied from the app appears on the webapp Leaves page and approving it changes `leaves/balance` |
 | **P4 Team** | manager today view (present / absent / on leave), member search, member day detail | team endpoints live; tab hidden for non-managers |
 | **P5 More + Release 2.0.0** | profile, holidays, attendance calendar, payslips (if any), language, biometric setting, about (version), logout · remove `.beta`, sign with v1.0.4 keystore, publish on `/download`, update download page copy | native app replaces the WebView shell |
 | **P6 Push** | FCM: punch reminders, leave decisions, announcements; `devices/push-token` | notifications arrive with the app closed |

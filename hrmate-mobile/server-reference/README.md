@@ -16,7 +16,14 @@ app/api/v1/mobile/
   leaves/balance/route.ts   ← Phase 1: GET → {available, pending, balances:[…]}
   attendance/punch/route.ts ← Phase 2: POST {type,lat,lng,accuracyM,mocked,method,deviceId} → {punch} · 409 GEOFENCE/CONFLICT
   attendance/history/route.ts ← Phase 2: GET ?from&to → {days:[{date,status,firstIn,lastOut,workedMinutes,punches[]}]}
+  leaves/route.ts           ← Phase 3: GET ?status&scope=mine|team → {items:[…]} · POST {type,from,to,halfDay,reason} → {leave}
+  leaves/[id]/approve/route.ts ← Phase 3: POST → {leave} (manager/HR/admin; 403 otherwise)
+  leaves/[id]/reject/route.ts  ← Phase 3: POST {reason} → {leave}
 ```
+
+Phase 3 note: `_lib/mobileAuth.ts` `handle()` now passes the route context through
+(`handle(async (req, ctx) => …)`) so `[id]` routes can read `ctx.params.id`. Existing
+one-argument handlers keep working unchanged — re-copy `_lib/mobileAuth.ts` too.
 
 Rules that every later route must follow (copy from `me/route.ts`):
 
@@ -74,4 +81,23 @@ curl -s -w '\n%{http_code}\n' -X POST https://hr.flavorflow.co.in/api/v1/mobile/
 curl -s -w '\n%{http_code}\n' -X POST https://hr.flavorflow.co.in/api/v1/mobile/attendance/punch -H "authorization: Bearer $T" -H 'content-type: application/json' \
   -d '{"type":"in","lat":31.4222459,"lng":75.0843618,"accuracyM":8,"mocked":false,"method":"biometric","deviceId":"curl-1"}'
 # the punch must now appear in the webapp's attendance page too (same store) — screenshot it
+```
+
+## Phase 3 verify
+
+```bash
+T=<token>
+# balance per type (already live from Phase 1) and my requests
+curl -s https://hr.flavorflow.co.in/api/v1/mobile/leaves/balance -H "authorization: Bearer $T"
+curl -s "https://hr.flavorflow.co.in/api/v1/mobile/leaves" -H "authorization: Bearer $T"
+# apply (a date a few days ahead) → 200 {"ok":true,"leave":{…,"status":"pending"}}
+curl -s -w '\n%{http_code}\n' -X POST https://hr.flavorflow.co.in/api/v1/mobile/leaves -H "authorization: Bearer $T" -H 'content-type: application/json' \
+  -d '{"type":"EL","from":"2026-09-25","to":"2026-09-25","halfDay":false,"reason":"Family function"}'
+# same dates again → 409 CONFLICT (overlap); missing reason → 400 VALIDATION
+# team scope (manager) → the request above must appear
+curl -s "https://hr.flavorflow.co.in/api/v1/mobile/leaves?scope=team&status=pending" -H "authorization: Bearer $T"
+# approve / reject (use the id from the create response)
+curl -s -X POST https://hr.flavorflow.co.in/api/v1/mobile/leaves/<id>/approve -H "authorization: Bearer $T"
+curl -s -X POST https://hr.flavorflow.co.in/api/v1/mobile/leaves/<id>/reject -H "authorization: Bearer $T" -H 'content-type: application/json' -d '{"reason":"Peak season"}'
+# → after approve, leaves/balance must show used +1 / available -1 and the webapp Leaves page shows the same request
 ```
