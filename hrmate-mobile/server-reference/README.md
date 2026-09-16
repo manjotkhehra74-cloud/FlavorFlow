@@ -21,6 +21,10 @@ app/api/v1/mobile/
   leaves/route.ts           ← Phase 3: GET ?status&scope=mine|team → {items:[…]} · POST {type,from,to,halfDay,reason} → {leave}
   leaves/[id]/approve/route.ts ← Phase 3: POST → {leave} (manager/HR/admin; 403 otherwise)
   leaves/[id]/reject/route.ts  ← Phase 3: POST {reason} → {leave}
+  team/_shared.ts           ← Phase 4: requireTeamAccess / teamMemberIds / memberDay (wire to the webapp's reporting-line rule)
+  team/today/route.ts       ← Phase 4: GET ?date → {date, counts{total,present,absent,onLeave,late}, members[]}
+  team/members/route.ts     ← Phase 4: GET ?q → {items[]}
+  team/members/[id]/day/route.ts ← Phase 4: GET ?date → {member, shift, day{…punches[]}}
 ```
 
 Phase 3 note: `_lib/mobileAuth.ts` `handle()` now passes the route context through
@@ -102,4 +106,16 @@ curl -s "https://hr.flavorflow.co.in/api/v1/mobile/leaves?scope=team&status=pend
 curl -s -X POST https://hr.flavorflow.co.in/api/v1/mobile/leaves/<id>/approve -H "authorization: Bearer $T"
 curl -s -X POST https://hr.flavorflow.co.in/api/v1/mobile/leaves/<id>/reject -H "authorization: Bearer $T" -H 'content-type: application/json' -d '{"reason":"Peak season"}'
 # → after approve, leaves/balance must show used +1 / available -1 and the webapp Leaves page shows the same request
+```
+
+## Phase 4 verify
+
+```bash
+T=<token of WKH00416 (super_admin → sees everyone)>
+curl -s https://hr.flavorflow.co.in/api/v1/mobile/team/today -H "authorization: Bearer $T"
+# → {"ok":true,"date":"2026-09-17","counts":{"total":N,"present":…,"absent":…,"onLeave":…,"late":…},"members":[{"id":"u_…","code":"WKH00418","name":"Ravinder Singh","department":"…","status":"leave","leaveType":"CL",…},…]}
+curl -s "https://hr.flavorflow.co.in/api/v1/mobile/team/members?q=rav" -H "authorization: Bearer $T"          # → items: Ravinder only
+curl -s "https://hr.flavorflow.co.in/api/v1/mobile/team/members/<ravinder id>/day?date=$(date +%F)" -H "authorization: Bearer $T"
+# → member + shift + day.punches (today's list) — same numbers the webapp attendance page shows for him
+# non-manager token (an employee login) → team/today must be 403 FORBIDDEN
 ```
