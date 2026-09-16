@@ -184,6 +184,11 @@ built by the pipeline and installed on a real phone · screenshots of every new/
 screen · `git log -1` hash in the reply (pushed) · no files outside the phase's scope
 changed · **Deviations: none**.
 
+**Order inside a phase (fixed):** ① server routes → commit → deploy → curls pass ② app
+files → **commit + push** (`git status` clean) ③ Codemagic build **from that pushed commit**
+④ install + screenshots. An APK built from uncommitted files is invalid — the pipeline must
+show the commit hash the APK was built from, and that hash must contain the phase's files.
+
 | Phase | Scope | Done when |
 |---|---|---|
 | **P0 Foundation** | `mobile/` project, this file, `RELEASE.md`, theme (§4), `ApiClient`, `AuthController`, `secure.dart`, router + shell with 5 placeholder tabs, login screen, splash, Mobile API `auth/login` + `me` + `auth/logout` | real login against `hr.flavorflow.co.in` works; Home placeholder shows the logged-in user's name and role; fingerprint unlock toggle works; beta APK installs beside the live app |
