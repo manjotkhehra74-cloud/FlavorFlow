@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { handle, ok, requireMobileUser } from '../../_lib/mobileAuth';
-import { listLeaveTypes, shortCode } from '../../_lib/leaveTypes';
+import { assignCodes, matchLeaveType } from '../../_lib/leaveCodes';
+import { listLeaveTypes } from '../../_lib/leaveTypes';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,11 +12,11 @@ export const dynamic = 'force-dynamic';
 export const GET = handle(async (req: NextRequest) => {
   const { user } = await requireMobileUser(req);
   const balance = await loadLeaveBalance(user.id); // TODO wire
-  // `type` MUST be shortCode(t) from _lib/leaveTypes.ts (same value the app sends back on POST leaves).
-  const types = await listLeaveTypes();
+  // `type` MUST be the unique code from _lib/leaveCodes.ts ("EL") — the app sends it back on POST leaves.
+  const types = assignCodes(await listLeaveTypes());
   const balances = (balance.balances as Array<Record<string, unknown>>).map((row) => {
-    const t = types.find((x) => x.key === row.key || x.key === row.type || shortCode(x) === row.type);
-    return { ...row, type: t ? shortCode(t) : String(row.type || '').toUpperCase(), name: t?.name ?? row.name };
+    const t = matchLeaveType(String(row.key ?? row.type ?? ''), types);
+    return { ...row, type: t ? t.code : String(row.type || '').toUpperCase(), name: t?.name ?? row.name };
   });
   return ok({ ...balance, balances });
 });

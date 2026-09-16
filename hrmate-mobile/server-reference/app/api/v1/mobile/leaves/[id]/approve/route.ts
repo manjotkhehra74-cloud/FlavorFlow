@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { fail, handle, ok, requireMobileUser } from '../../../_lib/mobileAuth';
+// response `leave.type` must be publicType(record.leaveTypeKey, assignCodes(await listLeaveTypes())).type — see _lib/leaveCodes.ts
 
 export const dynamic = 'force-dynamic';
 
