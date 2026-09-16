@@ -19,7 +19,9 @@ export async function requireTeamAccess(userId: string): Promise<void> {
 }
 
 // The people this user manages (webapp reporting line / department rule). For super_admin / HR
-// this is everyone active. Never include the caller themself.
+// this is everyone active. Never include the caller themself. Exclude system / service accounts
+// (e.g. the seeded "Super Admin" login) and inactive / exited employees — only real staff who are
+// expected to punch. `code` MUST be the employee code (e.g. WKH00418), never the internal user id.
 export async function teamMemberIds(userId: string): Promise<string[]> { throw new Error('TODO: team of ' + userId); }
 export async function canViewTeam(userId: string): Promise<boolean> { throw new Error('TODO: team visibility for ' + userId); }
 

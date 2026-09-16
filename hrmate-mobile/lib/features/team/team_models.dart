@@ -36,7 +36,7 @@ class TeamMember {
     final att = j['today'] is Map ? (j['today'] as Map).cast<String, dynamic>() : j;
     return TeamMember(
       id: (j['id'] ?? j['userId'] ?? '').toString(),
-      code: (j['code'] ?? j['employeeCode'] ?? '').toString(),
+      code: _employeeCode(j['code'] ?? j['employeeCode']),
       name: (j['name'] ?? '').toString(),
       department: (j['department'] ?? '').toString(),
       designation: j['designation']?.toString(),
@@ -48,6 +48,12 @@ class TeamMember {
       late: att['late'] == true,
       leaveType: att['leaveType']?.toString(),
     );
+  }
+
+  /// Employee code only — an internal id (`u_…`) is never shown in place of it.
+  static String _employeeCode(dynamic v) {
+    final s = (v ?? '').toString().trim();
+    return s.startsWith('u_') ? '' : s;
   }
 
   static List<TeamMember> listFromJson(dynamic json) {
