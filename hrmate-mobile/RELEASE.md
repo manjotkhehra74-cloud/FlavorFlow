@@ -7,7 +7,7 @@ Same pipeline pattern as FlavorFlow (CircleCI, approval-gated). Nothing is built
 | Track | Flavor | applicationId | Label | Signed with | Who installs |
 |---|---|---|---|---|---|
 | Beta (Phases 0–4) | `beta` | `in.flavorflow.hrmate.beta` | HRMate Beta | FlavorFlow upload key (CircleCI env) | owner + testers, next to the live app |
-| Release (Phase 5+) | `prod` | `in.flavorflow.hrmate` | HRMate | **HRMate release key** — Codemagic env group `hrmate_release` (`HRMATE_KEYSTORE_BASE64`, `HRMATE_KEYSTORE_PASSWORD`, `HRMATE_KEY_ALIAS`, `HRMATE_KEY_PASSWORD`), never in git | everyone via `hr.flavorflow.co.in/download` |
+| Release (Phase 5+) | `prod` | `in.flavorflow.hrmate` | HRMate | **HRMate release key** — Codemagic env group `hrmate_release` (`HRMATE_KEYSTORE_BASE64` + `HRMATE_KEYSTORE_PASSWORD`; alias fixed `hrmate3`, key password = store password), never in git | everyone via `hr.flavorflow.co.in/download` |
 
 ## Commands (what CI runs)
 
@@ -57,37 +57,44 @@ Android only updates an app in place when package name **and** certificate match
 Decision: the native app is `in.flavorflow.hrmate` (product identity, not the employer's), signed
 with a **new private key**; the shell is retired and users uninstall it once (a handful of staff).
 
-1. **New key, kept only in Codemagic.** Generate once, outside any repo, and never `git add` it:
+1. **New key, kept only in Codemagic.** Generate once, outside any repo, never `git add` it.
+   ONE password for store and key, alias fixed `hrmate3` — so the owner has only two values
+   to enter:
    ```bash
+   P=$(openssl rand -base64 18)     # the single password
    keytool -genkeypair -v -keystore hrmate-release-3.jks -storetype JKS -keyalg RSA -keysize 2048 \
-     -validity 10000 -alias hrmate3 -dname "CN=HRMate, O=FlavorFlow, L=Amritsar, C=IN"
-   base64 -w0 hrmate-release-3.jks        # → HRMATE_KEYSTORE_BASE64
-   keytool -list -v -keystore hrmate-release-3.jks -alias hrmate3 | grep SHA256   # record below
+     -validity 10000 -alias hrmate3 -storepass "$P" -keypass "$P" \
+     -dname "CN=HRMate, O=FlavorFlow, L=Amritsar, C=IN"
+   base64 -w0 hrmate-release-3.jks        # → HRMATE_KEYSTORE_BASE64 (one line)
+   echo "$P"                              # → HRMATE_KEYSTORE_PASSWORD
+   keytool -list -v -keystore hrmate-release-3.jks -alias hrmate3 -storepass "$P" | grep SHA256   # record below
    ```
-   Codemagic → app → Environment variables → group **`hrmate_release`** (all *secure*):
-   `HRMATE_KEYSTORE_BASE64`, `HRMATE_KEYSTORE_PASSWORD`, `HRMATE_KEY_ALIAS` (=`hrmate3`),
-   `HRMATE_KEY_PASSWORD`. The owner also keeps the four values in a password manager — losing
-   them means every future update is a fresh install. Delete `public/hrmate-release.keystore`.
+   Codemagic → app → Environment variables → group **`hrmate_release`**, both *secure*:
+   `HRMATE_KEYSTORE_BASE64`, `HRMATE_KEYSTORE_PASSWORD`. (Optional overrides: `HRMATE_KEY_ALIAS`
+   default `hrmate3`, `HRMATE_KEY_PASSWORD` default = store password.) The owner also keeps the
+   two values in a password manager — losing them means every future update is a fresh install.
 2. **Prod workflow** (`flutter-android-prod`, manual start only — no push trigger):
    `environment.groups: [hrmate_release]`; steps `flutter pub get` → `flutter analyze` →
    `flutter test` → keystore step → `flutter build apk --release --flavor prod`. The keystore
    step must **fail** when `HRMATE_KEYSTORE_BASE64` is empty — no fallback to any keystore in
    the repo, no default passwords:
    ```bash
-   set -e; [ -n "$HRMATE_KEYSTORE_BASE64" ] || { echo "hrmate_release env group missing"; exit 1; }
+   set -e
+   [ -n "$HRMATE_KEYSTORE_BASE64" ] || { echo "hrmate_release env group missing"; exit 1; }
+   [ -n "$HRMATE_KEYSTORE_PASSWORD" ] || { echo "HRMATE_KEYSTORE_PASSWORD missing"; exit 1; }
    echo "$HRMATE_KEYSTORE_BASE64" | base64 --decode > "$CM_BUILD_DIR/mobile/android/app/upload.keystore"
    cat > "$CM_BUILD_DIR/mobile/android/key.properties" <<EOF2
    storeFile=upload.keystore
    storePassword=$HRMATE_KEYSTORE_PASSWORD
-   keyAlias=$HRMATE_KEY_ALIAS
-   keyPassword=$HRMATE_KEY_PASSWORD
+   keyAlias=${HRMATE_KEY_ALIAS:-hrmate3}
+   keyPassword=${HRMATE_KEY_PASSWORD:-$HRMATE_KEYSTORE_PASSWORD}
    EOF2
    ```
    (`storeFile` is resolved relative to `android/app/`.)
 3. **Verify the artifact** `app-prod-release.apk`: `apksigner verify --print-certs` → SHA-256 must
    equal the fingerprint recorded in step 1:
-   `HRMate release key SHA-256: 43:AC:7B:E5:76:D0:C1:A2:4E:5F:EE:85:A8:7C:6E:35:1B:E2:BB:9C:60:F2:F3:E1:5A:22:F8:27:EA:AE:37:DD`
-   (alias `hrmate3`, generated 2026-09-16, held only in Codemagic group `hrmate_release`);
+   `HRMate release key SHA-256: <written by the HRMate agent when the key is generated>`
+   (alias `hrmate3`, held only in Codemagic group `hrmate_release`);
    `aapt dump badging … | grep package` →
    `name='in.flavorflow.hrmate' versionCode='29' versionName='3.0.0'`. Same check for every
    later build — a different fingerprint means the APK will not install as an update.
