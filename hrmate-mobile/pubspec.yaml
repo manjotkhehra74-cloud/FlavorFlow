@@ -3,7 +3,7 @@ description: HRMate — native Android app for the HRMate Workforce Portal (atte
 publish_to: "none"
 
 # Native app series = 2.x (the WebView shell was 1.x). Bump +1 per phase.
-version: 2.4.0+27
+version: 3.0.0+28
 
 environment:
   sdk: ">=3.5.0 <4.0.0"

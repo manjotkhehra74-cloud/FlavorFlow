@@ -2,16 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/api.dart';
 import '../../core/i18n.dart';
 import '../../core/secure.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
+import 'calendar_page.dart';
+import 'holidays_page.dart';
+import 'payslips_page.dart';
+import 'profile_page.dart';
 
-/// More — Phase 0 ships the parts every build needs for verification:
-/// signed-in identity, language, fingerprint unlock toggle, About (version)
-/// and Sign out. Phase 5 ADDS profile, holidays, calendar, payslips tiles
-/// above these rows.
+/// More — Phase 0: identity, language, fingerprint unlock, About, Sign out.
+/// Phase 5 adds the tiles grid (Profile · My attendance · Holidays · Payslips)
+/// between the identity card and the settings rows. Payslips hides itself when
+/// the server has no payslips module (404 on `GET payslips`).
 class MorePage extends StatefulWidget {
   const MorePage({super.key});
   @override
@@ -22,6 +27,7 @@ class _MorePageState extends State<MorePage> {
   bool _bioAvailable = false;
   bool _bioEnabled = false;
   String _version = '';
+  bool _payslips = true; // false once the server says 404 (module absent)
 
   @override
   void initState() {
@@ -35,8 +41,21 @@ class _MorePageState extends State<MorePage> {
         v = '${info.version} (${info.buildNumber})';
       } catch (_) {}
       if (mounted) setState(() { _bioAvailable = a; _bioEnabled = e; _version = v; });
+      _probePayslips();
     }();
   }
+
+  Future<void> _probePayslips() async {
+    if (!mounted) return;
+    final api = context.read<AuthController>().api;
+    try {
+      await api.get('/payslips');
+    } on ApiException catch (e) {
+      if (e.status == 404 && mounted) setState(() => _payslips = false);
+    } catch (_) {}
+  }
+
+  void _push(Widget page) => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
 
   Future<void> _toggleBio(bool on) async {
     if (on) {
@@ -86,7 +105,21 @@ class _MorePageState extends State<MorePage> {
             ]),
           ),
           const SizedBox(height: 16),
-          // Phase 5 inserts its tiles grid here.
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 10,
+            crossAxisSpacing: 10,
+            childAspectRatio: 1.9,
+            children: [
+              _Tile(icon: Icons.person_outline_rounded, label: tr('Profile'), onTap: () => _push(const ProfilePage())),
+              _Tile(icon: Icons.calendar_month_rounded, label: tr('My attendance'), onTap: () => _push(const CalendarPage())),
+              _Tile(icon: Icons.celebration_outlined, label: tr('Holidays'), onTap: () => _push(const HolidaysPage())),
+              if (_payslips) _Tile(icon: Icons.receipt_long_outlined, label: tr('Payslips'), onTap: () => _push(const PayslipsPage())),
+            ],
+          ),
+          const SizedBox(height: 16),
           HrCard(
             padding: EdgeInsets.zero,
             child: Column(children: [
@@ -113,7 +146,7 @@ class _MorePageState extends State<MorePage> {
               ListTile(
                 leading: const Icon(Icons.info_outline_rounded, color: HrBrand.blue),
                 title: Text(tr('About')),
-                subtitle: Text(tr('Native app · Phase 4 Team')),
+                subtitle: Text(tr('Native app · Phase 5 Release')),
                 trailing: Text(_version.isEmpty ? '' : '${tr('Version')} $_version', style: Theme.of(context).textTheme.bodySmall),
               ),
             ]),
@@ -128,4 +161,26 @@ class _MorePageState extends State<MorePage> {
       ),
     );
   }
+}
+
+class _Tile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  const _Tile({required this.icon, required this.label, required this.onTap});
+  @override
+  Widget build(BuildContext context) => HrCard(
+        onTap: onTap,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: const BoxDecoration(color: HrBrand.blueContainer, shape: BoxShape.circle),
+            child: Icon(icon, color: HrBrand.blue, size: 20),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: Text(label, style: Theme.of(context).textTheme.titleSmall, maxLines: 2, overflow: TextOverflow.ellipsis)),
+        ]),
+      );
 }

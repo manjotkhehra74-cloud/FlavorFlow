@@ -147,7 +147,7 @@ permission model — no second user table, no duplicated business rules.
 | `GET leaves/balance` · `GET leaves?status=&scope=mine\|team` · `POST leaves {type, from, to, halfDay, reason}` | employee leaves (`scope=team` = requests the caller may approve) |
 | `POST leaves/:id/approve` · `POST leaves/:id/reject {reason}` | manager actions |
 | `GET team/today` · `GET team/members?q=` · `GET team/members/:id/day?date=` | manager views |
-| `GET holidays` · `GET announcements` · `GET payslips` (only if the webapp has payslips) | More tab |
+| `GET me` (+`profile{designation,joinedOn,phone,manager,shift,site}`) · `GET holidays?year=` · `GET announcements` · `GET payslips` (create ONLY if the webapp has payroll; 404 hides the tile) | More tab |
 | `POST devices/push-token {token, platform}` | Phase 6 |
 
 Rule: **build the endpoint on the webapp first** (reply includes a working `curl` example
@@ -168,11 +168,11 @@ against `https://hr.flavorflow.co.in`), then build the screen that uses it.
   built once.
 - Android: `minSdk 26`, latest stable `targetSdk`; permissions declared only for features
   that exist (internet, fine location, biometric, notifications from Phase 6).
-- **Versioning & identity:** native app = `2.0.0+20`, build number +1 per phase (the
-  WebView shell was 1.x). Phases 0–4 ship as a **beta** with `applicationIdSuffix ".beta"`
-  and label "HRMate Beta" so it installs next to the live app. Phase 5 removes the suffix
-  and signs with the v1.0.4 keystore so it installs as an update. If that keystore is not
-  available, say so in Phase 0 — users will then uninstall the shell once at 2.0.0.
+- **Versioning & identity:** native app started at `2.0.0+20`, build number +1 per phase
+  (the WebView shell was 1.x). Phases 0–4 shipped as a **beta** with `applicationIdSuffix
+  ".beta"` and label "HRMate Beta" next to the live app. Phase 5 builds `--flavor prod`
+  (no suffix) as **3.0.0+28**, signed with the v1.0.4 keystore so it installs as an update.
+  If that keystore is not available, say so — users will then uninstall the shell once.
 - Secrets (keystore, passwords, server secret) are never committed.
 
 ---
@@ -196,7 +196,7 @@ show the commit hash the APK was built from, and that hash must contain the phas
 | **P2 Punch** | location + geofence check with distance, native biometric confirm, punch in/out, result sheet, today's punches — **app code already written upstream** (`hrmate-mobile/lib/features/punch/`, `core/geo.dart`); server routes in `server-reference/…/attendance/punch`, `attendance/history` | API `attendance/punch`, `attendance/history`; 409 GEOFENCE shown clearly; a mobile punch shows up in the webapp attendance page |
 | **P3 Leaves** | balance chips, list with status filters, apply form (type, dates, half-day, reason), manager approve / reject — **app code already written upstream** (`hrmate-mobile/lib/features/leaves/`); server routes in `server-reference/…/leaves/`, `leaves/[id]/approve`, `leaves/[id]/reject` | leaves endpoints live; a request applied from the app appears on the webapp Leaves page and approving it changes `leaves/balance` |
 | **P4 Team** | manager today view (present / absent / on leave / late counts as filters), member search, member day detail with date switcher — **app code already written upstream** (`hrmate-mobile/lib/features/team/`); server routes in `server-reference/…/team/` | team endpoints live; tab hidden for non-managers and 403 on the server; counts match the webapp dashboard for the same day |
-| **P5 More + Release 2.0.0** | profile, holidays, attendance calendar, payslips (if any), language, biometric setting, about (version), logout · remove `.beta`, sign with v1.0.4 keystore, publish on `/download`, update download page copy | native app replaces the WebView shell |
+| **P5 More + Release 3.0.0** | profile, holidays, attendance calendar (month grid on `attendance/history`), payslips (if any), language, biometric setting, about (version), logout — **app code already written upstream** (`hrmate-mobile/lib/features/more/`); server routes in `server-reference/…/me` (profile block), `holidays`, `payslips` · build `--flavor prod` (no `.beta`), sign with the v1.0.4 keystore, `3.0.0+28`, publish on `/download`, update download page copy | native app replaces the WebView shell: installs OVER it as an update (same applicationId + certificate) |
 | **P6 Push** | FCM: punch reminders, leave decisions, announcements; `devices/push-token` | notifications arrive with the app closed |
 | **P7 Polish** | dark theme, tablet layout, accessibility, crash reporting | — |
 

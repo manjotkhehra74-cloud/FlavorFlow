@@ -10,7 +10,7 @@ app/api/v1/mobile/
   _lib/mobileAuth.ts        ← JWT sign/verify + requireMobileUser() helper (shared by every route)
   auth/login/route.ts       ← POST {login, password, deviceId, deviceName} → {ok, token, expiresAt, user}
   auth/logout/route.ts      ← POST (bearer) → {ok:true}; revokes the device token
-  me/route.ts               ← GET  (bearer) → {ok:true, user}
+  me/route.ts               ← GET  (bearer) → {ok:true, user, profile}   (profile block added in Phase 5)
   attendance/today/route.ts ← Phase 1: GET → status/firstIn/lastOut/workedMinutes/shift/onLeave/holiday/geofence
   announcements/route.ts    ← Phase 1: GET → {items:[…]} (return [] if the webapp has no announcements)
   leaves/balance/route.ts   ← Phase 1: GET → {available, pending, balances:[…]}
@@ -25,6 +25,8 @@ app/api/v1/mobile/
   team/today/route.ts       ← Phase 4: GET ?date → {date, counts{total,present,absent,onLeave,late}, members[]}
   team/members/route.ts     ← Phase 4: GET ?q → {items[]}
   team/members/[id]/day/route.ts ← Phase 4: GET ?date → {member, shift, day{…punches[]}}
+  holidays/route.ts         ← Phase 5: GET ?year → {year, items[{date,name,type,optional}]}
+  payslips/route.ts         ← Phase 5: GET → {items[{id,month,label,netPay,currency,url}]} — create ONLY if the webapp has payroll; 404 hides the tile
 ```
 
 Phase 3 note: `_lib/mobileAuth.ts` `handle()` now passes the route context through
@@ -118,4 +120,22 @@ curl -s "https://hr.flavorflow.co.in/api/v1/mobile/team/members?q=rav" -H "autho
 curl -s "https://hr.flavorflow.co.in/api/v1/mobile/team/members/<ravinder id>/day?date=$(date +%F)" -H "authorization: Bearer $T"
 # → member + shift + day.punches (today's list) — same numbers the webapp attendance page shows for him
 # non-manager token (an employee login) → team/today must be 403 FORBIDDEN
+```
+
+## Phase 5 verify
+
+```bash
+T=<token>
+# profile block on /me (every field may be null; the app hides null rows)
+curl -s https://hr.flavorflow.co.in/api/v1/mobile/me -H "authorization: Bearer $T"
+# → {"ok":true,"user":{…},"profile":{"designation":"…","joinedOn":"2021-04-01","phone":"…","manager":{"id":"u_…","name":"…"},"shift":{"name":"Season Day Shift","start":"07:00","end":"19:00"},"site":"…"}}
+# holidays of this year — same list as the webapp holiday calendar
+curl -s "https://hr.flavorflow.co.in/api/v1/mobile/holidays?year=$(date +%Y)" -H "authorization: Bearer $T"
+# → {"ok":true,"year":2026,"items":[{"date":"2026-10-02","name":"Gandhi Jayanti","type":"public","optional":false},…]}
+# a whole month of history (calendar) — Phase 2 route, ≤62 days
+curl -s "https://hr.flavorflow.co.in/api/v1/mobile/attendance/history?from=$(date +%Y-%m-01)&to=$(date +%F)" -H "authorization: Bearer $T" | head -c 600; echo
+# payslips: ONLY if the webapp has a payroll module. 404 = module absent (app hides the tile); [] = none for this user
+curl -s -w '\n%{http_code}\n' https://hr.flavorflow.co.in/api/v1/mobile/payslips -H "authorization: Bearer $T"
+# the url of one item must open in a plain browser tab WITHOUT the webapp login (signed link):
+curl -s -o /dev/null -w '%{http_code} %{content_type}\n' "<url from the list>"   # → 200 application/pdf
 ```

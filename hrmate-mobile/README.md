@@ -22,7 +22,7 @@ lib/ui/app_shell.dart         bottom nav Home · Leaves · Punch(centre) · Team
 lib/ui/widgets.dart           LoadingView · EmptyView · ErrorRetryView · HrCard · StatusPill · Avatar · showErr/showOk
 lib/features/auth/            LoginPage (code/email + password, fingerprint unlock, language)
 lib/features/home/            HomePage — signed-in employee header + card (Phase 1 adds today card etc.)
-lib/features/more/            MorePage — language, fingerprint toggle, About (version), sign out
+lib/features/more/            MorePage — Profile · My attendance (calendar) · Holidays · Payslips tiles (Phase 5), language, fingerprint toggle, About (version), sign out
 lib/features/{punch,leaves,team}/  placeholders replaced in Phases 2–4
 android/                      applicationId in.flavorflow.hrmate, flavors beta(.beta, "HRMate Beta") / prod, minSdk 26, FlutterFragmentActivity, navy launch window
 server-reference/             Next.js handlers for auth/login · auth/logout · me (+ shared mobileAuth.ts with 2 TODOs to wire)
