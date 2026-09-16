@@ -16,6 +16,7 @@ app/api/v1/mobile/
   leaves/balance/route.ts   ← Phase 1: GET → {available, pending, balances:[…]}
   attendance/punch/route.ts ← Phase 2: POST {type,lat,lng,accuracyM,mocked,method,deviceId} → {punch} · 409 GEOFENCE/CONFLICT
   attendance/history/route.ts ← Phase 2: GET ?from&to → {days:[{date,status,firstIn,lastOut,workedMinutes,punches[]}]}
+  _lib/leaveTypes.ts        ← Phase 3: internal key ("EARNED") ⇄ short code ("EL") — shortCode/matchLeaveType/publicType
   leaves/route.ts           ← Phase 3: GET ?status&scope=mine|team → {items:[…]} · POST {type,from,to,halfDay,reason} → {leave}
   leaves/[id]/approve/route.ts ← Phase 3: POST → {leave} (manager/HR/admin; 403 otherwise)
   leaves/[id]/reject/route.ts  ← Phase 3: POST {reason} → {leave}
