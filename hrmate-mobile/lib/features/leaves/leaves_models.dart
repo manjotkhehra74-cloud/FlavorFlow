@@ -1,5 +1,16 @@
 import '../../core/format.dart';
 
+/// Short badge code: "(EL)" from the name when present, else a type of ≤ 3
+/// letters, else the first two letters ("EARNED" → "EA"). Display only —
+/// the value SENT to the server is always the `type` from `leaves/balance`.
+String _shortCode(String type, String name) {
+  final m = RegExp(r'\(([A-Za-z]{1,4})\)').firstMatch(name);
+  if (m != null) return m.group(1)!.toUpperCase();
+  final t = type.trim().toUpperCase();
+  if (t.isEmpty) return '?';
+  return t.length <= 3 ? t : t.substring(0, 2);
+}
+
 /// One leave type row from `GET leaves/balance` → `balances[]`.
 class LeaveTypeBalance {
   final String type; // EL | CL | SL | …
@@ -20,6 +31,8 @@ class LeaveTypeBalance {
       available: d(j['available'] ?? j['balance']),
     );
   }
+
+  String get code => _shortCode(type, name);
 
   static List<LeaveTypeBalance> listFromJson(dynamic json) {
     final list = json is Map ? json['balances'] : json;
@@ -100,6 +113,7 @@ class LeaveRequest {
     return list.whereType<Map>().map((m) => LeaveRequest.fromJson(m.cast<String, dynamic>())).toList();
   }
 
+  String get code => _shortCode(type, typeName);
   bool get pending => status == 'pending';
   bool get approved => status == 'approved';
   bool get rejected => status == 'rejected';

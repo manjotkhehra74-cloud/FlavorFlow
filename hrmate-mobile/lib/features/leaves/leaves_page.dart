@@ -297,7 +297,7 @@ class _BalanceCard extends StatelessWidget {
       child: SizedBox(
         width: 150,
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
-          Text(b.type.isEmpty ? b.name : b.type, style: t.labelLarge?.copyWith(color: HrBrand.subInk)),
+          Text(b.name, style: t.labelLarge?.copyWith(color: HrBrand.subInk), maxLines: 1, overflow: TextOverflow.ellipsis),
           const SizedBox(height: 4),
           Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
             Text(Fmt.compact(b.available), style: t.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
@@ -337,7 +337,7 @@ class _LeaveCard extends StatelessWidget {
             height: 40,
             decoration: const BoxDecoration(color: HrBrand.blueContainer, shape: BoxShape.circle),
             alignment: Alignment.center,
-            child: Text(r.type.isEmpty ? '?' : r.type, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: HrBrand.blueDeep)),
+            child: Text(r.code, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: HrBrand.blueDeep)),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -535,7 +535,7 @@ class _ApplyLeaveSheetState extends State<_ApplyLeaveSheet> {
             Wrap(spacing: 8, runSpacing: 8, children: [
               for (final b in widget.types)
                 ChoiceChip(
-                  label: Text('${b.type.isEmpty ? b.name : b.type} · ${Fmt.compact(b.available)}'),
+                  label: Text('${b.code} · ${Fmt.compact(b.available)}'),
                   selectedColor: HrBrand.blueContainer,
                   selected: _type == b.type,
                   onSelected: (_) => setState(() {

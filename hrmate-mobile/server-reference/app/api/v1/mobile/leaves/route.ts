@@ -3,6 +3,12 @@ import { fail, handle, ok, requireMobileUser } from '../_lib/mobileAuth';
 
 export const dynamic = 'force-dynamic';
 
+// LEAVE TYPE CODES: `type` in every payload (balance, list, create, approve, reject) is the SAME short
+// code that leaves/balance returns (e.g. "EL"), plus `typeName` ("Earned Leave (EL)"). The webapp's
+// internal key may differ (e.g. "EARNED") — resolve incoming `type` against the webapp's leave types by
+// internal key, short code or name (case-insensitive) before calling the apply function, and map the
+// internal key back to the short code in responses. Never expose two different codes for one type.
+//
 // Shared leave shape (list, create, approve, reject all return it):
 // { id, type:"EL", typeName:"Earned Leave (EL)", from:"YYYY-MM-DD", to:"YYYY-MM-DD", days:1.5, halfDay:false,
 //   reason, status:"pending"|"approved"|"rejected"|"cancelled", appliedAt:ISO, decidedAt:ISO|null,
@@ -42,12 +48,17 @@ export const POST = handle(async (req: NextRequest) => {
   if (to < from) return fail(400, 'VALIDATION', 'End date is before start date.');
   if (halfDay && from !== to) return fail(400, 'VALIDATION', 'Half day is only for a single day.');
   if (!reason) return fail(400, 'VALIDATION', 'Please enter a reason.');
-  const r = await createLeave({ userId: user.id, type, from, to, halfDay, reason }); // TODO wire
+  const typeKey = await resolveLeaveType(type); // "EL" | "EARNED" | "Earned Leave (EL)" → internal key
+  if (!typeKey) return fail(400, 'VALIDATION', `Unknown leave type "${type}".`);
+  const r = await createLeave({ userId: user.id, type: typeKey, from, to, halfDay, reason }); // TODO wire
   if (!r.ok) return fail(r.status || 400, r.code || 'VALIDATION', r.error || 'Leave request was not accepted.');
   return ok({ leave: r.leave });
 });
 
 // ---- TODO wire to the webapp's existing leave module (no duplicated rules) ----
+async function resolveLeaveType(input: string): Promise<string | null> {
+  throw new Error('TODO: match ' + input + ' against the webapp leave types (key / code / name, case-insensitive)');
+}
 async function canApproveLeaves(userId: string): Promise<boolean> { throw new Error('TODO: approval permission for ' + userId); }
 async function listMyLeaves(userId: string, status?: string): Promise<unknown[]> { throw new Error('TODO: leaves of ' + userId + ' ' + (status || '')); }
 async function listTeamLeaves(approverId: string, status?: string): Promise<unknown[]> { throw new Error('TODO: leaves awaiting ' + approverId + ' ' + (status || '')); }
