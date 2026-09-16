@@ -4,6 +4,17 @@
 // { id, code, name, department, designation, avatarUrl,
 //   status:"present"|"absent"|"leave"|"holiday"|"weekoff"|"half"|"notyet",
 //   firstIn:ISO|null, lastOut:ISO|null, workedMinutes, late:boolean, leaveType:"EL"|null }
+//
+// STATUS RULE for a day with NO punch (same rule as the webapp dashboard):
+//   leave → "leave"; holiday → "holiday"; weekly off → "weekoff";
+//   date < today → "absent";
+//   date == today → "absent" ONLY once the member's shift end (+ grace) has passed, else "notyet"
+//   (at 01:00 nobody on the 07:00 day shift is "absent" yet — they are "notyet");
+//   date > today → "notyet".
+// SHIFT RULE: shift = the member's ASSIGNED shift (users.shift_id); if none, the webapp's default
+// shift. Never pick a shift from the CURRENT clock time (pickShiftForNow(now)) — that labels every
+// day-shift worker "Night Shift" when the manager looks at night. Only a real punch time may be
+// used to auto-detect a shift, and only for that punched day.
 import { MobileError } from '../_lib/mobileAuth';
 
 export type MemberRow = {

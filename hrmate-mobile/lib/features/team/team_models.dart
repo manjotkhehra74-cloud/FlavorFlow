@@ -65,6 +65,7 @@ class TeamMember {
   bool get present => status == 'present' || status == 'half' || status == 'in' || status == 'out';
   bool get onLeave => status == 'leave';
   bool get off => status == 'holiday' || status == 'weekoff';
+  bool get notYet => status == 'notyet'; // today, shift not over yet, no punch — NOT absent
   bool get stillIn => present && firstIn != null && lastOut == null;
 }
 

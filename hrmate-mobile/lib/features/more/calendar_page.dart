@@ -180,6 +180,8 @@ StatusPill _statusPill(String status) {
       return StatusPill.info(tr('Holiday'));
     case 'weekoff':
       return StatusPill.info(tr('Week off'));
+    case 'notyet':
+      return StatusPill.info(tr('Not in yet'));
     default:
       return StatusPill.danger(tr('Absent'));
   }

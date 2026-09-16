@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 //   firstIn: ISO string | null,
 //   lastOut: ISO string | null,
 //   workedMinutes: number,              // completed minutes today (live if still "in")
-//   shift: { name, start: "09:00", end: "18:00" } | null,
+//   shift: { name, start: "09:00", end: "18:00" } | null,   ← the user's ASSIGNED shift (or the webapp default); never pickShiftForNow(now) — a day-shift user must not see "Night Shift" at 01:00
 //   onLeave: boolean, holiday: boolean, holidayName: string | null,
 //   geofence: { lat, lng, radiusM }      // site geofence the punch screen (Phase 2) will check against
 // }

@@ -62,7 +62,7 @@ class _TeamPageState extends State<TeamPage> {
     return t.members.where((m) {
       final okFilter = switch (_filter) {
         'present' => m.present,
-        'absent' => !m.present && !m.onLeave && !m.off,
+        'absent' => !m.present && !m.onLeave && !m.off && !m.notYet,
         'leave' => m.onLeave,
         'late' => m.late,
         _ => true,
@@ -200,6 +200,7 @@ StatusPill _memberPill(TeamMember m) {
   if (m.off) return StatusPill.info(m.status == 'holiday' ? tr('Holiday') : tr('Week off'));
   if (m.stillIn) return StatusPill.success(tr('In'));
   if (m.present) return StatusPill.info(tr('Out'));
+  if (m.notYet) return StatusPill.info(tr('Not in yet'));
   return StatusPill.danger(tr('Absent'));
 }
 
@@ -421,6 +422,8 @@ class _MemberDayPageState extends State<MemberDayPage> {
         return StatusPill.info(tr('Holiday'));
       case 'weekoff':
         return StatusPill.info(tr('Week off'));
+      case 'notyet':
+        return StatusPill.info(tr('Not in yet'));
       default:
         return StatusPill.danger(tr('Absent'));
     }
