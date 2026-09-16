@@ -16,7 +16,7 @@ class Fmt {
   static String iso(DateTime d) => _iso.format(d);
 
   /// 12 → "12", 1.5 → "1.5" (leave balances, counts).
-  static String num(num v) => v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(1);
+  static String compact(num v) => v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(1);
 
   /// "7h 45m" from minutes.
   static String duration(int? minutes) {

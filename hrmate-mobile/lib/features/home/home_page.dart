@@ -140,7 +140,7 @@ class _HomePageState extends State<HomePage> {
                     child: QuickTile(
                       icon: Icons.event_available_rounded,
                       label: tr('Leave balance'),
-                      value: _leave == null ? '—' : Fmt.num(_leave!.data.available),
+                      value: _leave == null ? '—' : Fmt.compact(_leave!.data.available),
                       sub: (_leave?.data.pending ?? 0) > 0 ? tr('%s pending').arg(_leave!.data.pending) : null,
                       color: HrBrand.green,
                       onTap: () => context.go('/leaves'),
