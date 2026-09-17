@@ -17,7 +17,14 @@ fi
 CONTAINER="${HRMATE_CONTAINER:-hrmate-hrmate-1}"
 docker ps --format '{{.Names}}' | grep -qx "$CONTAINER" || { echo "STOP: container $CONTAINER is not running"; exit 1; }
 if command -v unzip >/dev/null 2>&1; then
-  unzip -l "$APK" 2>/dev/null | grep -q 'AndroidManifest.xml' || { echo "STOP: $APK is not an APK"; exit 1; }
+  if ! unzip -l "$APK" 2>/dev/null | grep -q 'AndroidManifest.xml'; then
+    echo "STOP: $APK is not a complete APK."
+    echo "  size: $(stat -c %s "$APK") bytes   first bytes: $(head -c 2 "$APK" | od -An -c | tr -s ' ')"
+    echo "  zip test: $(unzip -tq "$APK" 2>&1 | tail -1)"
+    echo "  -> first bytes '< !' or '< h' = a web page was saved, not the APK: download again from Codemagic -> Artifacts"
+    echo "  -> 'End-of-central-directory' or a small size = the upload was cut short: upload the file again"
+    exit 1
+  fi
 fi
 NAME="HRMate-${VER}.apk"
 SIZE=$(stat -c %s "$APK")
