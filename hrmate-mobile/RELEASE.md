@@ -45,7 +45,7 @@ release of the native app (the WebView shell was 1.x, so 3.0.0 is guaranteed hig
 installed `versionCode`/`versionName`). After P5: 3.0.x for fixes, 3.1.0 P6 push, 3.2.0 P7.
 The About row in More shows `version (build)` from `package_info_plus`, so a screenshot
 proves which build runs. Actual history: 2.0.0+20 P0 · 2.1.0+21 P1 · 2.2.0+22 P2 ·
-2.3.0+24 P3 · 2.4.0+27 P4 · **3.0.0+29 P5 (prod)**.
+2.3.0+24 P3 · 2.4.0+27 P4 · **3.0.0+30 P5 (prod, published 2026-09-17)**.
 
 ## Phase 5 (release track) checklist
 
