@@ -140,3 +140,18 @@ curl -s -w '\n%{http_code}\n' https://hr.flavorflow.co.in/api/v1/mobile/payslips
 # the url of one item must open in a plain browser tab WITHOUT the webapp login (signed link):
 curl -s -o /dev/null -w '%{http_code} %{content_type}\n' "<url from the list>"   # → 200 application/pdf
 ```
+
+## Publishing (end of Phase 5, then every release)
+
+Files: `app/api/download/apk/route.ts`, `app/api/download/apk-info/route.ts` (replace the webapp's
+old `/api/download/apk` that redirected to the WebView-shell GitHub release), `scripts/publish-apk.sh`.
+The APK is NOT in git and NOT in the image — it is copied into the data volume by the script.
+
+```bash
+# owner, on the VPS, after uploading the tested APK with the SSH "UPLOAD FILE" button:
+sudo bash /opt/hrmate/scripts/publish-apk.sh ~/app-prod-release.apk 3.0.0 30
+# verify (anyone):
+curl -s https://hr.flavorflow.co.in/api/download/apk-info
+# → {"ok":true,"package":"in.flavorflow.hrmate","minAndroid":"8.0","version":"3.0.0","build":30,"file":"HRMate-3.0.0.apk","sizeBytes":…,"sha256":"…","publishedAt":"…","available":true,"url":"/api/download/apk"}
+curl -s -o /dev/null -w '%{http_code} %{size_download}\n' https://hr.flavorflow.co.in/api/download/apk   # → 200 <same sizeBytes>
+```

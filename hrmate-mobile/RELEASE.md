@@ -98,10 +98,18 @@ with a **new private key**; the shell is retired and users uninstall it once (a 
    `aapt dump badging … | grep package` →
    `name='in.flavorflow.hrmate' versionCode='29' versionName='3.0.0'`. Same check for every
    later build — a different fingerprint means the APK will not install as an update.
-4. Publish on `hr.flavorflow.co.in/download` as `HRMate-3.0.0.apk` (+ `apk-info.txt`: version,
-   build, commit, date) and update the page copy: "HRMate 3.0.0 — native app; fingerprint punch,
-   leaves, team, holidays" plus one line: *"Using HRMate 1.x? Uninstall it first, then install
-   3.0.0 (one time)."* Keep the beta build installable side-by-side until testers have moved;
-   then stop building `beta`.
-5. From now on every phase commit is built with `--flavor prod` (3.0.x / 3.1.0 …). The beta
-   flavor stays in the Gradle file for internal test builds only.
+4. **Publish** (after the owner has tested the build on his phone). One-time server setup by the
+   HRMate agent: `src/app/api/download/apk/route.ts` + `apk-info/route.ts` and
+   `scripts/publish-apk.sh` from `server-reference/` (the APK lives in the data volume
+   `/app/data/releases/`, never in git or the Docker image), download page reads
+   `/api/download/apk-info`. Every release after that is ONE command on the VPS, run by the owner:
+   ```bash
+   sudo bash /opt/hrmate/scripts/publish-apk.sh ~/app-prod-release.apk 3.0.0 30
+   ```
+   (upload the APK first with the SSH-in-browser "UPLOAD FILE" button). Download page copy:
+   "HRMate 3.0.0 — native app; fingerprint punch, leaves, team, holidays", version/build/date
+   from `apk-info`, package `in.flavorflow.hrmate`, plus one line: *"Using HRMate 1.x? Uninstall
+   it first, then install 3.0.0 (one time). Your data stays on the server."* QR must encode
+   `https://hr.flavorflow.co.in/api/download/apk`. Stop building `beta` once testers have moved.
+5. From now on every phase commit is built with `--flavor prod` (3.0.x / 3.1.0 …) and published
+   with the same one command. The beta flavor stays in the Gradle file for internal test builds.
