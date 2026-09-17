@@ -1,0 +1,2160 @@
+From 8e8835de382c72d5c86e43da90cd3039c8102b27 Mon Sep 17 00:00:00 2001
+From: Arena Agent <agent@arena.ai>
+Date: Thu, 17 Sep 2026 23:30:24 +0000
+Subject: [PATCH] =?UTF-8?q?feat(mobile):=20Phase=206=20push=20notification?=
+ =?UTF-8?q?s=20(FCM)=20=E2=80=94=20app=203.1.0+31=20+=20server=20routes?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+App (mobile/): lib/state/push.dart (FCM token → POST devices/push-token, foreground
+display via flutter_local_notifications on channel hrmate_default, tap → screen),
+More → Notifications switch (server pref prefs/notify) + "Send test notification",
+Android: google-services plugin applied only if android/app/google-services.json
+exists, POST_NOTIFICATIONS, default channel/icon/colour meta-data, ic_notification.
+pubspec 3.1.0+31 (firebase_core ^3.15.2, firebase_messaging ^15.2.10,
+flutter_local_notifications ^19.4.2). Upstream leaves files (short codes) included.
+
+Webapp: src/lib/fcm.ts (FCM HTTP v1 sender with the service-account key at
+/app/data/fcm-service-account.json — no npm dependency; table mobile_push_tokens;
+never throws, no-op until the key exists), src/lib/push.ts sendPushToUser() also
+fans out to FCM (3 additive lines; isNotifyEnabled still first), wall POST sends a
+push-only announcement to everyone except the author, mobile routes
+devices/push-token (POST/DELETE), devices/push-test, prefs/notify (GET/PUT),
+auth/logout also forgets the device's FCM tokens. No business rule changed.
+
+Source: FlavorFlow repo commit b1f4579 (hrmate-mobile/). Verified there with the
+real Next.js production build + an end-to-end run against a mock FCM endpoint.
+---
+ mobile/.gitignore                             |   4 +
+ mobile/ARCHITECTURE.md                        |  34 +-
+ mobile/README.md                              |   7 +-
+ mobile/RELEASE.md                             |  35 ++-
+ mobile/android/app/build.gradle.kts           |   9 +
+ .../android/app/src/main/AndroidManifest.xml  |  13 +
+ .../src/main/res/drawable/ic_notification.xml |  12 +
+ mobile/android/app/src/main/res/raw/keep.xml  |   5 +
+ .../app/src/main/res/values/colors.xml        |   1 +
+ mobile/android/settings.gradle.kts            |   2 +
+ mobile/lib/core/i18n.dart                     |  24 +-
+ mobile/lib/features/leaves/leaves_models.dart |  14 +
+ mobile/lib/features/leaves/leaves_page.dart   |   6 +-
+ mobile/lib/features/more/more_page.dart       |  91 +++++-
+ mobile/lib/main.dart                          |  19 +-
+ mobile/lib/state/auth.dart                    |   5 +
+ mobile/lib/state/push.dart                    | 204 ++++++++++++
+ mobile/pubspec.yaml                           |   8 +-
+ mobile/server-reference/README.md             |  57 ++++
+ .../app/api/v1/mobile/auth/logout/route.ts    |  10 +-
+ .../api/v1/mobile/devices/push-test/route.ts  |  31 ++
+ .../api/v1/mobile/devices/push-token/route.ts |  30 ++
+ .../app/api/v1/mobile/prefs/notify/route.ts   |  22 ++
+ mobile/server-reference/lib/fcm.ts            | 290 ++++++++++++++++++
+ .../server-reference/scripts/publish-apk.sh   |  22 +-
+ .../webapp-patches/src/app/api/wall/route.ts  |  65 ++++
+ .../webapp-patches/src/lib/push.ts            | 103 +++++++
+ mobile/test/smoke_test.dart                   |  11 +
+ scripts/publish-apk.sh                        |  22 +-
+ src/app/api/v1/mobile/auth/logout/route.ts    |  10 +-
+ .../api/v1/mobile/devices/push-test/route.ts  |  31 ++
+ .../api/v1/mobile/devices/push-token/route.ts |  30 ++
+ src/app/api/v1/mobile/prefs/notify/route.ts   |  22 ++
+ src/app/api/wall/route.ts                     |  15 +
+ src/lib/fcm.ts                                | 290 ++++++++++++++++++
+ src/lib/push.ts                               |   9 +
+ 36 files changed, 1529 insertions(+), 34 deletions(-)
+ create mode 100644 mobile/android/app/src/main/res/drawable/ic_notification.xml
+ create mode 100644 mobile/android/app/src/main/res/raw/keep.xml
+ create mode 100644 mobile/lib/state/push.dart
+ create mode 100644 mobile/server-reference/app/api/v1/mobile/devices/push-test/route.ts
+ create mode 100644 mobile/server-reference/app/api/v1/mobile/devices/push-token/route.ts
+ create mode 100644 mobile/server-reference/app/api/v1/mobile/prefs/notify/route.ts
+ create mode 100644 mobile/server-reference/lib/fcm.ts
+ create mode 100644 mobile/server-reference/webapp-patches/src/app/api/wall/route.ts
+ create mode 100644 mobile/server-reference/webapp-patches/src/lib/push.ts
+ create mode 100644 src/app/api/v1/mobile/devices/push-test/route.ts
+ create mode 100644 src/app/api/v1/mobile/devices/push-token/route.ts
+ create mode 100644 src/app/api/v1/mobile/prefs/notify/route.ts
+ create mode 100644 src/lib/fcm.ts
+
+diff --git a/mobile/.gitignore b/mobile/.gitignore
+index e014aa3..5ea2abb 100644
+--- a/mobile/.gitignore
++++ b/mobile/.gitignore
+@@ -11,3 +11,7 @@ android/app/*.jks
+ android/app/*.keystore
+ *.iml
+ .idea/
++# Phase 6: the FCM SERVICE-ACCOUNT key is a server secret — never in git (google-services.json
++# is public by design and IS committed in the HRMate repo, see RELEASE.md).
++*firebase-adminsdk*.json
++fcm-service-account.json
+diff --git a/mobile/ARCHITECTURE.md b/mobile/ARCHITECTURE.md
+index ae886b3..078e0ad 100644
+--- a/mobile/ARCHITECTURE.md
++++ b/mobile/ARCHITECTURE.md
+@@ -144,11 +144,11 @@ permission model — no second user table, no duplicated business rules.
+ | `GET attendance/today` | `{status:"in"\|"out"\|"none", firstIn, lastOut, workedMinutes, shift{name,start,end}, geofence{lat,lng,radiusM}}` |
+ | `POST attendance/punch {type:"in"\|"out", lat, lng, accuracyM, method:"biometric"\|"password", deviceId}` | 200 record · 409 `GEOFENCE` with `distanceM` |
+ | `GET attendance/history?from&to` | day rows for calendar / list |
+-| `GET leaves/balance` · `GET leaves?status=` · `POST leaves {type, from, to, halfDay, reason}` | employee leaves |
++| `GET leaves/balance` · `GET leaves?status=&scope=mine\|team` · `POST leaves {type, from, to, halfDay, reason}` | employee leaves (`scope=team` = requests the caller may approve) |
+ | `POST leaves/:id/approve` · `POST leaves/:id/reject {reason}` | manager actions |
+ | `GET team/today` · `GET team/members?q=` · `GET team/members/:id/day?date=` | manager views |
+-| `GET holidays` · `GET announcements` · `GET payslips` (only if the webapp has payslips) | More tab |
+-| `POST devices/push-token {token, platform}` | Phase 6 |
++| `GET me` (+`profile{designation,joinedOn,phone,manager,shift,site}`) · `GET holidays?year=` · `GET announcements` · `GET payslips` (create ONLY if the webapp has payroll; 404 hides the tile) | More tab |
++| `POST devices/push-token {token, platform, deviceId}` · `DELETE devices/push-token?token=` · `POST devices/push-test` · `GET/PUT prefs/notify {enabled}` | Phase 6 (push) |
+ 
+ Rule: **build the endpoint on the webapp first** (reply includes a working `curl` example
+ against `https://hr.flavorflow.co.in`), then build the screen that uses it.
+@@ -168,11 +168,12 @@ against `https://hr.flavorflow.co.in`), then build the screen that uses it.
+   built once.
+ - Android: `minSdk 26`, latest stable `targetSdk`; permissions declared only for features
+   that exist (internet, fine location, biometric, notifications from Phase 6).
+-- **Versioning & identity:** native app = `2.0.0+20`, build number +1 per phase (the
+-  WebView shell was 1.x). Phases 0–4 ship as a **beta** with `applicationIdSuffix ".beta"`
+-  and label "HRMate Beta" so it installs next to the live app. Phase 5 removes the suffix
+-  and signs with the v1.0.4 keystore so it installs as an update. If that keystore is not
+-  available, say so in Phase 0 — users will then uninstall the shell once at 2.0.0.
++- **Versioning & identity:** native app started at `2.0.0+20`, build number +1 per phase
++  (the WebView shell was 1.x). Phases 0–4 shipped as a **beta** with `applicationIdSuffix
++  ".beta"` and label "HRMate Beta" next to the live app. Phase 5 builds `--flavor prod`
++  (no suffix) as **3.0.0+28** with a **new private release key** held only in Codemagic
++  (env group `hrmate_release`). The shell (`com.gdfoods.hrmate`, key committed in the public
++  repo → compromised) is retired; users uninstall it once. See `mobile/RELEASE.md`.
+ - Secrets (keystore, passwords, server secret) are never committed.
+ 
+ ---
+@@ -184,15 +185,20 @@ built by the pipeline and installed on a real phone · screenshots of every new/
+ screen · `git log -1` hash in the reply (pushed) · no files outside the phase's scope
+ changed · **Deviations: none**.
+ 
++**Order inside a phase (fixed):** ① server routes → commit → deploy → curls pass ② app
++files → **commit + push** (`git status` clean) ③ Codemagic build **from that pushed commit**
++④ install + screenshots. An APK built from uncommitted files is invalid — the pipeline must
++show the commit hash the APK was built from, and that hash must contain the phase's files.
++
+ | Phase | Scope | Done when |
+ |---|---|---|
+ | **P0 Foundation** | `mobile/` project, this file, `RELEASE.md`, theme (§4), `ApiClient`, `AuthController`, `secure.dart`, router + shell with 5 placeholder tabs, login screen, splash, Mobile API `auth/login` + `me` + `auth/logout` | real login against `hr.flavorflow.co.in` works; Home placeholder shows the logged-in user's name and role; fingerprint unlock toggle works; beta APK installs beside the live app |
+-| **P1 Home** | today card (status, first in / last out, worked), quick tiles, announcements, pull-to-refresh | API `attendance/today`, `announcements` live; offline chip works |
+-| **P2 Punch** | location + geofence check with distance, native biometric confirm, punch in/out, result sheet, today's punches | API `attendance/punch`, `attendance/history`; 409 GEOFENCE shown clearly |
+-| **P3 Leaves** | balance chips, list with status filters, apply form (type, dates, half-day, reason), manager approve / reject | leaves endpoints live |
+-| **P4 Team** | manager today view (present / absent / on leave), member search, member day detail | team endpoints live; tab hidden for non-managers |
+-| **P5 More + Release 2.0.0** | profile, holidays, attendance calendar, payslips (if any), language, biometric setting, about (version), logout · remove `.beta`, sign with v1.0.4 keystore, publish on `/download`, update download page copy | native app replaces the WebView shell |
+-| **P6 Push** | FCM: punch reminders, leave decisions, announcements; `devices/push-token` | notifications arrive with the app closed |
++| **P1 Home** | today card (status, first in / last out, worked), quick tiles, announcements, pull-to-refresh — **app code already written upstream** (`hrmate-mobile/lib/features/home/`, `core/cache.dart`); server routes in `server-reference/…/attendance/today`, `announcements`, `leaves/balance` | API `attendance/today`, `announcements`, `leaves/balance` live; offline chip works |
++| **P2 Punch** | location + geofence check with distance, native biometric confirm, punch in/out, result sheet, today's punches — **app code already written upstream** (`hrmate-mobile/lib/features/punch/`, `core/geo.dart`); server routes in `server-reference/…/attendance/punch`, `attendance/history` | API `attendance/punch`, `attendance/history`; 409 GEOFENCE shown clearly; a mobile punch shows up in the webapp attendance page |
++| **P3 Leaves** | balance chips, list with status filters, apply form (type, dates, half-day, reason), manager approve / reject — **app code already written upstream** (`hrmate-mobile/lib/features/leaves/`); server routes in `server-reference/…/leaves/`, `leaves/[id]/approve`, `leaves/[id]/reject` | leaves endpoints live; a request applied from the app appears on the webapp Leaves page and approving it changes `leaves/balance` |
++| **P4 Team** | manager today view (present / absent / on leave / late counts as filters), member search, member day detail with date switcher — **app code already written upstream** (`hrmate-mobile/lib/features/team/`); server routes in `server-reference/…/team/` | team endpoints live; tab hidden for non-managers and 403 on the server; counts match the webapp dashboard for the same day |
++| **P5 More + Release 3.0.0** ✅ *(accepted 2026-09-17; 3.0.0+30 live on `/download`, sha256 972f3445…5514f)* | profile, holidays, attendance calendar (month grid on `attendance/history`), payslips (if any), language, biometric setting, about (version), logout — **app code already written upstream** (`hrmate-mobile/lib/features/more/`); server routes in `server-reference/…/me` (profile block), `holidays`, `payslips` · build `--flavor prod` (no `.beta`), sign with the v1.0.4 keystore, `3.0.0+28`, publish on `/download`, update download page copy | native app replaces the WebView shell (different package + new private key → the shell is uninstalled once); `apksigner` fingerprint recorded in RELEASE.md |
++| **P6 Push** | FCM: punch reminders, leave decisions, announcements; `devices/push-token` — **app code already written upstream** (`hrmate-mobile/lib/state/push.dart`, More → Notifications switch + *Send test notification*, `android/` Firebase wiring); server: `server-reference/lib/fcm.ts` → `src/lib/fcm.ts`, routes `devices/push-token`, `devices/push-test`, `prefs/notify`, re-copied `auth/logout`, and the two `webapp-patches` (`src/lib/push.ts` FCM fan-out inside `sendPushToUser`, wall POST announcement) · owner: Firebase project `HRMate`, `google-services.json` committed at `mobile/android/app/`, service-account key ONLY at `/app/data/fcm-service-account.json` on the VPS · version `3.1.0+31` | notifications arrive with the app closed (test push from More; a leave approved on the webapp reaches the employee's phone); `google-services.json missing` must not appear in the build log |
+ | **P7 Polish** | dark theme, tablet layout, accessibility, crash reporting | — |
+ 
+ Never merge two phases into one prompt. Never begin phase N+1 with phase N unaccepted.
+diff --git a/mobile/README.md b/mobile/README.md
+index 9296be5..d46afbb 100644
+--- a/mobile/README.md
++++ b/mobile/README.md
+@@ -18,14 +18,15 @@ lib/core/theme.dart           HRMate design tokens (#1E6FE0 · #F4F7FB · #0B163
+ lib/core/i18n.dart            tr('…') with en / pa / hi dictionaries
+ lib/core/format.dart          IST times, dates, durations, greeting, initials
+ lib/state/auth.dart           AuthController: restore / login / biometric unlock / logout; HrUser
++lib/state/push.dart           PushController (Phase 6): FCM token → POST devices/push-token, foreground display, tap → screen; off when google-services.json is absent
+ lib/ui/app_shell.dart         bottom nav Home · Leaves · Punch(centre) · Team · More + PhasePlaceholder
+ lib/ui/widgets.dart           LoadingView · EmptyView · ErrorRetryView · HrCard · StatusPill · Avatar · showErr/showOk
+ lib/features/auth/            LoginPage (code/email + password, fingerprint unlock, language)
+ lib/features/home/            HomePage — signed-in employee header + card (Phase 1 adds today card etc.)
+-lib/features/more/            MorePage — Profile · My attendance (calendar) · Holidays · Payslips tiles (Phase 5), language, fingerprint toggle, About (version), sign out
++lib/features/more/            MorePage — Profile · My attendance (calendar) · Holidays · Payslips tiles (Phase 5), language, fingerprint toggle, Notifications switch + test (Phase 6), About (version), sign out
+ lib/features/{punch,leaves,team}/  placeholders replaced in Phases 2–4
+-android/                      applicationId in.flavorflow.hrmate, flavors beta(.beta, "HRMate Beta") / prod, minSdk 26, FlutterFragmentActivity, navy launch window
+-server-reference/             Next.js handlers for auth/login · auth/logout · me (+ shared mobileAuth.ts with 2 TODOs to wire)
++android/                      applicationId in.flavorflow.hrmate, flavors beta(.beta, "HRMate Beta") / prod, minSdk 26, FlutterFragmentActivity, navy launch window; Phase 6: google-services plugin (applied only if android/app/google-services.json exists), POST_NOTIFICATIONS, channel hrmate_default, ic_notification
++server-reference/             Next.js handlers per phase (see server-reference/README.md); Phase 6: lib/fcm.ts + devices/push-token · devices/push-test · prefs/notify + webapp-patches (push.ts, wall route)
+ test/smoke_test.dart          theme tokens + splash-has-no-text
+ RELEASE.md                    build/sign/publish, versioning, Phase 5 checklist
+ ```
+diff --git a/mobile/RELEASE.md b/mobile/RELEASE.md
+index b2820c7..30f271a 100644
+--- a/mobile/RELEASE.md
++++ b/mobile/RELEASE.md
+@@ -45,7 +45,40 @@ release of the native app (the WebView shell was 1.x, so 3.0.0 is guaranteed hig
+ installed `versionCode`/`versionName`). After P5: 3.0.x for fixes, 3.1.0 P6 push, 3.2.0 P7.
+ The About row in More shows `version (build)` from `package_info_plus`, so a screenshot
+ proves which build runs. Actual history: 2.0.0+20 P0 · 2.1.0+21 P1 · 2.2.0+22 P2 ·
+-2.3.0+24 P3 · 2.4.0+27 P4 · **3.0.0+29 P5 (prod)**.
++2.3.0+24 P3 · 2.4.0+27 P4 · **3.0.0+30 P5 (prod, published 2026-09-17)** · 3.1.0+31 P6 push.
++
++## Phase 6 (push notifications) — Firebase setup, once
++
++Push uses Firebase Cloud Messaging. Two files, two different rules:
++
++| File | Where | Secret? |
++|---|---|---|
++| `google-services.json` (Android app config) | `mobile/android/app/google-services.json` — **committed** in the HRMate repo, because Codemagic builds from git | No — it only contains public project ids/API keys (Google documents it as safe to ship; it is inside every APK anyway) |
++| service-account key `hrmate-…-firebase-adminsdk-….json` (lets the SERVER send) | VPS only: `/app/data/fcm-service-account.json` inside the `hrmate_data` volume | **YES** — never in git, never in the image, never in chat |
++
++Owner steps (Firebase console, [console.firebase.google.com](https://console.firebase.google.com), Google account):
++
++1. **Add project** → name `HRMate` → Analytics off → Create.
++2. Project overview → **Android** icon → package name `in.flavorflow.hrmate` → Register app →
++   **Download google-services.json**. Then *Add app* again with package `in.flavorflow.hrmate.beta`
++   (the beta flavour) and download again — the second download contains **both** apps; keep that one.
++3. Put it at `mobile/android/app/google-services.json` in the HRMate repo (commit it; the agent can do this
++   from an uploaded copy). `android/app/build.gradle.kts` applies the Google-services plugin only when the
++   file exists, so a checkout without it still builds — with push silently off.
++4. ⚙ Project settings → **Cloud Messaging** → make sure *Firebase Cloud Messaging API (V1)* is **Enabled**.
++5. ⚙ Project settings → **Service accounts** → *Generate new private key* → the json downloads. Upload it to the
++   VPS (SSH "UPLOAD FILE") and run
++   `sudo docker cp ~/hrmate-*-firebase-adminsdk-*.json hrmate-hrmate-1:/app/data/fcm-service-account.json`.
++   No restart needed (the server re-checks the file every 30 s). Delete the local download afterwards.
++
++Build check: the Codemagic log must NOT contain `google-services.json missing — building WITHOUT push
++notifications`; if it does, step 3 is not committed. On the phone: More → Notifications switch visible →
++*Send test notification* → close the app → notification arrives (Phase 6 acceptance).
++
++Android 13+ asks for the notification permission at first sign-in; the switch's subtitle says
++"Allow notifications for HRMate in phone settings" if it was denied. Notification channel:
++`hrmate_default` ("HRMate", high importance) — created by the app, referenced by the manifest and by
++`src/lib/fcm.ts` on the server; renaming it anywhere breaks background display.
+ 
+ ## Phase 5 (release track) checklist
+ 
+diff --git a/mobile/android/app/build.gradle.kts b/mobile/android/app/build.gradle.kts
+index f4bcc59..e610d5f 100644
+--- a/mobile/android/app/build.gradle.kts
++++ b/mobile/android/app/build.gradle.kts
+@@ -6,6 +6,15 @@ plugins {
+     id("org.jetbrains.kotlin.android")
+     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+     id("dev.flutter.flutter-gradle-plugin")
++    // Phase 6 (push): applied only when android/app/google-services.json exists, so a
++    // checkout without the Firebase config still builds (push simply stays off in it).
++    id("com.google.gms.google-services") apply false
++}
++
++if (file("google-services.json").exists()) {
++    apply(plugin = "com.google.gms.google-services")
++} else {
++    logger.warn("HRMate: android/app/google-services.json missing — building WITHOUT push notifications")
+ }
+ 
+ val keystoreProperties = Properties()
+diff --git a/mobile/android/app/src/main/AndroidManifest.xml b/mobile/android/app/src/main/AndroidManifest.xml
+index 23f5112..6759122 100644
+--- a/mobile/android/app/src/main/AndroidManifest.xml
++++ b/mobile/android/app/src/main/AndroidManifest.xml
+@@ -6,6 +6,8 @@
+     <!-- factory geofence check at punch time (no background tracking) -->
+     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
++    <!-- Phase 6: push notifications (runtime prompt on Android 13+) -->
++    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+     <application
+         android:label="@string/app_name"
+         android:name="${applicationName}"
+@@ -31,6 +33,17 @@
+         <meta-data
+             android:name="flutterEmbedding"
+             android:value="2" />
++        <!-- Phase 6: FCM messages shown by the OS while the app is closed use this
++             channel + icon + colour (must match PushController.channelId). -->
++        <meta-data
++            android:name="com.google.firebase.messaging.default_notification_channel_id"
++            android:value="hrmate_default" />
++        <meta-data
++            android:name="com.google.firebase.messaging.default_notification_icon"
++            android:resource="@drawable/ic_notification" />
++        <meta-data
++            android:name="com.google.firebase.messaging.default_notification_color"
++            android:resource="@color/hr_blue" />
+     </application>
+     <queries>
+         <intent>
+diff --git a/mobile/android/app/src/main/res/drawable/ic_notification.xml b/mobile/android/app/src/main/res/drawable/ic_notification.xml
+new file mode 100644
+index 0000000..95a036e
+--- /dev/null
++++ b/mobile/android/app/src/main/res/drawable/ic_notification.xml
+@@ -0,0 +1,12 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Status-bar icon for push notifications: must be a single-colour (white) silhouette;
++     Android tints it with @color/hr_blue. Badge/ID-card outline, 24dp. -->
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="24dp"
++    android:height="24dp"
++    android:viewportWidth="24"
++    android:viewportHeight="24">
++    <path
++        android:fillColor="#FFFFFFFF"
++        android:pathData="M20,4H4C2.9,4 2,4.9 2,6v12c0,1.1 0.9,2 2,2h16c1.1,0 2,-0.9 2,-2V6C22,4.9 21.1,4 20,4zM20,18H4V6h16V18zM9,12c1.38,0 2.5,-1.12 2.5,-2.5S10.38,7 9,7 6.5,8.12 6.5,9.5 7.62,12 9,12zM14,16c0,-1.66 -2.24,-3 -5,-3s-5,1.34 -5,3v1h10V16zM13,9h6v1.5h-6zM13,12h6v1.5h-6z"/>
++</vector>
+diff --git a/mobile/android/app/src/main/res/raw/keep.xml b/mobile/android/app/src/main/res/raw/keep.xml
+new file mode 100644
+index 0000000..8df4cb2
+--- /dev/null
++++ b/mobile/android/app/src/main/res/raw/keep.xml
+@@ -0,0 +1,5 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Release builds shrink resources; the push icon/colour are referenced by NAME from FCM
++     payloads and the manifest, so pin them explicitly. -->
++<resources xmlns:tools="http://schemas.android.com/tools"
++    tools:keep="@drawable/ic_notification,@color/hr_blue,@color/hr_navy" />
+diff --git a/mobile/android/app/src/main/res/values/colors.xml b/mobile/android/app/src/main/res/values/colors.xml
+index 65803b6..eae16a5 100644
+--- a/mobile/android/app/src/main/res/values/colors.xml
++++ b/mobile/android/app/src/main/res/values/colors.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources>
+     <color name="hr_navy">#0B1633</color>
++    <color name="hr_blue">#1E6FE0</color>
+ </resources>
+diff --git a/mobile/android/settings.gradle.kts b/mobile/android/settings.gradle.kts
+index 92715c4..1d1c283 100644
+--- a/mobile/android/settings.gradle.kts
++++ b/mobile/android/settings.gradle.kts
+@@ -21,6 +21,8 @@ plugins {
+     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
+     id("com.android.application") version "8.7.3" apply false
+     id("org.jetbrains.kotlin.android") version "2.1.0" apply false
++    // Phase 6: reads android/app/google-services.json (Firebase project "HRMate")
++    id("com.google.gms.google-services") version "4.4.2" apply false
+ }
+ 
+ include(":app")
+diff --git a/mobile/lib/core/i18n.dart b/mobile/lib/core/i18n.dart
+index 07c5080..e9d9c70 100644
+--- a/mobile/lib/core/i18n.dart
++++ b/mobile/lib/core/i18n.dart
+@@ -112,7 +112,17 @@ class L10n extends ChangeNotifier {
+       'Joined on': 'ਭਰਤੀ ਦੀ ਤਾਰੀਖ',
+       'Leave': 'ਛੁੱਟੀ',
+       'My attendance': 'ਮੇਰੀ ਹਾਜ਼ਰੀ',
+-      'Native app · Phase 5 Release': 'ਨੇਟਿਵ ਐਪ · ਫੇਜ਼ 5 ਰਿਲੀਜ਼',
++      'Native app · Phase 6 Push': 'ਨੇਟਿਵ ਐਪ · ਫੇਜ਼ 6 ਪੁਸ਼',
++      'Notifications': 'ਨੋਟੀਫਿਕੇਸ਼ਨ',
++      'Notifications on': 'ਨੋਟੀਫਿਕੇਸ਼ਨ ਚਾਲੂ',
++      'Notifications off': 'ਨੋਟੀਫਿਕੇਸ਼ਨ ਬੰਦ',
++      'Punch reminders, leave decisions, announcements': 'ਪੰਚ ਰਿਮਾਈਂਡਰ, ਛੁੱਟੀ ਦੇ ਫ਼ੈਸਲੇ, ਸੂਚਨਾਵਾਂ',
++      'Allow notifications for HRMate in phone settings': 'ਫੋਨ ਦੀਆਂ ਸੈਟਿੰਗਾਂ ਵਿੱਚ HRMate ਲਈ ਨੋਟੀਫਿਕੇਸ਼ਨ ਦੀ ਇਜਾਜ਼ਤ ਦਿਓ',
++      'You will not receive push notifications': 'ਤੁਹਾਨੂੰ ਪੁਸ਼ ਨੋਟੀਫਿਕੇਸ਼ਨ ਨਹੀਂ ਮਿਲਣਗੇ',
++      'Send test notification': 'ਟੈਸਟ ਨੋਟੀਫਿਕੇਸ਼ਨ ਭੇਜੋ',
++      'The server has no push key yet': 'ਸਰਵਰ ਤੇ ਹਾਲੇ ਪੁਸ਼ ਕੀ ਨਹੀਂ ਹੈ',
++      'This phone is not registered for push yet — try again in a moment': 'ਇਹ ਫੋਨ ਹਾਲੇ ਪੁਸ਼ ਲਈ ਰਜਿਸਟਰ ਨਹੀਂ ਹੋਇਆ — ਥੋੜ੍ਹੀ ਦੇਰ ਬਾਅਦ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ',
++      'Test notification in %s seconds — close the app to check': '%s ਸਕਿੰਟਾਂ ਵਿੱਚ ਟੈਸਟ ਨੋਟੀਫਿਕੇਸ਼ਨ ਆਵੇਗਾ — ਜਾਂਚ ਲਈ ਐਪ ਬੰਦ ਕਰੋ',
+       'Net pay': 'ਨੈੱਟ ਤਨਖਾਹ',
+       'No holidays published for %s': '%s ਲਈ ਕੋਈ ਛੁੱਟੀਆਂ ਜਾਰੀ ਨਹੀਂ',
+       'No payslips yet': 'ਹਾਲੇ ਕੋਈ ਪੇਅ-ਸਲਿੱਪ ਨਹੀਂ',
+@@ -290,7 +300,17 @@ class L10n extends ChangeNotifier {
+       'Joined on': 'भर्ती की तारीख',
+       'Leave': 'छुट्टी',
+       'My attendance': 'मेरी उपस्थिति',
+-      'Native app · Phase 5 Release': 'नेटिव ऐप · फेज़ 5 रिलीज़',
++      'Native app · Phase 6 Push': 'नेटिव ऐप · फेज़ 6 पुश',
++      'Notifications': 'नोटिफ़िकेशन',
++      'Notifications on': 'नोटिफ़िकेशन चालू',
++      'Notifications off': 'नोटिफ़िकेशन बंद',
++      'Punch reminders, leave decisions, announcements': 'पंच रिमाइंडर, छुट्टी के फ़ैसले, सूचनाएँ',
++      'Allow notifications for HRMate in phone settings': 'फ़ोन की सेटिंग में HRMate के लिए नोटिफ़िकेशन की अनुमति दें',
++      'You will not receive push notifications': 'आपको पुश नोटिफ़िकेशन नहीं मिलेंगे',
++      'Send test notification': 'टेस्ट नोटिफ़िकेशन भेजें',
++      'The server has no push key yet': 'सर्वर पर अभी पुश कुंजी नहीं है',
++      'This phone is not registered for push yet — try again in a moment': 'यह फ़ोन अभी पुश के लिए रजिस्टर नहीं हुआ — थोड़ी देर बाद फिर कोशिश करें',
++      'Test notification in %s seconds — close the app to check': '%s सेकंड में टेस्ट नोटिफ़िकेशन आएगा — जाँच के लिए ऐप बंद करें',
+       'Net pay': 'नेट वेतन',
+       'No holidays published for %s': '%s के लिए कोई अवकाश जारी नहीं',
+       'No payslips yet': 'अभी कोई पे-स्लिप नहीं',
+diff --git a/mobile/lib/features/leaves/leaves_models.dart b/mobile/lib/features/leaves/leaves_models.dart
+index ba63689..4d58456 100644
+--- a/mobile/lib/features/leaves/leaves_models.dart
++++ b/mobile/lib/features/leaves/leaves_models.dart
+@@ -1,5 +1,16 @@
+ import '../../core/format.dart';
+ 
++/// Short badge code: "(EL)" from the name when present, else a type of ≤ 3
++/// letters, else the first two letters ("EARNED" → "EA"). Display only —
++/// the value SENT to the server is always the `type` from `leaves/balance`.
++String _shortCode(String type, String name) {
++  final m = RegExp(r'\(([A-Za-z]{1,4})\)').firstMatch(name);
++  if (m != null) return m.group(1)!.toUpperCase();
++  final t = type.trim().toUpperCase();
++  if (t.isEmpty) return '?';
++  return t.length <= 3 ? t : t.substring(0, 2);
++}
++
+ /// One leave type row from `GET leaves/balance` → `balances[]`.
+ class LeaveTypeBalance {
+   final String type; // EL | CL | SL | …
+@@ -21,6 +32,8 @@ class LeaveTypeBalance {
+     );
+   }
+ 
++  String get code => _shortCode(type, name);
++
+   static List<LeaveTypeBalance> listFromJson(dynamic json) {
+     final list = json is Map ? json['balances'] : json;
+     if (list is! List) return const [];
+@@ -100,6 +113,7 @@ class LeaveRequest {
+     return list.whereType<Map>().map((m) => LeaveRequest.fromJson(m.cast<String, dynamic>())).toList();
+   }
+ 
++  String get code => _shortCode(type, typeName);
+   bool get pending => status == 'pending';
+   bool get approved => status == 'approved';
+   bool get rejected => status == 'rejected';
+diff --git a/mobile/lib/features/leaves/leaves_page.dart b/mobile/lib/features/leaves/leaves_page.dart
+index b8a5bc2..c9115ba 100644
+--- a/mobile/lib/features/leaves/leaves_page.dart
++++ b/mobile/lib/features/leaves/leaves_page.dart
+@@ -297,7 +297,7 @@ class _BalanceCard extends StatelessWidget {
+       child: SizedBox(
+         width: 150,
+         child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+-          Text(b.type.isEmpty ? b.name : b.type, style: t.labelLarge?.copyWith(color: HrBrand.subInk)),
++          Text(b.name, style: t.labelLarge?.copyWith(color: HrBrand.subInk), maxLines: 1, overflow: TextOverflow.ellipsis),
+           const SizedBox(height: 4),
+           Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+             Text(Fmt.compact(b.available), style: t.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+@@ -337,7 +337,7 @@ class _LeaveCard extends StatelessWidget {
+             height: 40,
+             decoration: const BoxDecoration(color: HrBrand.blueContainer, shape: BoxShape.circle),
+             alignment: Alignment.center,
+-            child: Text(r.type.isEmpty ? '?' : r.type, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: HrBrand.blueDeep)),
++            child: Text(r.code, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: HrBrand.blueDeep)),
+           ),
+           const SizedBox(width: 12),
+           Expanded(
+@@ -535,7 +535,7 @@ class _ApplyLeaveSheetState extends State<_ApplyLeaveSheet> {
+             Wrap(spacing: 8, runSpacing: 8, children: [
+               for (final b in widget.types)
+                 ChoiceChip(
+-                  label: Text('${b.type.isEmpty ? b.name : b.type} · ${Fmt.compact(b.available)}'),
++                  label: Text('${b.code} · ${Fmt.compact(b.available)}'),
+                   selectedColor: HrBrand.blueContainer,
+                   selected: _type == b.type,
+                   onSelected: (_) => setState(() {
+diff --git a/mobile/lib/features/more/more_page.dart b/mobile/lib/features/more/more_page.dart
+index 46be820..d314af6 100644
+--- a/mobile/lib/features/more/more_page.dart
++++ b/mobile/lib/features/more/more_page.dart
+@@ -7,6 +7,7 @@ import '../../core/i18n.dart';
+ import '../../core/secure.dart';
+ import '../../core/theme.dart';
+ import '../../state/auth.dart';
++import '../../state/push.dart';
+ import '../../ui/widgets.dart';
+ import 'calendar_page.dart';
+ import 'holidays_page.dart';
+@@ -17,6 +18,10 @@ import 'profile_page.dart';
+ /// Phase 5 adds the tiles grid (Profile · My attendance · Holidays · Payslips)
+ /// between the identity card and the settings rows. Payslips hides itself when
+ /// the server has no payslips module (404 on `GET payslips`).
++/// Phase 6 adds the Notifications switch — the SERVER preference
++/// (`GET/PUT prefs/notify`, same `notify_enabled` the webapp uses), shown only
++/// when this build has push configured. Off = the server sends nothing to
++/// any of the user's devices (web or app).
+ class MorePage extends StatefulWidget {
+   const MorePage({super.key});
+   @override
+@@ -28,6 +33,8 @@ class _MorePageState extends State<MorePage> {
+   bool _bioEnabled = false;
+   String _version = '';
+   bool _payslips = true; // false once the server says 404 (module absent)
++  bool? _notify; // server preference; null = unknown / route not deployed yet
++  bool _notifyBusy = false;
+ 
+   @override
+   void initState() {
+@@ -42,9 +49,64 @@ class _MorePageState extends State<MorePage> {
+       } catch (_) {}
+       if (mounted) setState(() { _bioAvailable = a; _bioEnabled = e; _version = v; });
+       _probePayslips();
++      _loadNotify();
+     }();
+   }
+ 
++  Future<void> _loadNotify() async {
++    if (!mounted) return;
++    final api = context.read<AuthController>().api;
++    try {
++      final json = await api.get('/prefs/notify');
++      final m = (json as Map).cast<String, dynamic>();
++      if (mounted) setState(() => _notify = m['enabled'] != false);
++    } catch (_) {
++      // un-patched server or offline: the row stays hidden
++    }
++  }
++
++  Future<void> _toggleNotify(bool on) async {
++    if (_notifyBusy) return;
++    setState(() { _notifyBusy = true; _notify = on; });
++    final api = context.read<AuthController>().api;
++    try {
++      await api.put('/prefs/notify', {'enabled': on});
++      if (on) await PushController.instance.ensureRegistered();
++      if (mounted) showOk(context, tr(on ? 'Notifications on' : 'Notifications off'));
++    } catch (e) {
++      if (mounted) {
++        setState(() => _notify = !on);
++        showErr(context, e);
++      }
++    } finally {
++      if (mounted) setState(() => _notifyBusy = false);
++    }
++  }
++
++  /// `POST devices/push-test` — the server sends a real push to this phone
++  /// after a short delay, so the user can close the app and see it arrive
++  /// (the Phase 6 acceptance check, without touching any attendance/leave data).
++  Future<void> _testNotify() async {
++    final api = context.read<AuthController>().api;
++    try {
++      final json = await api.post('/devices/push-test');
++      final m = (json as Map).cast<String, dynamic>();
++      final tokens = (m['tokens'] as num?)?.toInt() ?? 0;
++      final seconds = (m['inSeconds'] as num?)?.toInt() ?? 10;
++      if (!mounted) return;
++      if (m['configured'] == false) {
++        showErr(context, tr('The server has no push key yet'));
++      } else if (tokens <= 0) {
++        showErr(context, tr('This phone is not registered for push yet — try again in a moment'));
++        PushController.instance.ensureRegistered(); // fire-and-forget re-registration
++      } else {
++        showOk(context, tr('Test notification in %s seconds — close the app to check').arg(seconds));
++      }
++    } catch (e) {
++      if (mounted) showErr(context, e);
++    }
++  }
++
+   Future<void> _probePayslips() async {
+     if (!mounted) return;
+     final api = context.read<AuthController>().api;
+@@ -85,6 +147,7 @@ class _MorePageState extends State<MorePage> {
+   Widget build(BuildContext context) {
+     final auth = context.watch<AuthController>();
+     final l10n = context.watch<L10n>();
++    final push = context.watch<PushController>();
+     final user = auth.user;
+     return Scaffold(
+       appBar: AppBar(title: Text(tr('More'))),
+@@ -142,11 +205,37 @@ class _MorePageState extends State<MorePage> {
+                   onChanged: _toggleBio,
+                 ),
+               ],
++              if (push.available && _notify != null) ...[
++                const Divider(),
++                SwitchListTile(
++                  secondary: const Icon(Icons.notifications_active_outlined, color: HrBrand.blue),
++                  title: Text(tr('Notifications')),
++                  subtitle: Text(tr(_notify == true
++                      ? (push.permitted
++                          ? 'Punch reminders, leave decisions, announcements'
++                          : 'Allow notifications for HRMate in phone settings')
++                      : 'You will not receive push notifications')),
++                  value: _notify == true,
++                  onChanged: _notifyBusy ? null : _toggleNotify,
++                ),
++                if (_notify == true)
++                  Padding(
++                    padding: const EdgeInsets.only(left: 72, bottom: 6),
++                    child: Align(
++                      alignment: Alignment.centerLeft,
++                      child: TextButton.icon(
++                        onPressed: _testNotify,
++                        icon: const Icon(Icons.send_rounded, size: 16),
++                        label: Text(tr('Send test notification')),
++                      ),
++                    ),
++                  ),
++              ],
+               const Divider(),
+               ListTile(
+                 leading: const Icon(Icons.info_outline_rounded, color: HrBrand.blue),
+                 title: Text(tr('About')),
+-                subtitle: Text(tr('Native app · Phase 5 Release')),
++                subtitle: Text(tr('Native app · Phase 6 Push')),
+                 trailing: Text(_version.isEmpty ? '' : '${tr('Version')} $_version', style: Theme.of(context).textTheme.bodySmall),
+               ),
+             ]),
+diff --git a/mobile/lib/main.dart b/mobile/lib/main.dart
+index 3bf8a40..7b5838a 100644
+--- a/mobile/lib/main.dart
++++ b/mobile/lib/main.dart
+@@ -6,17 +6,22 @@ import 'core/i18n.dart';
+ import 'core/theme.dart';
+ import 'router.dart';
+ import 'state/auth.dart';
++import 'state/push.dart';
+ 
+ void main() {
+   WidgetsFlutterBinding.ensureInitialized();
+   final auth = AuthController();
+   auth.restore();
+   L10n.instance.load();
++  // Phase 6: FCM token registration + foreground display. Never blocks
++  // startup; without google-services.json it simply stays unavailable.
++  PushController.instance.start(auth);
+   runApp(
+     MultiProvider(
+       providers: [
+         ChangeNotifierProvider.value(value: auth),
+         ChangeNotifierProvider.value(value: L10n.instance),
++        ChangeNotifierProvider.value(value: PushController.instance),
+       ],
+       child: const HrMateApp(),
+     ),
+@@ -32,6 +37,12 @@ class HrMateApp extends StatefulWidget {
+ class _HrMateAppState extends State<HrMateApp> {
+   GoRouter? _router; // built ONCE — rebuilding it would reset navigation
+ 
++  @override
++  void dispose() {
++    PushController.instance.attachOpenHandler(null);
++    super.dispose();
++  }
++
+   @override
+   Widget build(BuildContext context) {
+     final auth = context.watch<AuthController>();
+@@ -52,7 +63,13 @@ class _HrMateAppState extends State<HrMateApp> {
+         home: const SplashScreen(),
+       );
+     }
+-    _router ??= buildRouter(auth);
++    if (_router == null) {
++      final router = buildRouter(auth);
++      _router = router;
++      // A notification tap opens its screen — in a microtask, so it never runs
++      // inside a build. The router's redirect still sends a signed-out user to /login.
++      PushController.instance.attachOpenHandler((screen) => Future.microtask(() => router.go(screen)));
++    }
+     return MaterialApp.router(
+       title: 'HRMate',
+       debugShowCheckedModeBanner: false,
+diff --git a/mobile/lib/state/auth.dart b/mobile/lib/state/auth.dart
+index a32dcdd..6a32c73 100644
+--- a/mobile/lib/state/auth.dart
++++ b/mobile/lib/state/auth.dart
+@@ -74,6 +74,10 @@ class AuthController extends ChangeNotifier {
+   bool busy = false;
+   bool locked = false; // token present but biometric unlock still required
+ 
++  /// Runs at the start of [logout] while the Bearer token is still valid
++  /// (Phase 6: PushController removes this phone's FCM token on the server).
++  Future<void> Function()? beforeLogout;
++
+   AuthController() {
+     api.onUnauthenticated = () {
+       if (user != null || locked) {
+@@ -190,6 +194,7 @@ class AuthController extends ChangeNotifier {
+   }
+ 
+   Future<void> logout() async {
++    try { await beforeLogout?.call(); } catch (_) {/* best effort */}
+     try { await api.post('/auth/logout'); } catch (_) {/* best effort */}
+     await SecureStore.clearSession();
+     api.token = null;
+diff --git a/mobile/lib/state/push.dart b/mobile/lib/state/push.dart
+new file mode 100644
+index 0000000..b8ad960
+--- /dev/null
++++ b/mobile/lib/state/push.dart
+@@ -0,0 +1,204 @@
++import 'package:firebase_core/firebase_core.dart';
++import 'package:firebase_messaging/firebase_messaging.dart';
++import 'package:flutter/foundation.dart';
++import 'package:flutter_local_notifications/flutter_local_notifications.dart';
++
++import '../core/secure.dart';
++import 'auth.dart';
++
++/// Push notifications (Phase 6) — FCM token registration + display + tap routing.
++///
++/// How it fits the architecture:
++/// * The SERVER decides what to send (punch reminders, leave decisions,
++///   announcements) through its existing `notify()` pipeline; the app only
++///   registers its device token (`POST devices/push-token`) and shows what
++///   arrives. No notification logic lives on the phone.
++/// * Background / app-closed messages are shown by the OS (FCM `notification`
++///   payload on channel [channelId]). Foreground messages are shown through
++///   `flutter_local_notifications` on the same channel, so the user sees them
++///   in both cases. A tap opens the matching screen ([screenFor]).
++/// * Degrades gracefully: without `google-services.json` in the build, or
++///   without Play services, `Firebase.initializeApp()` fails → [available]
++///   stays false and the rest of the app is unaffected. An un-patched server
++///   (404 on `devices/push-token`) is simply retried on the next sign-in.
++class PushController extends ChangeNotifier {
++  PushController._();
++  static final PushController instance = PushController._();
++
++  /// Must match `default_notification_channel_id` in AndroidManifest.xml and
++  /// `android.notification.channel_id` sent by the server (`_lib/fcm.ts`).
++  static const channelId = 'hrmate_default';
++  static const _channelName = 'HRMate';
++  static const _channelDescription = 'Punch reminders, leave decisions and announcements';
++  static const _icon = 'ic_notification'; // android/app/src/main/res/drawable/ic_notification.xml
++
++  /// Firebase initialised in this build (google-services.json present).
++  bool available = false;
++
++  /// OS notification permission granted (Android 13+ asks; older = always true).
++  bool permitted = false;
++
++  AuthController? _auth;
++  String? _token;
++  String? _registeredKey; // "<userId>|<token>" that the server currently has
++  bool _syncing = false;
++  bool _askedPermission = false;
++  void Function(String screen)? _onOpen;
++  String? _pendingScreen;
++
++  final FlutterLocalNotificationsPlugin _local = FlutterLocalNotificationsPlugin();
++
++  /// Called once from main(). Never throws.
++  Future<void> start(AuthController auth) async {
++    _auth = auth;
++    try {
++      await Firebase.initializeApp();
++      available = true;
++    } catch (_) {
++      available = false; // push not configured in this build — app runs as before
++      notifyListeners();
++      return;
++    }
++    try {
++      await _local.initialize(
++        const InitializationSettings(android: AndroidInitializationSettings(_icon)),
++        onDidReceiveNotificationResponse: (r) => _open(r.payload),
++      );
++      await _local
++          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
++          ?.createNotificationChannel(const AndroidNotificationChannel(
++            channelId,
++            _channelName,
++            description: _channelDescription,
++            importance: Importance.high,
++          ));
++    } catch (_) {}
++    try {
++      final fm = FirebaseMessaging.instance;
++      FirebaseMessaging.onMessage.listen(_showForeground);
++      FirebaseMessaging.onMessageOpenedApp.listen((m) => _open(m.data['link']?.toString()));
++      final initial = await fm.getInitialMessage(); // app was closed, opened by a tap
++      if (initial != null) _open(initial.data['link']?.toString());
++      fm.onTokenRefresh.listen((t) {
++        _token = t;
++        _registeredKey = null;
++        _sync();
++      });
++    } catch (_) {}
++    auth.addListener(_sync);
++    auth.beforeLogout = unregister;
++    notifyListeners();
++    await _sync();
++  }
++
++  /// Where a tap should land. Set by the app once the router exists; a tap
++  /// that arrived earlier (cold start) is delivered as soon as it is set.
++  void attachOpenHandler(void Function(String screen)? handler) {
++    _onOpen = handler;
++    final p = _pendingScreen;
++    if (handler != null && p != null) {
++      _pendingScreen = null;
++      handler(p);
++    }
++  }
++
++  /// Webapp notification links → app screens (server links are webapp paths).
++  static String screenFor(String? link) {
++    final l = (link ?? '').trim().toLowerCase();
++    if (l.startsWith('/leaves') || l.startsWith('/approvals')) return '/leaves';
++    if (l.startsWith('/attendance')) return '/punch';
++    if (l.startsWith('/team') || l.startsWith('/roster')) return '/team';
++    return '/home';
++  }
++
++  /// Re-register the token (after the user turns notifications back on).
++  Future<void> ensureRegistered() {
++    _registeredKey = null;
++    _askedPermission = false;
++    return _sync();
++  }
++
++  /// Remove this phone's token on the server — called by AuthController
++  /// BEFORE the session is dropped (needs the Bearer token). Best effort;
++  /// the server's logout route deletes the device's tokens as well.
++  Future<void> unregister() async {
++    final auth = _auth;
++    final t = _token;
++    _registeredKey = null;
++    if (!available || auth == null || t == null || auth.api.token == null) return;
++    try {
++      await auth.api.delete('/devices/push-token?token=${Uri.encodeQueryComponent(t)}');
++    } catch (_) {}
++  }
++
++  Future<void> _sync() async {
++    final auth = _auth;
++    if (!available || auth == null) return;
++    if (!auth.isLoggedIn) {
++      _registeredKey = null;
++      return;
++    }
++    if (_syncing) return;
++    _syncing = true;
++    try {
++      if (!_askedPermission) {
++        _askedPermission = true;
++        final s = await FirebaseMessaging.instance.requestPermission();
++        permitted = s.authorizationStatus == AuthorizationStatus.authorized ||
++            s.authorizationStatus == AuthorizationStatus.provisional;
++        notifyListeners();
++      }
++      _token ??= await FirebaseMessaging.instance.getToken();
++      final t = _token;
++      final user = auth.user;
++      if (t == null || t.isEmpty || user == null) return;
++      final key = '${user.id}|$t';
++      if (_registeredKey == key) return;
++      await auth.api.post('/devices/push-token', {
++        'token': t,
++        'platform': 'android',
++        'deviceId': await SecureStore.deviceId(),
++      });
++      _registeredKey = key;
++    } catch (_) {
++      // offline / un-patched server: retried on the next auth change or token refresh
++    } finally {
++      _syncing = false;
++    }
++  }
++
++  Future<void> _showForeground(RemoteMessage m) async {
++    final n = m.notification;
++    final title = n?.title ?? m.data['title']?.toString();
++    final body = n?.body ?? m.data['body']?.toString();
++    if (title == null && body == null) return;
++    try {
++      await _local.show(
++        (m.messageId ?? DateTime.now().toIso8601String()).hashCode & 0x7fffffff,
++        title,
++        body,
++        const NotificationDetails(
++          android: AndroidNotificationDetails(
++            channelId,
++            _channelName,
++            channelDescription: _channelDescription,
++            importance: Importance.high,
++            priority: Priority.high,
++            icon: _icon,
++          ),
++        ),
++        payload: m.data['link']?.toString(),
++      );
++    } catch (_) {}
++  }
++
++  void _open(String? link) {
++    final screen = screenFor(link);
++    final h = _onOpen;
++    if (h == null) {
++      _pendingScreen = screen;
++      return;
++    }
++    h(screen);
++  }
++}
+diff --git a/mobile/pubspec.yaml b/mobile/pubspec.yaml
+index 8bc27f0..ed9d291 100644
+--- a/mobile/pubspec.yaml
++++ b/mobile/pubspec.yaml
+@@ -3,7 +3,7 @@ description: HRMate — native Android app for the HRMate Workforce Portal (atte
+ publish_to: "none"
+ 
+ # Native app series = 2.x (the WebView shell was 1.x). Bump +1 per phase.
+-version: 3.0.0+30
++version: 3.1.0+31
+ 
+ environment:
+   sdk: ">=3.5.0 <4.0.0"
+@@ -23,6 +23,12 @@ dependencies:
+   url_launcher: ^6.3.2
+   connectivity_plus: ^6.1.0
+   package_info_plus: ^8.1.0
++  # Phase 6 push (ARCHITECTURE.md §3 allow-list). Pinned: firebase_* 3.x/15.x are the
++  # last lines that build on Flutter 3.29 / Dart 3.7 (Codemagic image); local
++  # notifications 19.x is the last major before the Dart 3.8 requirement.
++  firebase_core: ^3.15.2
++  firebase_messaging: ^15.2.10
++  flutter_local_notifications: ^19.4.2
+ 
+ dev_dependencies:
+   flutter_test:
+diff --git a/mobile/server-reference/README.md b/mobile/server-reference/README.md
+index 1364f7e..33783c7 100644
+--- a/mobile/server-reference/README.md
++++ b/mobile/server-reference/README.md
+@@ -27,6 +27,13 @@ app/api/v1/mobile/
+   team/members/[id]/day/route.ts ← Phase 4: GET ?date → {member, shift, day{…punches[]}}
+   holidays/route.ts         ← Phase 5: GET ?year → {year, items[{date,name,type,optional}]}
+   payslips/route.ts         ← Phase 5: GET → {items[{id,month,label,netPay,currency,url}]} — create ONLY if the webapp has payroll; 404 hides the tile
++  devices/push-token/route.ts ← Phase 6: POST {token, platform, deviceId} → {ok} (upsert) · DELETE ?token= → {ok}
++  devices/push-test/route.ts  ← Phase 6: POST → {ok, configured, tokens, inSeconds} — sends ONE real push to the caller's phones after 10 s
++  prefs/notify/route.ts       ← Phase 6: GET → {enabled} · PUT {enabled} → the webapp's own user_prefs.notify_enabled
++  auth/logout/route.ts        ← Phase 6: re-copy — also forgets the device's FCM tokens
++lib/fcm.ts                  ← Phase 6: → src/lib/fcm.ts  FCM HTTP v1 sender (no npm dep), token table, sendFcmToUser / sendFcmAnnouncement
++webapp-patches/src/lib/push.ts        ← Phase 6: → src/lib/push.ts  (the live file + FCM fan-out inside sendPushToUser — the ONLY change)
++webapp-patches/src/app/api/wall/route.ts ← Phase 6: → src/app/api/wall/route.ts (the live file + push-only announcement after INSERT — the ONLY change)
+ ```
+ 
+ Phase 3 note: `_lib/mobileAuth.ts` `handle()` now passes the route context through
+@@ -155,3 +162,53 @@ curl -s https://hr.flavorflow.co.in/api/download/apk-info
+ # → {"ok":true,"package":"in.flavorflow.hrmate","minAndroid":"8.0","version":"3.0.0","build":30,"file":"HRMate-3.0.0.apk","sizeBytes":…,"sha256":"…","publishedAt":"…","available":true,"url":"/api/download/apk"}
+ curl -s -o /dev/null -w '%{http_code} %{size_download}\n' https://hr.flavorflow.co.in/api/download/apk   # → 200 <same sizeBytes>
+ ```
++
++## Phase 6 — push notifications (FCM)
++
++**What changes on the server (all additive, no business rule touched):**
++
++| File in the webapp | Action | Why |
++|---|---|---|
++| `src/lib/fcm.ts` | new (from `lib/fcm.ts`) | FCM HTTP v1 sender using the Firebase **service-account key**; signs the OAuth JWT with `node:crypto`, so **no new npm package**. Table `mobile_push_tokens`. Never throws; without a key every send is a no-op. |
++| `src/lib/push.ts` | replace (from `webapp-patches/src/lib/push.ts`) | `sendPushToUser()` now also calls `sendFcmToUser()` — every existing `notify()` (morning punch nudge, leave approved / rejected, missed-punch warnings, …) reaches the phone. The `isNotifyEnabled` check stays first, so "notifications off" covers web and app alike. |
++| `src/app/api/wall/route.ts` | replace (from `webapp-patches/…/wall/route.ts`) | after the wall INSERT: push-only announcement to everyone except the author (skips users with notifications off). Inbox / permissions unchanged. |
++| `src/app/api/v1/mobile/devices/push-token/route.ts` | new | app registers / removes its FCM token |
++| `src/app/api/v1/mobile/devices/push-test/route.ts` | new | "Send test notification" in More → the acceptance check without touching attendance/leave data |
++| `src/app/api/v1/mobile/prefs/notify/route.ts` | new | Notifications switch in More = the webapp's `user_prefs.notify_enabled` |
++| `src/app/api/v1/mobile/auth/logout/route.ts` | replace | logout also deletes the device's FCM tokens |
++
++**Server key (owner does this once, outside git):** Firebase console → project **HRMate** → ⚙ Project settings →
++*Service accounts* → **Generate new private key** → a `hrmate-…-firebase-adminsdk-….json` downloads. On the VPS:
++
++```bash
++# after uploading the json with the SSH "UPLOAD FILE" button (it lands in ~):
++sudo docker cp ~/hrmate-*-firebase-adminsdk-*.json hrmate-hrmate-1:/app/data/fcm-service-account.json
++# no restart needed — src/lib/fcm.ts re-checks the file every 30 s.  Container log shows:
++sudo docker logs --since 2m hrmate-hrmate-1 2>&1 | grep '\[fcm\]'      # → [fcm] configured: project hrmate-…
++```
++
++The file lives in the `hrmate_data` volume (`/app/data`, next to `hrmate.db`), so `docker compose up -d --build`
++keeps it. Optional overrides: `FCM_SERVICE_ACCOUNT_FILE=<path>` or `FCM_SERVICE_ACCOUNT_JSON=<inline json>` in
++`docker-compose.yml`. **Never commit the key** — it can send notifications to every user.
++
++**Verify (must be in the Phase 6 reply):**
++
++```bash
++T=<token from login>
++# preference (same value the webapp Settings page shows)
++curl -s https://hr.flavorflow.co.in/api/v1/mobile/prefs/notify -H "authorization: Bearer $T"                 # → {"ok":true,"enabled":true}
++curl -s -X PUT https://hr.flavorflow.co.in/api/v1/mobile/prefs/notify -H "authorization: Bearer $T" -H 'content-type: application/json' -d '{"enabled":true}'
++# token registration (validation) → 400 VALIDATION, then 200 with a dummy token
++curl -s -w '\n%{http_code}\n' -X POST https://hr.flavorflow.co.in/api/v1/mobile/devices/push-token -H "authorization: Bearer $T" -H 'content-type: application/json' -d '{}'
++curl -s -w '\n%{http_code}\n' -X POST https://hr.flavorflow.co.in/api/v1/mobile/devices/push-token -H "authorization: Bearer $T" -H 'content-type: application/json' -d '{"token":"curl-test-token-0123456789abcdef","platform":"android","deviceId":"curl-1"}'
++curl -s -X DELETE "https://hr.flavorflow.co.in/api/v1/mobile/devices/push-token?token=curl-test-token-0123456789abcdef" -H "authorization: Bearer $T"   # → {"ok":true}
++# server key status (configured:true once the json is in /app/data); tokens = phones of this user
++curl -s -X POST https://hr.flavorflow.co.in/api/v1/mobile/devices/push-test -H "authorization: Bearer $T"
++# → {"ok":true,"configured":true,"project":"hrmate-…","error":null,"tokens":1,"inSeconds":10}
++# no token → 401
++curl -s -o /dev/null -w '%{http_code}\n' https://hr.flavorflow.co.in/api/v1/mobile/prefs/notify
++```
++
++**Acceptance (owner, on the phone):** More → Notifications ON → *Send test notification* → press Home / swipe the
++app away → within ~10 s the notification appears in the tray → tap opens the app. Then a real one: approve a
++leave from the webapp → the employee's phone gets "Leave approved…" with the app closed.
+diff --git a/mobile/server-reference/app/api/v1/mobile/auth/logout/route.ts b/mobile/server-reference/app/api/v1/mobile/auth/logout/route.ts
+index 897aa39..0e73f85 100644
+--- a/mobile/server-reference/app/api/v1/mobile/auth/logout/route.ts
++++ b/mobile/server-reference/app/api/v1/mobile/auth/logout/route.ts
+@@ -1,11 +1,17 @@
+ import { NextRequest } from 'next/server';
+-import { handle, ok, requireMobileUser, revokeDevice } from '../../_lib/mobileAuth';
++import { handle, ok, requireMobileUser, revokeDevice, findDevice } from '../../_lib/mobileAuth';
++import { removeDevicePushTokens } from '@/lib/fcm';
+ 
+ export const dynamic = 'force-dynamic';
+ 
+-// POST /api/v1/mobile/auth/logout  (Bearer) — revokes this device's token
++// POST /api/v1/mobile/auth/logout  (Bearer) — revokes this device's token.
++// Phase 6: also forgets the device's FCM tokens, so a signed-out phone stops
++// receiving this user's notifications even if the app could not call
++// DELETE devices/push-token first (offline, killed, …).
+ export const POST = handle(async (req: NextRequest) => {
+   const { tokenId } = await requireMobileUser(req);
++  const dev = await findDevice(tokenId);
+   await revokeDevice(tokenId);
++  if (dev?.deviceId) removeDevicePushTokens(dev.deviceId);
+   return ok();
+ });
+diff --git a/mobile/server-reference/app/api/v1/mobile/devices/push-test/route.ts b/mobile/server-reference/app/api/v1/mobile/devices/push-test/route.ts
+new file mode 100644
+index 0000000..8a5d95d
+--- /dev/null
++++ b/mobile/server-reference/app/api/v1/mobile/devices/push-test/route.ts
+@@ -0,0 +1,31 @@
++import { NextRequest } from 'next/server';
++import { handle, ok, requireMobileUser } from '../../_lib/mobileAuth';
++import { countPushTokens, fcmStatus, sendFcmToUser } from '@/lib/fcm';
++
++export const dynamic = 'force-dynamic';
++
++const DELAY_S = 10;
++
++// POST /api/v1/mobile/devices/push-test  (Bearer)
++// Sends ONE real push to the caller's own registered phones after 10 s, so the
++// acceptance check "notification arrives with the app closed" can be done from
++// More → Notifications → "Send test notification" without touching attendance
++// or leave data (nothing is written to the webapp's notifications inbox).
++// → {ok:true, configured, project, tokens, inSeconds}
++export const POST = handle(async (req: NextRequest) => {
++  const { user } = await requireMobileUser(req);
++  const st = fcmStatus();
++  const tokens = countPushTokens(user.id);
++  if (st.configured && tokens > 0) {
++    const at = new Date(Date.now() + DELAY_S * 1000);
++    const time = at.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' });
++    setTimeout(() => {
++      sendFcmToUser(user.id, {
++        title: 'HRMate test notification',
++        body: `Push is working on this phone (${time}).`,
++        link: '/settings',
++      }).then((r) => console.log(`[fcm] test → ${user.code}: sent ${r.sent}, failed ${r.failed}, removed ${r.removed}`));
++    }, DELAY_S * 1000);
++  }
++  return ok({ configured: st.configured, project: st.project, error: st.error, tokens, inSeconds: DELAY_S });
++});
+diff --git a/mobile/server-reference/app/api/v1/mobile/devices/push-token/route.ts b/mobile/server-reference/app/api/v1/mobile/devices/push-token/route.ts
+new file mode 100644
+index 0000000..3a46b86
+--- /dev/null
++++ b/mobile/server-reference/app/api/v1/mobile/devices/push-token/route.ts
+@@ -0,0 +1,30 @@
++import { NextRequest } from 'next/server';
++import { handle, ok, fail, requireMobileUser, findDevice } from '../../_lib/mobileAuth';
++import { registerPushToken, removePushToken } from '@/lib/fcm';
++
++export const dynamic = 'force-dynamic';
++
++// POST /api/v1/mobile/devices/push-token  (Bearer)  {token, platform?, deviceId?}
++// Registers this phone's FCM token for the signed-in user (upsert; a rotated
++// token replaces the previous one of the same device). → {ok:true}
++export const POST = handle(async (req: NextRequest) => {
++  const { user, tokenId } = await requireMobileUser(req);
++  const body = (await req.json().catch(() => ({}))) as { token?: unknown; platform?: unknown; deviceId?: unknown };
++  const token = typeof body.token === 'string' ? body.token.trim() : '';
++  if (!token || token.length < 20 || token.length > 4096) return fail(400, 'VALIDATION', 'token is required.');
++  const platform = typeof body.platform === 'string' && body.platform.trim() ? body.platform.trim().toLowerCase() : 'android';
++  // device id: what the app sends, else the one recorded at login for this session
++  let deviceId = typeof body.deviceId === 'string' ? body.deviceId.trim() : '';
++  if (!deviceId) deviceId = (await findDevice(tokenId))?.deviceId || '';
++  registerPushToken(user.id, token, platform, deviceId);
++  return ok();
++});
++
++// DELETE /api/v1/mobile/devices/push-token?token=…  (Bearer)
++// The app calls this right before sign-out. → {ok:true} (also when nothing matched)
++export const DELETE = handle(async (req: NextRequest) => {
++  const { user } = await requireMobileUser(req);
++  const token = (req.nextUrl.searchParams.get('token') || '').trim();
++  if (token) removePushToken(user.id, token);
++  return ok();
++});
+diff --git a/mobile/server-reference/app/api/v1/mobile/prefs/notify/route.ts b/mobile/server-reference/app/api/v1/mobile/prefs/notify/route.ts
+new file mode 100644
+index 0000000..cce711a
+--- /dev/null
++++ b/mobile/server-reference/app/api/v1/mobile/prefs/notify/route.ts
+@@ -0,0 +1,22 @@
++import { NextRequest } from 'next/server';
++import { handle, ok, fail, requireMobileUser } from '../../_lib/mobileAuth';
++import { getUserPrefs, setUserPrefs } from '@/lib/prefs';
++
++export const dynamic = 'force-dynamic';
++
++// GET /api/v1/mobile/prefs/notify  (Bearer) → {ok:true, enabled}
++// The SAME `user_prefs.notify_enabled` the webapp's Settings page uses: off means
++// `sendPushToUser()` sends nothing (web push AND FCM) — no second preference store.
++export const GET = handle(async (req: NextRequest) => {
++  const { user } = await requireMobileUser(req);
++  return ok({ enabled: getUserPrefs(user.id).notify_enabled !== 0 });
++});
++
++// PUT /api/v1/mobile/prefs/notify  (Bearer)  {enabled: boolean} → {ok:true, enabled}
++export const PUT = handle(async (req: NextRequest) => {
++  const { user } = await requireMobileUser(req);
++  const body = (await req.json().catch(() => ({}))) as { enabled?: unknown };
++  if (typeof body.enabled !== 'boolean') return fail(400, 'VALIDATION', 'enabled (true/false) is required.');
++  const next = setUserPrefs(user.id, { notify_enabled: body.enabled ? 1 : 0 });
++  return ok({ enabled: next.notify_enabled !== 0 });
++});
+diff --git a/mobile/server-reference/lib/fcm.ts b/mobile/server-reference/lib/fcm.ts
+new file mode 100644
+index 0000000..b492e78
+--- /dev/null
++++ b/mobile/server-reference/lib/fcm.ts
+@@ -0,0 +1,290 @@
++// Phase 6 — Firebase Cloud Messaging (HTTP v1) sender for the native app.
++//
++// * No npm dependency: the service-account key signs an RS256 JWT with node:crypto,
++//   the OAuth token is cached, messages go to `projects/<id>/messages:send` with fetch.
++// * Config = ONE file, the Firebase service-account key, outside git and outside the
++//   image: `/app/data/fcm-service-account.json` (docker volume `hrmate_data`), or the
++//   env `FCM_SERVICE_ACCOUNT_FILE` / `FCM_SERVICE_ACCOUNT_JSON`. The file is re-checked
++//   every 30 s, so copying it into the container is enough — no restart needed.
++// * Never throws into a caller: without a key every send is a silent no-op, so the
++//   webapp keeps working exactly as before Phase 6.
++// * Called by `src/lib/push.ts` (`sendPushToUser` → web-push subscriptions THEN
++//   `sendFcmToUser`), i.e. every existing `notify()` — punch reminders, leave
++//   decisions, announcements — reaches the phone with no change to business logic.
++//   `push.ts` already returns early when the user turned notifications off
++//   (`isNotifyEnabled`), so the preference covers web and app alike.
++//
++// Lives at `src/lib/fcm.ts` in the webapp (next to push.ts / prefs.ts / notify.ts).
++import fs from 'fs';
++import { createSign } from 'crypto';
++import db from './db';
++
++// Table is created on first use (not at import) so `next build` never touches the DB.
++let schemaReady = false;
++function ensureSchema(): void {
++  if (schemaReady) return;
++  db.exec(`
++    CREATE TABLE IF NOT EXISTS mobile_push_tokens (
++      token      TEXT PRIMARY KEY,
++      user_id    TEXT NOT NULL,
++      device_id  TEXT NOT NULL DEFAULT '',
++      platform   TEXT NOT NULL DEFAULT 'android',
++      created_at TEXT NOT NULL,
++      updated_at TEXT NOT NULL,
++      last_error TEXT
++    );
++    CREATE INDEX IF NOT EXISTS idx_mobile_push_tokens_user ON mobile_push_tokens(user_id);
++  `);
++  schemaReady = true;
++}
++
++export type PushPayload = { title: string; body: string; link?: string };
++
++/** Must match `PushController.channelId` + the manifest meta-data in the app. */
++export const FCM_CHANNEL_ID = 'hrmate_default';
++const FCM_ICON = 'ic_notification';
++const FCM_COLOR = '#1E6FE0';
++
++type ServiceAccount = { project_id: string; client_email: string; private_key: string; token_uri: string };
++
++const SA_FILE = process.env.FCM_SERVICE_ACCOUNT_FILE || '/app/data/fcm-service-account.json';
++let sa: ServiceAccount | null = null;
++let saCheckedAt = 0;
++let saError = 'not checked yet';
++
++function loadServiceAccount(): ServiceAccount | null {
++  if (sa) return sa;
++  const now = Date.now();
++  if (now - saCheckedAt < 30_000) return null;
++  saCheckedAt = now;
++  try {
++    const raw =
++      process.env.FCM_SERVICE_ACCOUNT_JSON ||
++      (fs.existsSync(SA_FILE) ? fs.readFileSync(SA_FILE, 'utf8') : '');
++    if (!raw) {
++      saError = `no service-account key at ${SA_FILE}`;
++      return null;
++    }
++    const j = JSON.parse(raw);
++    if (!j.project_id || !j.client_email || !j.private_key) {
++      saError = 'file is not a Firebase service-account key (project_id / client_email / private_key missing)';
++      return null;
++    }
++    sa = {
++      project_id: String(j.project_id),
++      client_email: String(j.client_email),
++      private_key: String(j.private_key),
++      token_uri: String(j.token_uri || 'https://oauth2.googleapis.com/token'),
++    };
++    saError = '';
++    console.log(`[fcm] configured: project ${sa.project_id} (${sa.client_email})`);
++    return sa;
++  } catch (e) {
++    saError = `cannot read ${SA_FILE}: ${(e as Error).message || e}`;
++    return null;
++  }
++}
++
++/** For `POST devices/push-test` and logs — never exposes the key. */
++export function fcmStatus(): { configured: boolean; project: string | null; error: string | null; file: string } {
++  const s = loadServiceAccount();
++  return { configured: !!s, project: s?.project_id || null, error: s ? null : saError, file: SA_FILE };
++}
++
++// ---- OAuth2 (service account → access token, cached until ~1 min before expiry) ----
++let accessToken = '';
++let accessExp = 0;
++let accessInflight: Promise<string> | null = null;
++
++function getAccessToken(s: ServiceAccount): Promise<string> {
++  const now = Math.floor(Date.now() / 1000);
++  if (accessToken && accessExp - 60 > now) return Promise.resolve(accessToken);
++  // parallel sends share ONE token request (a fan-out must not hit OAuth N times)
++  accessInflight ??= fetchAccessToken(s).finally(() => {
++    accessInflight = null;
++  });
++  return accessInflight;
++}
++
++async function fetchAccessToken(s: ServiceAccount): Promise<string> {
++  const now = Math.floor(Date.now() / 1000);
++  const b64u = (x: string) => Buffer.from(x).toString('base64url');
++  const header = b64u(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
++  const claims = b64u(
++    JSON.stringify({
++      iss: s.client_email,
++      scope: 'https://www.googleapis.com/auth/firebase.messaging',
++      aud: s.token_uri,
++      iat: now,
++      exp: now + 3600,
++    })
++  );
++  const signer = createSign('RSA-SHA256');
++  signer.update(`${header}.${claims}`);
++  signer.end();
++  const signature = signer.sign(s.private_key, 'base64url');
++  const res = await fetch(s.token_uri, {
++    method: 'POST',
++    headers: { 'content-type': 'application/x-www-form-urlencoded' },
++    body: new URLSearchParams({
++      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
++      assertion: `${header}.${claims}.${signature}`,
++    }),
++  });
++  const j = (await res.json().catch(() => ({}))) as { access_token?: string; expires_in?: number; error?: string; error_description?: string };
++  if (!res.ok || !j.access_token) {
++    throw new Error(`oauth ${res.status}: ${j.error_description || j.error || 'no access_token'}`);
++  }
++  accessToken = j.access_token;
++  accessExp = now + Number(j.expires_in || 3600);
++  return accessToken;
++}
++
++let lastWarnAt = 0;
++function warn(msg: string) {
++  const now = Date.now();
++  if (now - lastWarnAt < 60_000) return;
++  lastWarnAt = now;
++  console.warn(`[fcm] ${msg}`);
++}
++
++type SendResult = 'ok' | 'gone' | 'error';
++
++async function sendOne(s: ServiceAccount, token: string, p: PushPayload, retry = true): Promise<{ r: SendResult; err?: string }> {
++  const at = await getAccessToken(s);
++  const message = {
++    token,
++    notification: { title: p.title, body: p.body },
++    // data values must be strings; the app routes a tap by `link` (webapp path)
++    data: { link: p.link || '/dashboard', title: p.title, body: p.body },
++    android: {
++      priority: 'HIGH',
++      notification: { channel_id: FCM_CHANNEL_ID, icon: FCM_ICON, color: FCM_COLOR, default_sound: true },
++    },
++  };
++  const res = await fetch(`https://fcm.googleapis.com/v1/projects/${s.project_id}/messages:send`, {
++    method: 'POST',
++    headers: { authorization: `Bearer ${at}`, 'content-type': 'application/json' },
++    body: JSON.stringify({ message }),
++  });
++  if (res.ok) return { r: 'ok' };
++  const text = (await res.text().catch(() => '')).slice(0, 400);
++  if (res.status === 401 && retry) {
++    accessToken = ''; // token revoked/expired early — refresh once
++    return sendOne(s, token, p, false);
++  }
++  // Token no longer valid on this phone (app uninstalled / data cleared / rotated) → forget it.
++  const gone = res.status === 404 || /UNREGISTERED|not a valid FCM registration token/i.test(text);
++  return { r: gone ? 'gone' : 'error', err: `${res.status} ${text}` };
++}
++
++/** Send one notification to every registered phone of a user. Never throws. */
++export async function sendFcmToUser(userId: string, p: PushPayload): Promise<{ sent: number; failed: number; removed: number }> {
++  const out = { sent: 0, failed: 0, removed: 0 };
++  const s = loadServiceAccount();
++  if (!s) return out;
++  ensureSchema();
++  let rows: { token: string }[] = [];
++  try {
++    rows = db.prepare('SELECT token FROM mobile_push_tokens WHERE user_id = ?').all(userId) as { token: string }[];
++  } catch (e) {
++    warn(`token lookup failed: ${(e as Error).message || e}`);
++    return out;
++  }
++  if (!rows.length) return out;
++  await Promise.all(
++    rows.map(async ({ token }) => {
++      try {
++        const { r, err } = await sendOne(s, token, p);
++        if (r === 'ok') {
++          out.sent++;
++        } else if (r === 'gone') {
++          db.prepare('DELETE FROM mobile_push_tokens WHERE token = ?').run(token);
++          out.removed++;
++        } else {
++          out.failed++;
++          db.prepare('UPDATE mobile_push_tokens SET last_error = ? WHERE token = ?').run((err || 'error').slice(0, 300), token);
++          warn(`send failed for user ${userId}: ${err}`);
++        }
++      } catch (e) {
++        out.failed++;
++        warn(`send threw for user ${userId}: ${(e as Error).message || e}`);
++      }
++    })
++  );
++  return out;
++}
++
++/** Fan-out helper — 10 users at a time. Never throws. */
++export async function sendFcmToMany(userIds: string[], p: PushPayload): Promise<void> {
++  for (let i = 0; i < userIds.length; i += 10) {
++    await Promise.all(userIds.slice(i, i + 10).map((id) => sendFcmToUser(id, p)));
++  }
++}
++
++/**
++ * Announcement (new wall post) → every active user's PHONE, except the author and
++ * users who turned notifications off. Deliberately push-only: the webapp's
++ * notifications inbox / web-push behaviour is unchanged (additive, no new rule).
++ * Fire-and-forget from the wall POST handler; never throws.
++ */
++export function sendFcmAnnouncement(p: PushPayload, excludeUserId = ''): void {
++  if (!loadServiceAccount()) return;
++  ensureSchema();
++  let ids: string[] = [];
++  try {
++    ids = (
++      db
++        .prepare(
++          `SELECT DISTINCT t.user_id AS id
++             FROM mobile_push_tokens t
++             JOIN users u ON u.id = t.user_id AND u.active = 1
++             LEFT JOIN user_prefs pr ON pr.user_id = t.user_id
++            WHERE t.user_id != ? AND COALESCE(pr.notify_enabled, 1) != 0`
++        )
++        .all(excludeUserId) as { id: string }[]
++    ).map((r) => r.id);
++  } catch (e) {
++    warn(`announcement lookup failed: ${(e as Error).message || e}`);
++    return;
++  }
++  if (!ids.length) return;
++  sendFcmToMany(ids, p).catch(() => {});
++}
++
++// ---- token registry (used by devices/* routes and auth/logout) ----------------------
++
++export function registerPushToken(userId: string, token: string, platform: string, deviceId: string): void {
++  ensureSchema();
++  const now = new Date().toISOString();
++  db.prepare(
++    `INSERT INTO mobile_push_tokens (token, user_id, device_id, platform, created_at, updated_at, last_error)
++     VALUES (?, ?, ?, ?, ?, ?, NULL)
++     ON CONFLICT(token) DO UPDATE SET
++       user_id = excluded.user_id,
++       device_id = excluded.device_id,
++       platform = excluded.platform,
++       updated_at = excluded.updated_at,
++       last_error = NULL`
++  ).run(token, userId, deviceId, platform, now, now);
++  // one token per phone: a rotated token replaces the previous one of the same device
++  if (deviceId) db.prepare('DELETE FROM mobile_push_tokens WHERE device_id = ? AND token != ?').run(deviceId, token);
++}
++
++export function removePushToken(userId: string, token: string): void {
++  ensureSchema();
++  db.prepare('DELETE FROM mobile_push_tokens WHERE user_id = ? AND token = ?').run(userId, token);
++}
++
++/** Logout: the signed-out phone must not receive this user's notifications any more. */
++export function removeDevicePushTokens(deviceId: string): void {
++  if (!deviceId) return;
++  ensureSchema();
++  db.prepare('DELETE FROM mobile_push_tokens WHERE device_id = ?').run(deviceId);
++}
++
++export function countPushTokens(userId: string): number {
++  ensureSchema();
++  const row = db.prepare('SELECT COUNT(*) AS n FROM mobile_push_tokens WHERE user_id = ?').get(userId) as { n: number } | undefined;
++  return row?.n || 0;
++}
+diff --git a/mobile/server-reference/scripts/publish-apk.sh b/mobile/server-reference/scripts/publish-apk.sh
+index aab4c00..7321f86 100755
+--- a/mobile/server-reference/scripts/publish-apk.sh
++++ b/mobile/server-reference/scripts/publish-apk.sh
+@@ -16,11 +16,29 @@ fi
+ [[ "$BUILD" =~ ^[0-9]+$ ]] || { echo "STOP: build must be a number"; exit 1; }
+ CONTAINER="${HRMATE_CONTAINER:-hrmate-hrmate-1}"
+ docker ps --format '{{.Names}}' | grep -qx "$CONTAINER" || { echo "STOP: container $CONTAINER is not running"; exit 1; }
++# Real APK = zip with AndroidManifest.xml. (No `unzip -l | grep -q` here: with pipefail, grep
++# closing the pipe early makes the check fail on big APKs.)
++BYTES=$(stat -c %s "$APK")
++MAGIC=$(head -c 2 "$APK" | od -An -c | tr -d ' ')
++if [ "$MAGIC" != "PK" ]; then
++  echo "STOP: $APK is not an APK (first bytes '$MAGIC', $BYTES bytes)."
++  echo "  -> '<!' or '<h' = a web page was saved, not the APK: download again from Codemagic -> Artifacts"
++  exit 1
++fi
+ if command -v unzip >/dev/null 2>&1; then
+-  unzip -l "$APK" 2>/dev/null | grep -q 'AndroidManifest.xml' || { echo "STOP: $APK is not an APK"; exit 1; }
++  if ! unzip -tq "$APK" >/dev/null 2>&1; then
++    echo "STOP: $APK is damaged/incomplete ($BYTES bytes): $(unzip -tq "$APK" 2>&1 | tail -1)"
++    echo "  -> the upload was cut short: upload the file again and wait for the progress bar to finish"
++    exit 1
++  fi
++  LISTING=$(unzip -Z1 "$APK" 2>/dev/null || true)
++  case "$LISTING" in
++    *AndroidManifest.xml*) : ;;
++    *) echo "STOP: $APK has no AndroidManifest.xml — not an Android APK"; exit 1 ;;
++  esac
+ fi
+ NAME="HRMate-${VER}.apk"
+-SIZE=$(stat -c %s "$APK")
++SIZE=$BYTES
+ SHA=$(sha256sum "$APK" | cut -d' ' -f1)
+ NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+ TMP=$(mktemp -d)
+diff --git a/mobile/server-reference/webapp-patches/src/app/api/wall/route.ts b/mobile/server-reference/webapp-patches/src/app/api/wall/route.ts
+new file mode 100644
+index 0000000..6f02dca
+--- /dev/null
++++ b/mobile/server-reference/webapp-patches/src/app/api/wall/route.ts
+@@ -0,0 +1,65 @@
++import { NextRequest } from "next/server";
++import db from "@/lib/db";
++import { randomId } from "@/lib/crypto";
++import { requireUser, unauthorized, error, json } from "@/lib/api";
++import { hasPermission } from "@/lib/permissions";
++import { sendFcmAnnouncement } from "@/lib/fcm";
++
++export async function GET() {
++  const user = requireUser();
++  if (!user) return unauthorized();
++
++  const posts = db
++    .prepare(
++      `SELECT p.*, u.name AS author_name, u.color AS author_color, u.designation AS author_designation,
++        u.avatar AS author_avatar,
++        (SELECT COUNT(*) FROM wall_likes l WHERE l.post_id = p.id) AS like_count,
++        (SELECT COUNT(*) FROM wall_comments c WHERE c.post_id = p.id) AS comment_count,
++        EXISTS(SELECT 1 FROM wall_likes l2 WHERE l2.post_id = p.id AND l2.user_id = ?) AS liked_by_me
++       FROM wall_posts p JOIN users u ON u.id = p.user_id
++       ORDER BY p.created_at DESC`
++    )
++    .all(user.id);
++
++  const comments = db
++    .prepare(
++      `SELECT c.*, u.name AS author_name, u.color AS author_color, u.avatar AS author_avatar
++       FROM wall_comments c JOIN users u ON u.id = c.user_id
++       ORDER BY c.created_at ASC`
++    )
++    .all();
++
++  return json({ posts, comments });
++}
++
++export async function POST(req: NextRequest) {
++  const user = requireUser();
++  if (!user) return unauthorized();
++  if (!hasPermission(user.id, "wall.post")) {
++    return error("You don't have permission to post", 403);
++  }
++
++  const { content } = await req.json();
++  if (!content || !content.trim()) return error("Post content is required");
++
++  const id = randomId("p_");
++  db.prepare(
++    "INSERT INTO wall_posts (id, user_id, content, created_at) VALUES (?, ?, ?, ?)"
++  ).run(id, user.id, content.trim(), Date.now());
++
++  // Phase 6 (native app): a new post is an "announcement" on the phones — push only,
++  // everyone except the author, users with notifications off are skipped. Nothing
++  // about the webapp's wall, inbox or permissions changes.
++  const text = String(content).trim().replace(/\s+/g, " ");
++  const author = db.prepare("SELECT name FROM users WHERE id = ?").get(user.id) as { name?: string } | undefined;
++  sendFcmAnnouncement(
++    {
++      title: `New post by ${author?.name || "HRMate"}`,
++      body: text.length > 140 ? `${text.slice(0, 137)}…` : text,
++      link: "/wall",
++    },
++    user.id
++  );
++
++  return json({ ok: true, id });
++}
+diff --git a/mobile/server-reference/webapp-patches/src/lib/push.ts b/mobile/server-reference/webapp-patches/src/lib/push.ts
+new file mode 100644
+index 0000000..5805b3a
+--- /dev/null
++++ b/mobile/server-reference/webapp-patches/src/lib/push.ts
+@@ -0,0 +1,103 @@
++import webpush from "web-push";
++import db from "./db";
++import { isNotifyEnabled } from "./prefs";
++import { sendFcmToUser } from "./fcm";
++
++const VAPID_PUBLIC =
++  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||
++  "BHUrFAr3YbwEoBtkBLgsHS4UTPk0ABs8U47F90ZbVgezp_cvL50t7pD8BSW2Gjd1cLdXdQtm4fbD7oZqu1s9Iz8";
++const VAPID_PRIVATE =
++  process.env.VAPID_PRIVATE_KEY || "j5FLZFuvPjmYrkWy77Vuqvf4SKJLaJl7AZQPKOH2fRc";
++
++webpush.setVapidDetails(
++  "mailto:admin@hrmate.com",
++  VAPID_PUBLIC,
++  VAPID_PRIVATE
++);
++
++export function getVapidPublicKey(): string {
++  return VAPID_PUBLIC;
++}
++
++interface PushSubscriptionRow {
++  endpoint: string;
++  p256dh: string;
++  auth: string;
++}
++
++export function saveSubscription(userId: string, sub: {
++  endpoint: string;
++  keys: { p256dh: string; auth: string };
++}) {
++  db.prepare(
++    `INSERT OR REPLACE INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, created_at)
++     VALUES (?, ?, ?, ?, ?, ?)`
++  ).run(
++    sub.endpoint,
++    userId,
++    sub.endpoint,
++    sub.keys.p256dh,
++    sub.keys.auth,
++    Date.now()
++  );
++}
++
++export function removeSubscription(userId: string, endpoint: string) {
++  db.prepare("DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint = ?").run(
++    userId,
++    endpoint
++  );
++}
++
++export async function sendPushToUser(
++  userId: string,
++  payload: { title: string; body: string; link?: string }
++) {
++  if (!isNotifyEnabled(userId)) return;
++
++  // Phase 6 (native app): the same notification also goes to the user's phones via
++  // FCM. Runs alongside web push, is a no-op until the server has its FCM key, and
++  // never throws — nothing else in this function changed.
++  const fcm = sendFcmToUser(userId, payload).catch(() => undefined);
++
++  const subs = db
++    .prepare("SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?")
++    .all(userId) as PushSubscriptionRow[];
++
++  const results = await Promise.allSettled(
++    subs.map((s) =>
++      webpush.sendNotification(
++        {
++          endpoint: s.endpoint,
++          keys: { p256dh: s.p256dh, auth: s.auth },
++        },
++        JSON.stringify({
++          title: payload.title,
++          body: payload.body,
++          icon: "/icon.png",
++          badge: "/icon.png",
++          data: { url: payload.link || "/dashboard" },
++        })
++      )
++    )
++  );
++
++  // Clean up expired subscriptions
++  results.forEach((r, i) => {
++    if (r.status === "rejected") {
++      const code = (r.reason as any)?.statusCode;
++      if (code === 404 || code === 410) {
++        db.prepare("DELETE FROM push_subscriptions WHERE endpoint = ?").run(subs[i].endpoint);
++      }
++    }
++  });
++
++  await fcm;
++}
++
++export async function sendPushToMany(
++  userIds: string[],
++  payload: { title: string; body: string; link?: string }
++) {
++  await Promise.all(userIds.map((id) => sendPushToUser(id, payload)));
++}
+diff --git a/mobile/test/smoke_test.dart b/mobile/test/smoke_test.dart
+index dfdab03..2721ae0 100644
+--- a/mobile/test/smoke_test.dart
++++ b/mobile/test/smoke_test.dart
+@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
+ import 'package:flutter_test/flutter_test.dart';
+ import 'package:hrmate/core/theme.dart';
+ import 'package:hrmate/main.dart';
++import 'package:hrmate/state/push.dart';
+ 
+ void main() {
+   testWidgets('theme builds with the HRMate tokens', (tester) async {
+@@ -10,6 +11,16 @@ void main() {
+     expect(t.scaffoldBackgroundColor, HrBrand.bg);
+   });
+ 
++  test('notification links map to app screens (Phase 6)', () {
++    expect(PushController.screenFor('/leaves'), '/leaves');
++    expect(PushController.screenFor('/approvals'), '/leaves');
++    expect(PushController.screenFor('/attendance'), '/punch');
++    expect(PushController.screenFor('/roster'), '/team');
++    expect(PushController.screenFor('/wall'), '/home');
++    expect(PushController.screenFor(null), '/home');
++    expect(PushController.screenFor(''), '/home');
++  });
++
+   testWidgets('splash renders without text', (tester) async {
+     await tester.pumpWidget(MaterialApp(theme: buildTheme(), home: const SplashScreen()));
+     expect(find.byType(CircularProgressIndicator), findsOneWidget);
+diff --git a/scripts/publish-apk.sh b/scripts/publish-apk.sh
+index aab4c00..7321f86 100755
+--- a/scripts/publish-apk.sh
++++ b/scripts/publish-apk.sh
+@@ -16,11 +16,29 @@ fi
+ [[ "$BUILD" =~ ^[0-9]+$ ]] || { echo "STOP: build must be a number"; exit 1; }
+ CONTAINER="${HRMATE_CONTAINER:-hrmate-hrmate-1}"
+ docker ps --format '{{.Names}}' | grep -qx "$CONTAINER" || { echo "STOP: container $CONTAINER is not running"; exit 1; }
++# Real APK = zip with AndroidManifest.xml. (No `unzip -l | grep -q` here: with pipefail, grep
++# closing the pipe early makes the check fail on big APKs.)
++BYTES=$(stat -c %s "$APK")
++MAGIC=$(head -c 2 "$APK" | od -An -c | tr -d ' ')
++if [ "$MAGIC" != "PK" ]; then
++  echo "STOP: $APK is not an APK (first bytes '$MAGIC', $BYTES bytes)."
++  echo "  -> '<!' or '<h' = a web page was saved, not the APK: download again from Codemagic -> Artifacts"
++  exit 1
++fi
+ if command -v unzip >/dev/null 2>&1; then
+-  unzip -l "$APK" 2>/dev/null | grep -q 'AndroidManifest.xml' || { echo "STOP: $APK is not an APK"; exit 1; }
++  if ! unzip -tq "$APK" >/dev/null 2>&1; then
++    echo "STOP: $APK is damaged/incomplete ($BYTES bytes): $(unzip -tq "$APK" 2>&1 | tail -1)"
++    echo "  -> the upload was cut short: upload the file again and wait for the progress bar to finish"
++    exit 1
++  fi
++  LISTING=$(unzip -Z1 "$APK" 2>/dev/null || true)
++  case "$LISTING" in
++    *AndroidManifest.xml*) : ;;
++    *) echo "STOP: $APK has no AndroidManifest.xml — not an Android APK"; exit 1 ;;
++  esac
+ fi
+ NAME="HRMate-${VER}.apk"
+-SIZE=$(stat -c %s "$APK")
++SIZE=$BYTES
+ SHA=$(sha256sum "$APK" | cut -d' ' -f1)
+ NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+ TMP=$(mktemp -d)
+diff --git a/src/app/api/v1/mobile/auth/logout/route.ts b/src/app/api/v1/mobile/auth/logout/route.ts
+index 897aa39..0e73f85 100644
+--- a/src/app/api/v1/mobile/auth/logout/route.ts
++++ b/src/app/api/v1/mobile/auth/logout/route.ts
+@@ -1,11 +1,17 @@
+ import { NextRequest } from 'next/server';
+-import { handle, ok, requireMobileUser, revokeDevice } from '../../_lib/mobileAuth';
++import { handle, ok, requireMobileUser, revokeDevice, findDevice } from '../../_lib/mobileAuth';
++import { removeDevicePushTokens } from '@/lib/fcm';
+ 
+ export const dynamic = 'force-dynamic';
+ 
+-// POST /api/v1/mobile/auth/logout  (Bearer) — revokes this device's token
++// POST /api/v1/mobile/auth/logout  (Bearer) — revokes this device's token.
++// Phase 6: also forgets the device's FCM tokens, so a signed-out phone stops
++// receiving this user's notifications even if the app could not call
++// DELETE devices/push-token first (offline, killed, …).
+ export const POST = handle(async (req: NextRequest) => {
+   const { tokenId } = await requireMobileUser(req);
++  const dev = await findDevice(tokenId);
+   await revokeDevice(tokenId);
++  if (dev?.deviceId) removeDevicePushTokens(dev.deviceId);
+   return ok();
+ });
+diff --git a/src/app/api/v1/mobile/devices/push-test/route.ts b/src/app/api/v1/mobile/devices/push-test/route.ts
+new file mode 100644
+index 0000000..8a5d95d
+--- /dev/null
++++ b/src/app/api/v1/mobile/devices/push-test/route.ts
+@@ -0,0 +1,31 @@
++import { NextRequest } from 'next/server';
++import { handle, ok, requireMobileUser } from '../../_lib/mobileAuth';
++import { countPushTokens, fcmStatus, sendFcmToUser } from '@/lib/fcm';
++
++export const dynamic = 'force-dynamic';
++
++const DELAY_S = 10;
++
++// POST /api/v1/mobile/devices/push-test  (Bearer)
++// Sends ONE real push to the caller's own registered phones after 10 s, so the
++// acceptance check "notification arrives with the app closed" can be done from
++// More → Notifications → "Send test notification" without touching attendance
++// or leave data (nothing is written to the webapp's notifications inbox).
++// → {ok:true, configured, project, tokens, inSeconds}
++export const POST = handle(async (req: NextRequest) => {
++  const { user } = await requireMobileUser(req);
++  const st = fcmStatus();
++  const tokens = countPushTokens(user.id);
++  if (st.configured && tokens > 0) {
++    const at = new Date(Date.now() + DELAY_S * 1000);
++    const time = at.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' });
++    setTimeout(() => {
++      sendFcmToUser(user.id, {
++        title: 'HRMate test notification',
++        body: `Push is working on this phone (${time}).`,
++        link: '/settings',
++      }).then((r) => console.log(`[fcm] test → ${user.code}: sent ${r.sent}, failed ${r.failed}, removed ${r.removed}`));
++    }, DELAY_S * 1000);
++  }
++  return ok({ configured: st.configured, project: st.project, error: st.error, tokens, inSeconds: DELAY_S });
++});
+diff --git a/src/app/api/v1/mobile/devices/push-token/route.ts b/src/app/api/v1/mobile/devices/push-token/route.ts
+new file mode 100644
+index 0000000..3a46b86
+--- /dev/null
++++ b/src/app/api/v1/mobile/devices/push-token/route.ts
+@@ -0,0 +1,30 @@
++import { NextRequest } from 'next/server';
++import { handle, ok, fail, requireMobileUser, findDevice } from '../../_lib/mobileAuth';
++import { registerPushToken, removePushToken } from '@/lib/fcm';
++
++export const dynamic = 'force-dynamic';
++
++// POST /api/v1/mobile/devices/push-token  (Bearer)  {token, platform?, deviceId?}
++// Registers this phone's FCM token for the signed-in user (upsert; a rotated
++// token replaces the previous one of the same device). → {ok:true}
++export const POST = handle(async (req: NextRequest) => {
++  const { user, tokenId } = await requireMobileUser(req);
++  const body = (await req.json().catch(() => ({}))) as { token?: unknown; platform?: unknown; deviceId?: unknown };
++  const token = typeof body.token === 'string' ? body.token.trim() : '';
++  if (!token || token.length < 20 || token.length > 4096) return fail(400, 'VALIDATION', 'token is required.');
++  const platform = typeof body.platform === 'string' && body.platform.trim() ? body.platform.trim().toLowerCase() : 'android';
++  // device id: what the app sends, else the one recorded at login for this session
++  let deviceId = typeof body.deviceId === 'string' ? body.deviceId.trim() : '';
++  if (!deviceId) deviceId = (await findDevice(tokenId))?.deviceId || '';
++  registerPushToken(user.id, token, platform, deviceId);
++  return ok();
++});
++
++// DELETE /api/v1/mobile/devices/push-token?token=…  (Bearer)
++// The app calls this right before sign-out. → {ok:true} (also when nothing matched)
++export const DELETE = handle(async (req: NextRequest) => {
++  const { user } = await requireMobileUser(req);
++  const token = (req.nextUrl.searchParams.get('token') || '').trim();
++  if (token) removePushToken(user.id, token);
++  return ok();
++});
+diff --git a/src/app/api/v1/mobile/prefs/notify/route.ts b/src/app/api/v1/mobile/prefs/notify/route.ts
+new file mode 100644
+index 0000000..cce711a
+--- /dev/null
++++ b/src/app/api/v1/mobile/prefs/notify/route.ts
+@@ -0,0 +1,22 @@
++import { NextRequest } from 'next/server';
++import { handle, ok, fail, requireMobileUser } from '../../_lib/mobileAuth';
++import { getUserPrefs, setUserPrefs } from '@/lib/prefs';
++
++export const dynamic = 'force-dynamic';
++
++// GET /api/v1/mobile/prefs/notify  (Bearer) → {ok:true, enabled}
++// The SAME `user_prefs.notify_enabled` the webapp's Settings page uses: off means
++// `sendPushToUser()` sends nothing (web push AND FCM) — no second preference store.
++export const GET = handle(async (req: NextRequest) => {
++  const { user } = await requireMobileUser(req);
++  return ok({ enabled: getUserPrefs(user.id).notify_enabled !== 0 });
++});
++
++// PUT /api/v1/mobile/prefs/notify  (Bearer)  {enabled: boolean} → {ok:true, enabled}
++export const PUT = handle(async (req: NextRequest) => {
++  const { user } = await requireMobileUser(req);
++  const body = (await req.json().catch(() => ({}))) as { enabled?: unknown };
++  if (typeof body.enabled !== 'boolean') return fail(400, 'VALIDATION', 'enabled (true/false) is required.');
++  const next = setUserPrefs(user.id, { notify_enabled: body.enabled ? 1 : 0 });
++  return ok({ enabled: next.notify_enabled !== 0 });
++});
+diff --git a/src/app/api/wall/route.ts b/src/app/api/wall/route.ts
+index 948c84d..6f02dca 100644
+--- a/src/app/api/wall/route.ts
++++ b/src/app/api/wall/route.ts
+@@ -3,6 +3,7 @@ import db from "@/lib/db";
+ import { randomId } from "@/lib/crypto";
+ import { requireUser, unauthorized, error, json } from "@/lib/api";
+ import { hasPermission } from "@/lib/permissions";
++import { sendFcmAnnouncement } from "@/lib/fcm";
+ 
+ export async function GET() {
+   const user = requireUser();
+@@ -46,5 +47,19 @@ export async function POST(req: NextRequest) {
+     "INSERT INTO wall_posts (id, user_id, content, created_at) VALUES (?, ?, ?, ?)"
+   ).run(id, user.id, content.trim(), Date.now());
+ 
++  // Phase 6 (native app): a new post is an "announcement" on the phones — push only,
++  // everyone except the author, users with notifications off are skipped. Nothing
++  // about the webapp's wall, inbox or permissions changes.
++  const text = String(content).trim().replace(/\s+/g, " ");
++  const author = db.prepare("SELECT name FROM users WHERE id = ?").get(user.id) as { name?: string } | undefined;
++  sendFcmAnnouncement(
++    {
++      title: `New post by ${author?.name || "HRMate"}`,
++      body: text.length > 140 ? `${text.slice(0, 137)}…` : text,
++      link: "/wall",
++    },
++    user.id
++  );
++
+   return json({ ok: true, id });
+ }
+diff --git a/src/lib/fcm.ts b/src/lib/fcm.ts
+new file mode 100644
+index 0000000..b492e78
+--- /dev/null
++++ b/src/lib/fcm.ts
+@@ -0,0 +1,290 @@
++// Phase 6 — Firebase Cloud Messaging (HTTP v1) sender for the native app.
++//
++// * No npm dependency: the service-account key signs an RS256 JWT with node:crypto,
++//   the OAuth token is cached, messages go to `projects/<id>/messages:send` with fetch.
++// * Config = ONE file, the Firebase service-account key, outside git and outside the
++//   image: `/app/data/fcm-service-account.json` (docker volume `hrmate_data`), or the
++//   env `FCM_SERVICE_ACCOUNT_FILE` / `FCM_SERVICE_ACCOUNT_JSON`. The file is re-checked
++//   every 30 s, so copying it into the container is enough — no restart needed.
++// * Never throws into a caller: without a key every send is a silent no-op, so the
++//   webapp keeps working exactly as before Phase 6.
++// * Called by `src/lib/push.ts` (`sendPushToUser` → web-push subscriptions THEN
++//   `sendFcmToUser`), i.e. every existing `notify()` — punch reminders, leave
++//   decisions, announcements — reaches the phone with no change to business logic.
++//   `push.ts` already returns early when the user turned notifications off
++//   (`isNotifyEnabled`), so the preference covers web and app alike.
++//
++// Lives at `src/lib/fcm.ts` in the webapp (next to push.ts / prefs.ts / notify.ts).
++import fs from 'fs';
++import { createSign } from 'crypto';
++import db from './db';
++
++// Table is created on first use (not at import) so `next build` never touches the DB.
++let schemaReady = false;
++function ensureSchema(): void {
++  if (schemaReady) return;
++  db.exec(`
++    CREATE TABLE IF NOT EXISTS mobile_push_tokens (
++      token      TEXT PRIMARY KEY,
++      user_id    TEXT NOT NULL,
++      device_id  TEXT NOT NULL DEFAULT '',
++      platform   TEXT NOT NULL DEFAULT 'android',
++      created_at TEXT NOT NULL,
++      updated_at TEXT NOT NULL,
++      last_error TEXT
++    );
++    CREATE INDEX IF NOT EXISTS idx_mobile_push_tokens_user ON mobile_push_tokens(user_id);
++  `);
++  schemaReady = true;
++}
++
++export type PushPayload = { title: string; body: string; link?: string };
++
++/** Must match `PushController.channelId` + the manifest meta-data in the app. */
++export const FCM_CHANNEL_ID = 'hrmate_default';
++const FCM_ICON = 'ic_notification';
++const FCM_COLOR = '#1E6FE0';
++
++type ServiceAccount = { project_id: string; client_email: string; private_key: string; token_uri: string };
++
++const SA_FILE = process.env.FCM_SERVICE_ACCOUNT_FILE || '/app/data/fcm-service-account.json';
++let sa: ServiceAccount | null = null;
++let saCheckedAt = 0;
++let saError = 'not checked yet';
++
++function loadServiceAccount(): ServiceAccount | null {
++  if (sa) return sa;
++  const now = Date.now();
++  if (now - saCheckedAt < 30_000) return null;
++  saCheckedAt = now;
++  try {
++    const raw =
++      process.env.FCM_SERVICE_ACCOUNT_JSON ||
++      (fs.existsSync(SA_FILE) ? fs.readFileSync(SA_FILE, 'utf8') : '');
++    if (!raw) {
++      saError = `no service-account key at ${SA_FILE}`;
++      return null;
++    }
++    const j = JSON.parse(raw);
++    if (!j.project_id || !j.client_email || !j.private_key) {
++      saError = 'file is not a Firebase service-account key (project_id / client_email / private_key missing)';
++      return null;
++    }
++    sa = {
++      project_id: String(j.project_id),
++      client_email: String(j.client_email),
++      private_key: String(j.private_key),
++      token_uri: String(j.token_uri || 'https://oauth2.googleapis.com/token'),
++    };
++    saError = '';
++    console.log(`[fcm] configured: project ${sa.project_id} (${sa.client_email})`);
++    return sa;
++  } catch (e) {
++    saError = `cannot read ${SA_FILE}: ${(e as Error).message || e}`;
++    return null;
++  }
++}
++
++/** For `POST devices/push-test` and logs — never exposes the key. */
++export function fcmStatus(): { configured: boolean; project: string | null; error: string | null; file: string } {
++  const s = loadServiceAccount();
++  return { configured: !!s, project: s?.project_id || null, error: s ? null : saError, file: SA_FILE };
++}
++
++// ---- OAuth2 (service account → access token, cached until ~1 min before expiry) ----
++let accessToken = '';
++let accessExp = 0;
++let accessInflight: Promise<string> | null = null;
++
++function getAccessToken(s: ServiceAccount): Promise<string> {
++  const now = Math.floor(Date.now() / 1000);
++  if (accessToken && accessExp - 60 > now) return Promise.resolve(accessToken);
++  // parallel sends share ONE token request (a fan-out must not hit OAuth N times)
++  accessInflight ??= fetchAccessToken(s).finally(() => {
++    accessInflight = null;
++  });
++  return accessInflight;
++}
++
++async function fetchAccessToken(s: ServiceAccount): Promise<string> {
++  const now = Math.floor(Date.now() / 1000);
++  const b64u = (x: string) => Buffer.from(x).toString('base64url');
++  const header = b64u(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
++  const claims = b64u(
++    JSON.stringify({
++      iss: s.client_email,
++      scope: 'https://www.googleapis.com/auth/firebase.messaging',
++      aud: s.token_uri,
++      iat: now,
++      exp: now + 3600,
++    })
++  );
++  const signer = createSign('RSA-SHA256');
++  signer.update(`${header}.${claims}`);
++  signer.end();
++  const signature = signer.sign(s.private_key, 'base64url');
++  const res = await fetch(s.token_uri, {
++    method: 'POST',
++    headers: { 'content-type': 'application/x-www-form-urlencoded' },
++    body: new URLSearchParams({
++      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
++      assertion: `${header}.${claims}.${signature}`,
++    }),
++  });
++  const j = (await res.json().catch(() => ({}))) as { access_token?: string; expires_in?: number; error?: string; error_description?: string };
++  if (!res.ok || !j.access_token) {
++    throw new Error(`oauth ${res.status}: ${j.error_description || j.error || 'no access_token'}`);
++  }
++  accessToken = j.access_token;
++  accessExp = now + Number(j.expires_in || 3600);
++  return accessToken;
++}
++
++let lastWarnAt = 0;
++function warn(msg: string) {
++  const now = Date.now();
++  if (now - lastWarnAt < 60_000) return;
++  lastWarnAt = now;
++  console.warn(`[fcm] ${msg}`);
++}
++
++type SendResult = 'ok' | 'gone' | 'error';
++
++async function sendOne(s: ServiceAccount, token: string, p: PushPayload, retry = true): Promise<{ r: SendResult; err?: string }> {
++  const at = await getAccessToken(s);
++  const message = {
++    token,
++    notification: { title: p.title, body: p.body },
++    // data values must be strings; the app routes a tap by `link` (webapp path)
++    data: { link: p.link || '/dashboard', title: p.title, body: p.body },
++    android: {
++      priority: 'HIGH',
++      notification: { channel_id: FCM_CHANNEL_ID, icon: FCM_ICON, color: FCM_COLOR, default_sound: true },
++    },
++  };
++  const res = await fetch(`https://fcm.googleapis.com/v1/projects/${s.project_id}/messages:send`, {
++    method: 'POST',
++    headers: { authorization: `Bearer ${at}`, 'content-type': 'application/json' },
++    body: JSON.stringify({ message }),
++  });
++  if (res.ok) return { r: 'ok' };
++  const text = (await res.text().catch(() => '')).slice(0, 400);
++  if (res.status === 401 && retry) {
++    accessToken = ''; // token revoked/expired early — refresh once
++    return sendOne(s, token, p, false);
++  }
++  // Token no longer valid on this phone (app uninstalled / data cleared / rotated) → forget it.
++  const gone = res.status === 404 || /UNREGISTERED|not a valid FCM registration token/i.test(text);
++  return { r: gone ? 'gone' : 'error', err: `${res.status} ${text}` };
++}
++
++/** Send one notification to every registered phone of a user. Never throws. */
++export async function sendFcmToUser(userId: string, p: PushPayload): Promise<{ sent: number; failed: number; removed: number }> {
++  const out = { sent: 0, failed: 0, removed: 0 };
++  const s = loadServiceAccount();
++  if (!s) return out;
++  ensureSchema();
++  let rows: { token: string }[] = [];
++  try {
++    rows = db.prepare('SELECT token FROM mobile_push_tokens WHERE user_id = ?').all(userId) as { token: string }[];
++  } catch (e) {
++    warn(`token lookup failed: ${(e as Error).message || e}`);
++    return out;
++  }
++  if (!rows.length) return out;
++  await Promise.all(
++    rows.map(async ({ token }) => {
++      try {
++        const { r, err } = await sendOne(s, token, p);
++        if (r === 'ok') {
++          out.sent++;
++        } else if (r === 'gone') {
++          db.prepare('DELETE FROM mobile_push_tokens WHERE token = ?').run(token);
++          out.removed++;
++        } else {
++          out.failed++;
++          db.prepare('UPDATE mobile_push_tokens SET last_error = ? WHERE token = ?').run((err || 'error').slice(0, 300), token);
++          warn(`send failed for user ${userId}: ${err}`);
++        }
++      } catch (e) {
++        out.failed++;
++        warn(`send threw for user ${userId}: ${(e as Error).message || e}`);
++      }
++    })
++  );
++  return out;
++}
++
++/** Fan-out helper — 10 users at a time. Never throws. */
++export async function sendFcmToMany(userIds: string[], p: PushPayload): Promise<void> {
++  for (let i = 0; i < userIds.length; i += 10) {
++    await Promise.all(userIds.slice(i, i + 10).map((id) => sendFcmToUser(id, p)));
++  }
++}
++
++/**
++ * Announcement (new wall post) → every active user's PHONE, except the author and
++ * users who turned notifications off. Deliberately push-only: the webapp's
++ * notifications inbox / web-push behaviour is unchanged (additive, no new rule).
++ * Fire-and-forget from the wall POST handler; never throws.
++ */
++export function sendFcmAnnouncement(p: PushPayload, excludeUserId = ''): void {
++  if (!loadServiceAccount()) return;
++  ensureSchema();
++  let ids: string[] = [];
++  try {
++    ids = (
++      db
++        .prepare(
++          `SELECT DISTINCT t.user_id AS id
++             FROM mobile_push_tokens t
++             JOIN users u ON u.id = t.user_id AND u.active = 1
++             LEFT JOIN user_prefs pr ON pr.user_id = t.user_id
++            WHERE t.user_id != ? AND COALESCE(pr.notify_enabled, 1) != 0`
++        )
++        .all(excludeUserId) as { id: string }[]
++    ).map((r) => r.id);
++  } catch (e) {
++    warn(`announcement lookup failed: ${(e as Error).message || e}`);
++    return;
++  }
++  if (!ids.length) return;
++  sendFcmToMany(ids, p).catch(() => {});
++}
++
++// ---- token registry (used by devices/* routes and auth/logout) ----------------------
++
++export function registerPushToken(userId: string, token: string, platform: string, deviceId: string): void {
++  ensureSchema();
++  const now = new Date().toISOString();
++  db.prepare(
++    `INSERT INTO mobile_push_tokens (token, user_id, device_id, platform, created_at, updated_at, last_error)
++     VALUES (?, ?, ?, ?, ?, ?, NULL)
++     ON CONFLICT(token) DO UPDATE SET
++       user_id = excluded.user_id,
++       device_id = excluded.device_id,
++       platform = excluded.platform,
++       updated_at = excluded.updated_at,
++       last_error = NULL`
++  ).run(token, userId, deviceId, platform, now, now);
++  // one token per phone: a rotated token replaces the previous one of the same device
++  if (deviceId) db.prepare('DELETE FROM mobile_push_tokens WHERE device_id = ? AND token != ?').run(deviceId, token);
++}
++
++export function removePushToken(userId: string, token: string): void {
++  ensureSchema();
++  db.prepare('DELETE FROM mobile_push_tokens WHERE user_id = ? AND token = ?').run(userId, token);
++}
++
++/** Logout: the signed-out phone must not receive this user's notifications any more. */
++export function removeDevicePushTokens(deviceId: string): void {
++  if (!deviceId) return;
++  ensureSchema();
++  db.prepare('DELETE FROM mobile_push_tokens WHERE device_id = ?').run(deviceId);
++}
++
++export function countPushTokens(userId: string): number {
++  ensureSchema();
++  const row = db.prepare('SELECT COUNT(*) AS n FROM mobile_push_tokens WHERE user_id = ?').get(userId) as { n: number } | undefined;
++  return row?.n || 0;
++}
+diff --git a/src/lib/push.ts b/src/lib/push.ts
+index 0eb756e..5805b3a 100644
+--- a/src/lib/push.ts
++++ b/src/lib/push.ts
+@@ -1,6 +1,7 @@
+ import webpush from "web-push";
+ import db from "./db";
+ import { isNotifyEnabled } from "./prefs";
++import { sendFcmToUser } from "./fcm";
+ 
+ const VAPID_PUBLIC =
+   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||
+@@ -53,6 +54,12 @@ export async function sendPushToUser(
+   payload: { title: string; body: string; link?: string }
+ ) {
+   if (!isNotifyEnabled(userId)) return;
++
++  // Phase 6 (native app): the same notification also goes to the user's phones via
++  // FCM. Runs alongside web push, is a no-op until the server has its FCM key, and
++  // never throws — nothing else in this function changed.
++  const fcm = sendFcmToUser(userId, payload).catch(() => undefined);
++
+   const subs = db
+     .prepare("SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?")
+     .all(userId) as PushSubscriptionRow[];
+@@ -84,6 +91,8 @@ export async function sendPushToUser(
+       }
+     }
+   });
++
++  await fcm;
+ }
+ 
+ export async function sendPushToMany(
+-- 
+2.39.5
+
