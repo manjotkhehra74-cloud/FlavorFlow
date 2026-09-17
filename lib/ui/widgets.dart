@@ -99,6 +99,7 @@ class StatusChip extends StatelessWidget {
     'DISPATCHED': (Color(0xFFC2410C), Color(0xFFFBEFE6)),
     'DRAFT': (Color(0xFF475569), Color(0xFFEFF2F6)),
     'CANCELLED': (Color(0xFF475569), Color(0xFFEFF2F6)),
+    'VOID': (Color(0xFFB91C1C), Color(0xFFFBEAEA)),
     'HIGH': (Color(0xFFB91C1C), Color(0xFFFBEAEA)),
     'MEDIUM': (Color(0xFFB45309), Color(0xFFFEF6E7)),
     'LOW': (Color(0xFF047857), Color(0xFFE7F6EF)),

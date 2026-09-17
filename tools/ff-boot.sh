@@ -10,7 +10,7 @@
 #   → 2-3 min baad result browser vich:  https://flavorflow.co.in/download/boot-status.txt
 #   (poora log: VM → "Serial port 1 (console)" ya /var/log/ff-boot.log)
 #
-# Steps (arg naal chuno, default sab):  fixssh industry billing stockledger codes lossrestore hrmate saasbilling demo web apk
+# Steps (arg naal chuno, default sab):  fixssh industry billing stockledger codes lossrestore hrmate dispatchfix saasbilling demo web apk
 #   fixssh   — memory/OOM/swap snapshot, swap ensure, google-guest-agent + sshd restart
 #              (SSH-in-browser "Connection failed… retrying" aksar guest-agent/RAM karke)
 #   industry — tools/ff-saasindustry.sh (idempotent) + tenant /api/settings/company verify
@@ -18,6 +18,8 @@
 #   lossrestore — tools/ff-lossrestore.sh: Packing Loss % sheet back on the server menu (app gates it per industry / company)
 #   hrmate   — tools/ff-hrmate.sh: company-level HRMate attendance link in the core
 #              (/api/settings/hrmate admin-only + /api/hrmate/summary read-only proxy; key stays on the server)
+#   dispatchfix — tools/ff-dispatchfix.sh: menu follows each user's OWN permissions (custom chips) +
+#              POST /api/dispatch/:id/void that works on the node:sqlite wrapper (SAVEPOINT; stock + batch back)
 #   saasbilling — tools/ff-saasbilling.sh: subscription plans + cheque activation + owner
 #              console API in the gateway (admin key from GCE metadata `ff-admin-key`)
 #   demo     — tools/ff-saasdemo.sh (16 demo-<industry> tenants, same demo login)
@@ -33,7 +35,7 @@ main() {
   WEB="${FF_WEB:-/opt/flavorflow-saas/web}"
   LOG=/var/log/ff-boot.log
   STATUS="$WEB/download/boot-status.txt"
-  STEPS="${*:-fixssh industry billing stockledger codes lossrestore hrmate saasbilling demo web apk}"
+  STEPS="${*:-fixssh industry billing stockledger codes lossrestore hrmate dispatchfix saasbilling demo web apk}"
   mkdir -p "$WEB/download"
   exec > >(tee -a "$LOG") 2>&1
   : > "$STATUS"; chmod 644 "$STATUS"
@@ -154,6 +156,19 @@ main() {
       fi
       st "[hrmate] rc=$RC"
     else st "[hrmate] koi server.js nahi — skip"; fi
+  fi
+
+  # ---------- dispatchfix (menu = effective permissions; dispatch void route v2 for every tenant + factory) ----------
+  if [[ " $STEPS " == *" dispatchfix "* ]]; then
+    if [ -f /opt/flavorflow-saas/core/routes/dispatch.js ] || [ -f /opt/flavorflow/server/routes/dispatch.js ]; then
+      OUT=""; RC=1
+      if fetch "$RAW/ff-dispatchfix.sh" /tmp/ff-dispatchfix.sh; then OUT=$(bash /tmp/ff-dispatchfix.sh </dev/null 2>&1); RC=$?; fi
+      if [ -z "$OUT" ]; then st "[dispatchfix] script download FAIL (GitHub reach nahi hoya?)"; else
+        echo "$OUT"
+        echo "$OUT" | grep -E '^(SELFTEST|ROUTE|SERVER|TENANT|FACTORY|DISPATCHFIX|FATAL)' | cut -c1-200 | sed 's/^/[dispatchfix] /' | tee -a "$STATUS"
+      fi
+      st "[dispatchfix] rc=$RC"
+    else st "[dispatchfix] koi routes/dispatch.js nahi — skip"; fi
   fi
 
   # ---------- saasbilling (subscription plans, cheque activation, admin console API) ----------

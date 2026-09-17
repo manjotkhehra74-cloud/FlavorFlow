@@ -14,6 +14,51 @@ import '../core/format.dart';
 import '../state/auth.dart';
 import 'widgets.dart';
 
+/// Standard sections in menu order with the permission that unlocks each
+/// (mirrors the server's rbac NAV_ITEMS; Dashboard is universal).
+const List<Map<String, String>> kStandardNav = [
+  {'path': '/dashboard', 'label': 'Dashboard', 'icon': 'dashboard', 'perm': 'dashboard.view', 'group': 'Overview'},
+  {'path': '/products', 'label': 'Product Master', 'icon': 'inventory_2', 'perm': 'products.view', 'group': 'Operations'},
+  {'path': '/inventory', 'label': 'Inventory', 'icon': 'warehouse', 'perm': 'inventory.view', 'group': 'Operations'},
+  {'path': '/packing', 'label': 'Packing Material', 'icon': 'widgets', 'perm': 'packing.view', 'group': 'Operations'},
+  {'path': '/production', 'label': 'Production', 'icon': 'manufacturing', 'perm': 'production.view', 'group': 'Operations'},
+  {'path': '/dispatch', 'label': 'Dispatch', 'icon': 'local_shipping', 'perm': 'dispatch.view', 'group': 'Operations'},
+  {'path': '/adjustments', 'label': 'Stock Adjustments', 'icon': 'tune', 'perm': 'adjustments.view', 'group': 'Stock Control'},
+  {'path': '/approvals', 'label': 'Approvals', 'icon': 'fact_check', 'perm': 'adjustments.approve', 'group': 'Stock Control'},
+  {'path': '/reports', 'label': 'Reports', 'icon': 'bar_chart', 'perm': 'reports.view', 'group': 'Insights'},
+  {'path': '/users', 'label': 'User Management', 'icon': 'group', 'perm': 'users.view', 'group': 'Administration'},
+  {'path': '/audit', 'label': 'Audit Log', 'icon': 'history', 'perm': 'audit.view', 'group': 'Administration'},
+];
+
+/// Makes the menu match the user's effective permissions (in place):
+/// 1) server entries that carry a `perm` the user lacks are dropped
+///    (Dashboard always stays — it is universal);
+/// 2) standard sections the user may open but the server left out are
+///    inserted right after the nearest preceding standard entry.
+void reconcileNav(List<Map<String, dynamic>> nav, AuthController auth) {
+  final perms = auth.session?.permissions ?? const <String>{};
+  if (perms.isEmpty) return; // unknown → leave the server menu alone
+  bool has(String perm) => perm == 'dashboard.view' || perms.contains('*') || perms.contains(perm);
+  nav.removeWhere((e) {
+    final perm = e['perm'];
+    return perm is String && perm.isNotEmpty && !has(perm);
+  });
+  for (var i = 0; i < kStandardNav.length; i++) {
+    final s = kStandardNav[i];
+    if (nav.any((e) => e['path'] == s['path'])) continue;
+    if (!has(s['perm']!)) continue;
+    var at = 0;
+    for (var j = i - 1; j >= 0; j--) {
+      final k = nav.indexWhere((e) => e['path'] == kStandardNav[j]['path']);
+      if (k != -1) {
+        at = k + 1;
+        break;
+      }
+    }
+    nav.insert(at, Map<String, dynamic>.from(s));
+  }
+}
+
 /// Authenticated shell: dark enterprise sidebar (desktop) / drawer (mobile),
 /// slim top bar with live notification badge and the user's role identity.
 class AppShell extends StatefulWidget {
@@ -174,6 +219,13 @@ class _AppShellState extends State<AppShell> {
     final session = auth.session;
     if (session == null) return const Scaffold();
     final nav = [...session.nav.map((e) => Map<String, dynamic>.from(e as Map))];
+    // Menu = the user's OWN permissions. Older servers build `nav` from the
+    // ROLE defaults while `permissions` is the user's edited list (Users →
+    // Edit → permission chips): a Production Manager given dispatch.view
+    // could open Dispatch but never saw it in the menu. Add every standard
+    // section the user may open and drop entries whose permission was taken
+    // away (servers with ff-dispatchfix already send the right list — no-op).
+    reconcileNav(nav, auth);
     // Raw Material gets its own menu entry right below Packing Material.
     // Once the server knows raw.view/loss.view (ff-permfix) it sends these
     // entries itself and gates them per user; until then we inject them

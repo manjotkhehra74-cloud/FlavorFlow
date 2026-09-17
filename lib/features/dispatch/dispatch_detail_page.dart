@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/api.dart';
 import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../core/i18n.dart';
@@ -50,6 +51,12 @@ class _DispatchDetailPageState extends State<DispatchDetailPage> {
       if (!mounted) return;
       showOk(context, tr('Dispatch voided — stock returned to inventory.'));
       setState(() => _future = _load());
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      // 404 = server without the void route, 500 = the old route that crashed
+      // on this server's SQLite wrapper — both mean "apply ff-dispatchfix".
+      final needsUpdate = e.status == 404 || e.status == 500;
+      showErr(context, needsUpdate ? '${e.message} — ${tr('Server needs the dispatch update (ff-dispatchfix) — ask your admin to run it.')}' : e);
     } catch (e) {
       if (mounted) showErr(context, e);
     } finally {
