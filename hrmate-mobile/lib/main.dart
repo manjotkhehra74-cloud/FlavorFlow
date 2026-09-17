@@ -6,17 +6,22 @@ import 'core/i18n.dart';
 import 'core/theme.dart';
 import 'router.dart';
 import 'state/auth.dart';
+import 'state/push.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   final auth = AuthController();
   auth.restore();
   L10n.instance.load();
+  // Phase 6: FCM token registration + foreground display. Never blocks
+  // startup; without google-services.json it simply stays unavailable.
+  PushController.instance.start(auth);
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: auth),
         ChangeNotifierProvider.value(value: L10n.instance),
+        ChangeNotifierProvider.value(value: PushController.instance),
       ],
       child: const HrMateApp(),
     ),
@@ -31,6 +36,12 @@ class HrMateApp extends StatefulWidget {
 
 class _HrMateAppState extends State<HrMateApp> {
   GoRouter? _router; // built ONCE — rebuilding it would reset navigation
+
+  @override
+  void dispose() {
+    PushController.instance.attachOpenHandler(null);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -52,7 +63,13 @@ class _HrMateAppState extends State<HrMateApp> {
         home: const SplashScreen(),
       );
     }
-    _router ??= buildRouter(auth);
+    if (_router == null) {
+      final router = buildRouter(auth);
+      _router = router;
+      // A notification tap opens its screen — in a microtask, so it never runs
+      // inside a build. The router's redirect still sends a signed-out user to /login.
+      PushController.instance.attachOpenHandler((screen) => Future.microtask(() => router.go(screen)));
+    }
     return MaterialApp.router(
       title: 'HRMate',
       debugShowCheckedModeBanner: false,

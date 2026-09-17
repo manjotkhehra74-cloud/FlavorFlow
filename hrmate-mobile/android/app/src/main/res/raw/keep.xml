@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Release builds shrink resources; the push icon/colour are referenced by NAME from FCM
+     payloads and the manifest, so pin them explicitly. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_notification,@color/hr_blue,@color/hr_navy" />

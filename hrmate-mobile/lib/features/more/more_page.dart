@@ -7,6 +7,7 @@ import '../../core/i18n.dart';
 import '../../core/secure.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
+import '../../state/push.dart';
 import '../../ui/widgets.dart';
 import 'calendar_page.dart';
 import 'holidays_page.dart';
@@ -17,6 +18,10 @@ import 'profile_page.dart';
 /// Phase 5 adds the tiles grid (Profile · My attendance · Holidays · Payslips)
 /// between the identity card and the settings rows. Payslips hides itself when
 /// the server has no payslips module (404 on `GET payslips`).
+/// Phase 6 adds the Notifications switch — the SERVER preference
+/// (`GET/PUT prefs/notify`, same `notify_enabled` the webapp uses), shown only
+/// when this build has push configured. Off = the server sends nothing to
+/// any of the user's devices (web or app).
 class MorePage extends StatefulWidget {
   const MorePage({super.key});
   @override
@@ -28,6 +33,8 @@ class _MorePageState extends State<MorePage> {
   bool _bioEnabled = false;
   String _version = '';
   bool _payslips = true; // false once the server says 404 (module absent)
+  bool? _notify; // server preference; null = unknown / route not deployed yet
+  bool _notifyBusy = false;
 
   @override
   void initState() {
@@ -42,7 +49,62 @@ class _MorePageState extends State<MorePage> {
       } catch (_) {}
       if (mounted) setState(() { _bioAvailable = a; _bioEnabled = e; _version = v; });
       _probePayslips();
+      _loadNotify();
     }();
+  }
+
+  Future<void> _loadNotify() async {
+    if (!mounted) return;
+    final api = context.read<AuthController>().api;
+    try {
+      final json = await api.get('/prefs/notify');
+      final m = (json as Map).cast<String, dynamic>();
+      if (mounted) setState(() => _notify = m['enabled'] != false);
+    } catch (_) {
+      // un-patched server or offline: the row stays hidden
+    }
+  }
+
+  Future<void> _toggleNotify(bool on) async {
+    if (_notifyBusy) return;
+    setState(() { _notifyBusy = true; _notify = on; });
+    final api = context.read<AuthController>().api;
+    try {
+      await api.put('/prefs/notify', {'enabled': on});
+      if (on) await PushController.instance.ensureRegistered();
+      if (mounted) showOk(context, tr(on ? 'Notifications on' : 'Notifications off'));
+    } catch (e) {
+      if (mounted) {
+        setState(() => _notify = !on);
+        showErr(context, e);
+      }
+    } finally {
+      if (mounted) setState(() => _notifyBusy = false);
+    }
+  }
+
+  /// `POST devices/push-test` — the server sends a real push to this phone
+  /// after a short delay, so the user can close the app and see it arrive
+  /// (the Phase 6 acceptance check, without touching any attendance/leave data).
+  Future<void> _testNotify() async {
+    final api = context.read<AuthController>().api;
+    try {
+      final json = await api.post('/devices/push-test');
+      final m = (json as Map).cast<String, dynamic>();
+      final tokens = (m['tokens'] as num?)?.toInt() ?? 0;
+      final seconds = (m['inSeconds'] as num?)?.toInt() ?? 10;
+      if (!mounted) return;
+      if (m['configured'] == false) {
+        showErr(context, tr('The server has no push key yet'));
+      } else if (tokens <= 0) {
+        showErr(context, tr('This phone is not registered for push yet — try again in a moment'));
+        PushController.instance.ensureRegistered(); // fire-and-forget re-registration
+      } else {
+        showOk(context, tr('Test notification in %s seconds — close the app to check').arg(seconds));
+      }
+    } catch (e) {
+      if (mounted) showErr(context, e);
+    }
   }
 
   Future<void> _probePayslips() async {
@@ -85,6 +147,7 @@ class _MorePageState extends State<MorePage> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthController>();
     final l10n = context.watch<L10n>();
+    final push = context.watch<PushController>();
     final user = auth.user;
     return Scaffold(
       appBar: AppBar(title: Text(tr('More'))),
@@ -142,11 +205,37 @@ class _MorePageState extends State<MorePage> {
                   onChanged: _toggleBio,
                 ),
               ],
+              if (push.available && _notify != null) ...[
+                const Divider(),
+                SwitchListTile(
+                  secondary: const Icon(Icons.notifications_active_outlined, color: HrBrand.blue),
+                  title: Text(tr('Notifications')),
+                  subtitle: Text(tr(_notify == true
+                      ? (push.permitted
+                          ? 'Punch reminders, leave decisions, announcements'
+                          : 'Allow notifications for HRMate in phone settings')
+                      : 'You will not receive push notifications')),
+                  value: _notify == true,
+                  onChanged: _notifyBusy ? null : _toggleNotify,
+                ),
+                if (_notify == true)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 72, bottom: 6),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: _testNotify,
+                        icon: const Icon(Icons.send_rounded, size: 16),
+                        label: Text(tr('Send test notification')),
+                      ),
+                    ),
+                  ),
+              ],
               const Divider(),
               ListTile(
                 leading: const Icon(Icons.info_outline_rounded, color: HrBrand.blue),
                 title: Text(tr('About')),
-                subtitle: Text(tr('Native app · Phase 5 Release')),
+                subtitle: Text(tr('Native app · Phase 6 Push')),
                 trailing: Text(_version.isEmpty ? '' : '${tr('Version')} $_version', style: Theme.of(context).textTheme.bodySmall),
               ),
             ]),

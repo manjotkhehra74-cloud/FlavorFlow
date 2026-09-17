@@ -74,6 +74,10 @@ class AuthController extends ChangeNotifier {
   bool busy = false;
   bool locked = false; // token present but biometric unlock still required
 
+  /// Runs at the start of [logout] while the Bearer token is still valid
+  /// (Phase 6: PushController removes this phone's FCM token on the server).
+  Future<void> Function()? beforeLogout;
+
   AuthController() {
     api.onUnauthenticated = () {
       if (user != null || locked) {
@@ -190,6 +194,7 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    try { await beforeLogout?.call(); } catch (_) {/* best effort */}
     try { await api.post('/auth/logout'); } catch (_) {/* best effort */}
     await SecureStore.clearSession();
     api.token = null;

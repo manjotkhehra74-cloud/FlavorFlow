@@ -45,7 +45,40 @@ release of the native app (the WebView shell was 1.x, so 3.0.0 is guaranteed hig
 installed `versionCode`/`versionName`). After P5: 3.0.x for fixes, 3.1.0 P6 push, 3.2.0 P7.
 The About row in More shows `version (build)` from `package_info_plus`, so a screenshot
 proves which build runs. Actual history: 2.0.0+20 P0 · 2.1.0+21 P1 · 2.2.0+22 P2 ·
-2.3.0+24 P3 · 2.4.0+27 P4 · **3.0.0+30 P5 (prod, published 2026-09-17)**.
+2.3.0+24 P3 · 2.4.0+27 P4 · **3.0.0+30 P5 (prod, published 2026-09-17)** · 3.1.0+31 P6 push.
+
+## Phase 6 (push notifications) — Firebase setup, once
+
+Push uses Firebase Cloud Messaging. Two files, two different rules:
+
+| File | Where | Secret? |
+|---|---|---|
+| `google-services.json` (Android app config) | `mobile/android/app/google-services.json` — **committed** in the HRMate repo, because Codemagic builds from git | No — it only contains public project ids/API keys (Google documents it as safe to ship; it is inside every APK anyway) |
+| service-account key `hrmate-…-firebase-adminsdk-….json` (lets the SERVER send) | VPS only: `/app/data/fcm-service-account.json` inside the `hrmate_data` volume | **YES** — never in git, never in the image, never in chat |
+
+Owner steps (Firebase console, [console.firebase.google.com](https://console.firebase.google.com), Google account):
+
+1. **Add project** → name `HRMate` → Analytics off → Create.
+2. Project overview → **Android** icon → package name `in.flavorflow.hrmate` → Register app →
+   **Download google-services.json**. Then *Add app* again with package `in.flavorflow.hrmate.beta`
+   (the beta flavour) and download again — the second download contains **both** apps; keep that one.
+3. Put it at `mobile/android/app/google-services.json` in the HRMate repo (commit it; the agent can do this
+   from an uploaded copy). `android/app/build.gradle.kts` applies the Google-services plugin only when the
+   file exists, so a checkout without it still builds — with push silently off.
+4. ⚙ Project settings → **Cloud Messaging** → make sure *Firebase Cloud Messaging API (V1)* is **Enabled**.
+5. ⚙ Project settings → **Service accounts** → *Generate new private key* → the json downloads. Upload it to the
+   VPS (SSH "UPLOAD FILE") and run
+   `sudo docker cp ~/hrmate-*-firebase-adminsdk-*.json hrmate-hrmate-1:/app/data/fcm-service-account.json`.
+   No restart needed (the server re-checks the file every 30 s). Delete the local download afterwards.
+
+Build check: the Codemagic log must NOT contain `google-services.json missing — building WITHOUT push
+notifications`; if it does, step 3 is not committed. On the phone: More → Notifications switch visible →
+*Send test notification* → close the app → notification arrives (Phase 6 acceptance).
+
+Android 13+ asks for the notification permission at first sign-in; the switch's subtitle says
+"Allow notifications for HRMate in phone settings" if it was denied. Notification channel:
+`hrmate_default` ("HRMate", high importance) — created by the app, referenced by the manifest and by
+`src/lib/fcm.ts` on the server; renaming it anywhere breaks background display.
 
 ## Phase 5 (release track) checklist
 

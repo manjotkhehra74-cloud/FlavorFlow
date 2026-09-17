@@ -3,7 +3,7 @@ description: HRMate — native Android app for the HRMate Workforce Portal (atte
 publish_to: "none"
 
 # Native app series = 2.x (the WebView shell was 1.x). Bump +1 per phase.
-version: 3.0.0+30
+version: 3.1.0+31
 
 environment:
   sdk: ">=3.5.0 <4.0.0"
@@ -23,6 +23,12 @@ dependencies:
   url_launcher: ^6.3.2
   connectivity_plus: ^6.1.0
   package_info_plus: ^8.1.0
+  # Phase 6 push (ARCHITECTURE.md §3 allow-list). Pinned: firebase_* 3.x/15.x are the
+  # last lines that build on Flutter 3.29 / Dart 3.7 (Codemagic image); local
+  # notifications 19.x is the last major before the Dart 3.8 requirement.
+  firebase_core: ^3.15.2
+  firebase_messaging: ^15.2.10
+  flutter_local_notifications: ^19.4.2
 
 dev_dependencies:
   flutter_test:

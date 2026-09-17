@@ -6,6 +6,15 @@ plugins {
     id("org.jetbrains.kotlin.android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+    // Phase 6 (push): applied only when android/app/google-services.json exists, so a
+    // checkout without the Firebase config still builds (push simply stays off in it).
+    id("com.google.gms.google-services") apply false
+}
+
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+} else {
+    logger.warn("HRMate: android/app/google-services.json missing — building WITHOUT push notifications")
 }
 
 val keystoreProperties = Properties()

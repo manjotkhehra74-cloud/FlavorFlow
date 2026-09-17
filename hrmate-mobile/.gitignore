@@ -11,3 +11,7 @@ android/app/*.jks
 android/app/*.keystore
 *.iml
 .idea/
+# Phase 6: the FCM SERVICE-ACCOUNT key is a server secret — never in git (google-services.json
+# is public by design and IS committed in the HRMate repo, see RELEASE.md).
+*firebase-adminsdk*.json
+fcm-service-account.json

@@ -18,14 +18,15 @@ lib/core/theme.dart           HRMate design tokens (#1E6FE0 · #F4F7FB · #0B163
 lib/core/i18n.dart            tr('…') with en / pa / hi dictionaries
 lib/core/format.dart          IST times, dates, durations, greeting, initials
 lib/state/auth.dart           AuthController: restore / login / biometric unlock / logout; HrUser
+lib/state/push.dart           PushController (Phase 6): FCM token → POST devices/push-token, foreground display, tap → screen; off when google-services.json is absent
 lib/ui/app_shell.dart         bottom nav Home · Leaves · Punch(centre) · Team · More + PhasePlaceholder
 lib/ui/widgets.dart           LoadingView · EmptyView · ErrorRetryView · HrCard · StatusPill · Avatar · showErr/showOk
 lib/features/auth/            LoginPage (code/email + password, fingerprint unlock, language)
 lib/features/home/            HomePage — signed-in employee header + card (Phase 1 adds today card etc.)
-lib/features/more/            MorePage — Profile · My attendance (calendar) · Holidays · Payslips tiles (Phase 5), language, fingerprint toggle, About (version), sign out
+lib/features/more/            MorePage — Profile · My attendance (calendar) · Holidays · Payslips tiles (Phase 5), language, fingerprint toggle, Notifications switch + test (Phase 6), About (version), sign out
 lib/features/{punch,leaves,team}/  placeholders replaced in Phases 2–4
-android/                      applicationId in.flavorflow.hrmate, flavors beta(.beta, "HRMate Beta") / prod, minSdk 26, FlutterFragmentActivity, navy launch window
-server-reference/             Next.js handlers for auth/login · auth/logout · me (+ shared mobileAuth.ts with 2 TODOs to wire)
+android/                      applicationId in.flavorflow.hrmate, flavors beta(.beta, "HRMate Beta") / prod, minSdk 26, FlutterFragmentActivity, navy launch window; Phase 6: google-services plugin (applied only if android/app/google-services.json exists), POST_NOTIFICATIONS, channel hrmate_default, ic_notification
+server-reference/             Next.js handlers per phase (see server-reference/README.md); Phase 6: lib/fcm.ts + devices/push-token · devices/push-test · prefs/notify + webapp-patches (push.ts, wall route)
 test/smoke_test.dart          theme tokens + splash-has-no-text
 RELEASE.md                    build/sign/publish, versioning, Phase 5 checklist
 ```

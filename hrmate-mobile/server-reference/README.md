@@ -27,6 +27,13 @@ app/api/v1/mobile/
   team/members/[id]/day/route.ts ← Phase 4: GET ?date → {member, shift, day{…punches[]}}
   holidays/route.ts         ← Phase 5: GET ?year → {year, items[{date,name,type,optional}]}
   payslips/route.ts         ← Phase 5: GET → {items[{id,month,label,netPay,currency,url}]} — create ONLY if the webapp has payroll; 404 hides the tile
+  devices/push-token/route.ts ← Phase 6: POST {token, platform, deviceId} → {ok} (upsert) · DELETE ?token= → {ok}
+  devices/push-test/route.ts  ← Phase 6: POST → {ok, configured, tokens, inSeconds} — sends ONE real push to the caller's phones after 10 s
+  prefs/notify/route.ts       ← Phase 6: GET → {enabled} · PUT {enabled} → the webapp's own user_prefs.notify_enabled
+  auth/logout/route.ts        ← Phase 6: re-copy — also forgets the device's FCM tokens
+lib/fcm.ts                  ← Phase 6: → src/lib/fcm.ts  FCM HTTP v1 sender (no npm dep), token table, sendFcmToUser / sendFcmAnnouncement
+webapp-patches/src/lib/push.ts        ← Phase 6: → src/lib/push.ts  (the live file + FCM fan-out inside sendPushToUser — the ONLY change)
+webapp-patches/src/app/api/wall/route.ts ← Phase 6: → src/app/api/wall/route.ts (the live file + push-only announcement after INSERT — the ONLY change)
 ```
 
 Phase 3 note: `_lib/mobileAuth.ts` `handle()` now passes the route context through
@@ -155,3 +162,53 @@ curl -s https://hr.flavorflow.co.in/api/download/apk-info
 # → {"ok":true,"package":"in.flavorflow.hrmate","minAndroid":"8.0","version":"3.0.0","build":30,"file":"HRMate-3.0.0.apk","sizeBytes":…,"sha256":"…","publishedAt":"…","available":true,"url":"/api/download/apk"}
 curl -s -o /dev/null -w '%{http_code} %{size_download}\n' https://hr.flavorflow.co.in/api/download/apk   # → 200 <same sizeBytes>
 ```
+
+## Phase 6 — push notifications (FCM)
+
+**What changes on the server (all additive, no business rule touched):**
+
+| File in the webapp | Action | Why |
+|---|---|---|
+| `src/lib/fcm.ts` | new (from `lib/fcm.ts`) | FCM HTTP v1 sender using the Firebase **service-account key**; signs the OAuth JWT with `node:crypto`, so **no new npm package**. Table `mobile_push_tokens`. Never throws; without a key every send is a no-op. |
+| `src/lib/push.ts` | replace (from `webapp-patches/src/lib/push.ts`) | `sendPushToUser()` now also calls `sendFcmToUser()` — every existing `notify()` (morning punch nudge, leave approved / rejected, missed-punch warnings, …) reaches the phone. The `isNotifyEnabled` check stays first, so "notifications off" covers web and app alike. |
+| `src/app/api/wall/route.ts` | replace (from `webapp-patches/…/wall/route.ts`) | after the wall INSERT: push-only announcement to everyone except the author (skips users with notifications off). Inbox / permissions unchanged. |
+| `src/app/api/v1/mobile/devices/push-token/route.ts` | new | app registers / removes its FCM token |
+| `src/app/api/v1/mobile/devices/push-test/route.ts` | new | "Send test notification" in More → the acceptance check without touching attendance/leave data |
+| `src/app/api/v1/mobile/prefs/notify/route.ts` | new | Notifications switch in More = the webapp's `user_prefs.notify_enabled` |
+| `src/app/api/v1/mobile/auth/logout/route.ts` | replace | logout also deletes the device's FCM tokens |
+
+**Server key (owner does this once, outside git):** Firebase console → project **HRMate** → ⚙ Project settings →
+*Service accounts* → **Generate new private key** → a `hrmate-…-firebase-adminsdk-….json` downloads. On the VPS:
+
+```bash
+# after uploading the json with the SSH "UPLOAD FILE" button (it lands in ~):
+sudo docker cp ~/hrmate-*-firebase-adminsdk-*.json hrmate-hrmate-1:/app/data/fcm-service-account.json
+# no restart needed — src/lib/fcm.ts re-checks the file every 30 s.  Container log shows:
+sudo docker logs --since 2m hrmate-hrmate-1 2>&1 | grep '\[fcm\]'      # → [fcm] configured: project hrmate-…
+```
+
+The file lives in the `hrmate_data` volume (`/app/data`, next to `hrmate.db`), so `docker compose up -d --build`
+keeps it. Optional overrides: `FCM_SERVICE_ACCOUNT_FILE=<path>` or `FCM_SERVICE_ACCOUNT_JSON=<inline json>` in
+`docker-compose.yml`. **Never commit the key** — it can send notifications to every user.
+
+**Verify (must be in the Phase 6 reply):**
+
+```bash
+T=<token from login>
+# preference (same value the webapp Settings page shows)
+curl -s https://hr.flavorflow.co.in/api/v1/mobile/prefs/notify -H "authorization: Bearer $T"                 # → {"ok":true,"enabled":true}
+curl -s -X PUT https://hr.flavorflow.co.in/api/v1/mobile/prefs/notify -H "authorization: Bearer $T" -H 'content-type: application/json' -d '{"enabled":true}'
+# token registration (validation) → 400 VALIDATION, then 200 with a dummy token
+curl -s -w '\n%{http_code}\n' -X POST https://hr.flavorflow.co.in/api/v1/mobile/devices/push-token -H "authorization: Bearer $T" -H 'content-type: application/json' -d '{}'
+curl -s -w '\n%{http_code}\n' -X POST https://hr.flavorflow.co.in/api/v1/mobile/devices/push-token -H "authorization: Bearer $T" -H 'content-type: application/json' -d '{"token":"curl-test-token-0123456789abcdef","platform":"android","deviceId":"curl-1"}'
+curl -s -X DELETE "https://hr.flavorflow.co.in/api/v1/mobile/devices/push-token?token=curl-test-token-0123456789abcdef" -H "authorization: Bearer $T"   # → {"ok":true}
+# server key status (configured:true once the json is in /app/data); tokens = phones of this user
+curl -s -X POST https://hr.flavorflow.co.in/api/v1/mobile/devices/push-test -H "authorization: Bearer $T"
+# → {"ok":true,"configured":true,"project":"hrmate-…","error":null,"tokens":1,"inSeconds":10}
+# no token → 401
+curl -s -o /dev/null -w '%{http_code}\n' https://hr.flavorflow.co.in/api/v1/mobile/prefs/notify
+```
+
+**Acceptance (owner, on the phone):** More → Notifications ON → *Send test notification* → press Home / swipe the
+app away → within ~10 s the notification appears in the tray → tap opens the app. Then a real one: approve a
+leave from the webapp → the employee's phone gets "Leave approved…" with the app closed.
