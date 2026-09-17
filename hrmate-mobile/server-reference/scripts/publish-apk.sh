@@ -16,18 +16,29 @@ fi
 [[ "$BUILD" =~ ^[0-9]+$ ]] || { echo "STOP: build must be a number"; exit 1; }
 CONTAINER="${HRMATE_CONTAINER:-hrmate-hrmate-1}"
 docker ps --format '{{.Names}}' | grep -qx "$CONTAINER" || { echo "STOP: container $CONTAINER is not running"; exit 1; }
+# Real APK = zip with AndroidManifest.xml. (No `unzip -l | grep -q` here: with pipefail, grep
+# closing the pipe early makes the check fail on big APKs.)
+BYTES=$(stat -c %s "$APK")
+MAGIC=$(head -c 2 "$APK" | od -An -c | tr -d ' ')
+if [ "$MAGIC" != "PK" ]; then
+  echo "STOP: $APK is not an APK (first bytes '$MAGIC', $BYTES bytes)."
+  echo "  -> '<!' or '<h' = a web page was saved, not the APK: download again from Codemagic -> Artifacts"
+  exit 1
+fi
 if command -v unzip >/dev/null 2>&1; then
-  if ! unzip -l "$APK" 2>/dev/null | grep -q 'AndroidManifest.xml'; then
-    echo "STOP: $APK is not a complete APK."
-    echo "  size: $(stat -c %s "$APK") bytes   first bytes: $(head -c 2 "$APK" | od -An -c | tr -s ' ')"
-    echo "  zip test: $(unzip -tq "$APK" 2>&1 | tail -1)"
-    echo "  -> first bytes '< !' or '< h' = a web page was saved, not the APK: download again from Codemagic -> Artifacts"
-    echo "  -> 'End-of-central-directory' or a small size = the upload was cut short: upload the file again"
+  if ! unzip -tq "$APK" >/dev/null 2>&1; then
+    echo "STOP: $APK is damaged/incomplete ($BYTES bytes): $(unzip -tq "$APK" 2>&1 | tail -1)"
+    echo "  -> the upload was cut short: upload the file again and wait for the progress bar to finish"
     exit 1
   fi
+  LISTING=$(unzip -Z1 "$APK" 2>/dev/null || true)
+  case "$LISTING" in
+    *AndroidManifest.xml*) : ;;
+    *) echo "STOP: $APK has no AndroidManifest.xml — not an Android APK"; exit 1 ;;
+  esac
 fi
 NAME="HRMate-${VER}.apk"
-SIZE=$(stat -c %s "$APK")
+SIZE=$BYTES
 SHA=$(sha256sum "$APK" | cut -d' ' -f1)
 NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 TMP=$(mktemp -d)
