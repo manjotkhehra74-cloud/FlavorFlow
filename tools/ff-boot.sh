@@ -10,7 +10,7 @@
 #   → 2-3 min baad result browser vich:  https://flavorflow.co.in/download/boot-status.txt
 #   (poora log: VM → "Serial port 1 (console)" ya /var/log/ff-boot.log)
 #
-# Steps (arg naal chuno, default sab):  fixssh industry billing stockledger codes lossrestore hrmate dispatchfix saasbilling demo web apk
+# Steps (arg naal chuno, default sab):  fixssh industry billing stockledger codes lossrestore hrmate dispatchfix batchrecon saasbilling demo web apk
 #   fixssh   — memory/OOM/swap snapshot, swap ensure, google-guest-agent + sshd restart
 #              (SSH-in-browser "Connection failed… retrying" aksar guest-agent/RAM karke)
 #   industry — tools/ff-saasindustry.sh (idempotent) + tenant /api/settings/company verify
@@ -20,6 +20,9 @@
 #              (/api/settings/hrmate admin-only + /api/hrmate/summary read-only proxy; key stays on the server)
 #   dispatchfix — tools/ff-dispatchfix.sh: menu follows each user's OWN permissions (custom chips) +
 #              POST /api/dispatch/:id/void that works on the node:sqlite wrapper (SAVEPOINT; stock + batch back)
+#   batchrecon — tools/ff-batchrecon.sh: batch used_cb repaired from real dispatch lines (deleted/re-created
+#              batch lost its counter → register showed dispatched cartons), delete/under-edit guards on
+#              dispatched batches, Batch-wise Stock TOTAL = Stock on Hand (Unassigned line)
 #   saasbilling — tools/ff-saasbilling.sh: subscription plans + cheque activation + owner
 #              console API in the gateway (admin key from GCE metadata `ff-admin-key`)
 #   demo     — tools/ff-saasdemo.sh (16 demo-<industry> tenants, same demo login)
@@ -35,7 +38,7 @@ main() {
   WEB="${FF_WEB:-/opt/flavorflow-saas/web}"
   LOG=/var/log/ff-boot.log
   STATUS="$WEB/download/boot-status.txt"
-  STEPS="${*:-fixssh industry billing stockledger codes lossrestore hrmate dispatchfix saasbilling demo web apk}"
+  STEPS="${*:-fixssh industry billing stockledger codes lossrestore hrmate dispatchfix batchrecon saasbilling demo web apk}"
   mkdir -p "$WEB/download"
   exec > >(tee -a "$LOG") 2>&1
   : > "$STATUS"; chmod 644 "$STATUS"
@@ -169,6 +172,19 @@ main() {
       fi
       st "[dispatchfix] rc=$RC"
     else st "[dispatchfix] koi routes/dispatch.js nahi — skip"; fi
+  fi
+
+  # ---------- batchrecon (batch register = stock on hand; every tenant + factory) ----------
+  if [[ " $STEPS " == *" batchrecon "* ]]; then
+    if [ -f /opt/flavorflow-saas/core/routes/production.js ] || [ -f /opt/flavorflow/server/routes/production.js ]; then
+      OUT=""; RC=1
+      if fetch "$RAW/ff-batchrecon.sh" /tmp/ff-batchrecon.sh; then OUT=$(bash /tmp/ff-batchrecon.sh </dev/null 2>&1); RC=$?; fi
+      if [ -z "$OUT" ]; then st "[batchrecon] script download FAIL (GitHub reach nahi hoya?)"; else
+        echo "$OUT"
+        echo "$OUT" | grep -E '^(SELFTEST|GUARD|REPORT|RECON|SERVER|TENANT|FACTORY|BATCHRECON|FATAL)' | grep -v '^RECON tenant-[^:]*: batches consistent' | cut -c1-220 | sed 's/^/[batchrecon] /' | tee -a "$STATUS"
+      fi
+      st "[batchrecon] rc=$RC"
+    else st "[batchrecon] koi routes/production.js nahi — skip"; fi
   fi
 
   # ---------- saasbilling (subscription plans, cheque activation, admin console API) ----------

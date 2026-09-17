@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api.dart';
+import 'i18n.dart';
 import 'industry_pack.dart';
 
 /// Editable company identity printed on every exported PDF (packing slips,
@@ -412,7 +413,17 @@ class U {
         ];
       }
     }
-    return ([for (final c in cols) ize(c)], data);
+    return ([for (final c in cols) ize(c)], [for (final r in data) _localizeRow(r)]);
+  }
+
+  /// Server-built marker cells that must read in the user's language and
+  /// industry (the Batch-wise Stock register's "Unassigned" line, added by
+  /// ff-batchrecon = stock on hand that no batch accounts for). Other cells
+  /// pass through untouched.
+  static const Set<String> _serverMarkers = {'Unassigned (opening stock / adjustments)'};
+  static List<dynamic> _localizeRow(List<dynamic> r) {
+    if (!r.any((c) => c is String && _serverMarkers.contains(c))) return r;
+    return [for (final c in r) c is String && _serverMarkers.contains(c) ? ize(tr(c)) : c];
   }
 
   /// Indexes of tray columns removed by [table] — lets callers re-map
