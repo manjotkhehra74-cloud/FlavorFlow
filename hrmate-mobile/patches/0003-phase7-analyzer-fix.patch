@@ -1,0 +1,200 @@
+From 6828431cffd382c53ef113e60ea9e3282ddb5e98 Mon Sep 17 00:00:00 2001
+From: Arena Agent <agent@arena.ai>
+Date: Fri, 18 Sep 2026 13:52:43 +0000
+Subject: [PATCH] =?UTF-8?q?fix(mobile):=20Phase=207=20analyze=20errors=20o?=
+ =?UTF-8?q?n=20Flutter=203.29=20(Codemagic)=20=E2=80=94=20FontFeature('tnu?=
+ =?UTF-8?q?m')=20instead=20of=20FontFeature.tabularNumbers(),=20dashed=20b?=
+ =?UTF-8?q?order=20without=20PathMetric.extractPoints/addPolyline=20(plain?=
+ =?UTF-8?q?=20dash=20lines=20+=20corner=20arcs),=20holiday=20cache=20as=20?=
+ =?UTF-8?q?Cached<Holiday=3F>,=20const=20Text.rich/Column/Positioned?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Codemagic build failed 'Flutter Analyze' with 15 errors + 9 infos; all
+fixed. No visual change — same pixels, APIs that exist on Flutter 3.29.
+
+Source: FlavorFlow repo commit a964f58 (hrmate-mobile/).
+---
+ mobile/lib/features/auth/login_page.dart  |  4 +-
+ mobile/lib/features/home/home_page.dart   |  6 +--
+ mobile/lib/features/punch/punch_page.dart |  4 +-
+ mobile/lib/ui/app_shell.dart              |  8 ++--
+ mobile/lib/ui/widgets.dart                | 55 +++++++++++++++++------
+ 5 files changed, 53 insertions(+), 24 deletions(-)
+
+diff --git a/mobile/lib/features/auth/login_page.dart b/mobile/lib/features/auth/login_page.dart
+index af41a0c..d1f81de 100644
+--- a/mobile/lib/features/auth/login_page.dart
++++ b/mobile/lib/features/auth/login_page.dart
+@@ -129,8 +129,8 @@ class _LoginPageState extends State<LoginPage> {
+                           ),
+                         ),
+                         const SizedBox(height: 14),
+-                        Text.rich(
+-                          TextSpan(children: const [
++                        const Text.rich(
++                          TextSpan(children: [
+                             TextSpan(text: 'HR', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: HrBrand.heading, height: 1)),
+                             TextSpan(text: 'Mate', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: HrBrand.blue, height: 1)),
+                           ]),
+diff --git a/mobile/lib/features/home/home_page.dart b/mobile/lib/features/home/home_page.dart
+index 6af1227..404e636 100644
+--- a/mobile/lib/features/home/home_page.dart
++++ b/mobile/lib/features/home/home_page.dart
+@@ -74,7 +74,7 @@ class _HomePageState extends State<HomePage> {
+     try {
+       leave = await cachedFetch('leaves/balance', () => api.get('/leaves/balance'), LeaveBalance.fromJson);
+     } catch (_) {}
+-    Cached<Holiday>? holiday;
++    Cached<Holiday?>? holiday;
+     try {
+       final now = DateTime.now();
+       holiday = await cachedFetch('holidays/${now.year}', () => api.get('/holidays', query: {'year': now.year.toString()}),
+@@ -328,7 +328,7 @@ class _NavyCard extends StatelessWidget {
+               Center(
+                 child: Text(
+                   '${_hm(elapsed)} / ${_target(t)}',
+-                  style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: HrBrand.emeraldOnNavy, fontFeatures: [FontFeature.tabularNumbers()]),
++                  style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: HrBrand.emeraldOnNavy, fontFeatures: [FontFeature('tnum')]),
+                 ),
+               ),
+               const SizedBox(height: 2),
+@@ -339,7 +339,7 @@ class _NavyCard extends StatelessWidget {
+                     fontSize: 26,
+                     fontWeight: FontWeight.w900,
+                     color: Colors.white,
+-                    fontFeatures: [FontFeature.tabularNumbers()],
++                    fontFeatures: [FontFeature('tnum')],
+                     shadows: [Shadow(color: Color(0x8010B981), blurRadius: 14)],
+                   ),
+                 ),
+diff --git a/mobile/lib/features/punch/punch_page.dart b/mobile/lib/features/punch/punch_page.dart
+index 41d604c..4b1e844 100644
+--- a/mobile/lib/features/punch/punch_page.dart
++++ b/mobile/lib/features/punch/punch_page.dart
+@@ -602,14 +602,14 @@ class _Centre extends StatelessWidget {
+       final secs = (elapsed.inSeconds % 60).toString().padLeft(2, '0');
+       child = Column(mainAxisSize: MainAxisSize.min, children: [
+         Text('${hrs}h ${mins}m / ${target.inHours.toString().padLeft(2, '0')}h ${(target.inMinutes % 60).toString().padLeft(2, '0')}m',
+-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: HrBrand.emeraldOnNavy, fontFeatures: [FontFeature.tabularNumbers()])),
++            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: HrBrand.emeraldOnNavy, fontFeatures: [FontFeature('tnum')])),
+         const SizedBox(height: 2),
+         Text('$hrs:$mins:$secs',
+             style: const TextStyle(
+               fontSize: 26,
+               fontWeight: FontWeight.w900,
+               color: Colors.white,
+-              fontFeatures: [FontFeature.tabularNumbers()],
++              fontFeatures: [FontFeature('tnum')],
+               shadows: [Shadow(color: Color(0x8010B981), blurRadius: 14)],
+             )),
+         const SizedBox(height: 2),
+diff --git a/mobile/lib/ui/app_shell.dart b/mobile/lib/ui/app_shell.dart
+index cfdce4c..a9c8198 100644
+--- a/mobile/lib/ui/app_shell.dart
++++ b/mobile/lib/ui/app_shell.dart
+@@ -91,18 +91,18 @@ class _Header extends StatelessWidget {
+         ),
+         const SizedBox(width: 10),
+         Expanded(
+-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
++          child: const Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+             Text.rich(
+-              TextSpan(children: const [
++              TextSpan(children: [
+                 TextSpan(text: 'HR', style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w900, color: HrBrand.heading, height: 1)),
+                 TextSpan(text: 'Mate', style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w900, color: HrBrand.blue, height: 1)),
+               ]),
+             ),
+-            const SizedBox(height: 1.5),
++            SizedBox(height: 1.5),
+             Text(HrBrand.company,
+                 maxLines: 1,
+                 overflow: TextOverflow.ellipsis,
+-                style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: HrBrand.subInk, letterSpacing: 0.2)),
++                style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: HrBrand.subInk, letterSpacing: 0.2)),
+           ]),
+         ),
+         const SizedBox(width: 8),
+diff --git a/mobile/lib/ui/widgets.dart b/mobile/lib/ui/widgets.dart
+index c3ca6f6..b5ae331 100644
+--- a/mobile/lib/ui/widgets.dart
++++ b/mobile/lib/ui/widgets.dart
+@@ -55,7 +55,7 @@ class EmptyView extends StatelessWidget {
+                   ],
+                 ]),
+               ),
+-              Positioned.fill(child: CustomPaint(painter: const _DashedRect(radius: HrBrand.radiusCard))),
++              const Positioned.fill(child: const CustomPaint(painter: const _DashedRect(radius: HrBrand.radiusCard))),
+             ]),
+           ),
+         ),
+@@ -67,23 +67,52 @@ class _DashedRect extends CustomPainter {
+   const _DashedRect({required this.radius});
+   @override
+   void paint(Canvas canvas, Size size) {
+-    final rrect = RRect.fromRectAndRadius(
+-      Rect.fromLTWH(0.75, 0.75, math.max(0, size.width - 1.5), math.max(0, size.height - 1.5)),
+-      Radius.circular(radius),
+-    );
+-    final path = Path()..addRRect(rrect);
++    const stroke = 1.4;
+     final paint = Paint()
+       ..style = PaintingStyle.stroke
+-      ..strokeWidth = 1.4
++      ..strokeWidth = stroke
++      ..strokeCap = StrokeCap.round
+       ..color = HrBrand.inputBorder;
+-    for (final m in path.computeMetrics()) {
+-      var dist = 0.0;
+-      while (dist < m.length) {
+-        final end = math.min(dist + 6, m.length);
+-        canvas.drawPath(Path()..addPolyline(m.extractPoints(dist, end)), paint);
+-        dist += 12;
++    final w = size.width;
++    final h = size.height;
++    final x0 = stroke / 2;
++    final y0 = stroke / 2;
++    final x1 = w - stroke / 2;
++    final y1 = h - stroke / 2;
++    if (x1 <= x0 || y1 <= y0) return;
++    final r = radius.clamp(0.0, math.min(w, h) / 2);
++    const dash = 6.0;
++    const gap = 6.0;
++    final step = dash + gap;
++    void dashH(double y, double xFrom, double xTo) {
++      var x = math.min(xFrom, xTo);
++      final to = math.max(xFrom, xTo);
++      while (x < to) {
++        final xe = math.min(x + dash, to);
++        canvas.drawLine(Offset(x, y), Offset(xe, y), paint);
++        x += step;
+       }
+     }
++
++    void dashV(double x, double yFrom, double yTo) {
++      var y = math.min(yFrom, yTo);
++      final to = math.max(yFrom, yTo);
++      while (y < to) {
++        final ye = math.min(y + dash, to);
++        canvas.drawLine(Offset(x, y), Offset(x, ye), paint);
++        y += step;
++      }
++    }
++
++    // Straight edges as dashes, corners as solid quarter arcs.
++    dashH(y0, x0 + r, x1 - r);
++    dashH(y1, x0 + r, x1 - r);
++    dashV(x0, y0 + r, y1 - r);
++    dashV(x1, y0 + r, y1 - r);
++    canvas.drawArc(Rect.fromCircle(center: Offset(x0 + r, y0 + r), radius: r), math.pi, math.pi / 2, false, paint);
++    canvas.drawArc(Rect.fromCircle(center: Offset(x1 - r, y0 + r), radius: r), math.pi * 1.5, math.pi / 2, false, paint);
++    canvas.drawArc(Rect.fromCircle(center: Offset(x1 - r, y1 - r), radius: r), 0, math.pi / 2, false, paint);
++    canvas.drawArc(Rect.fromCircle(center: Offset(x0 + r, y1 - r), radius: r), math.pi / 2, math.pi / 2, false, paint);
+   }
+ 
+   @override
+-- 
+2.39.5
+
