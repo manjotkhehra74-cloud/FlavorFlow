@@ -129,8 +129,8 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                         ),
                         const SizedBox(height: 14),
-                        Text.rich(
-                          TextSpan(children: const [
+                        const Text.rich(
+                          TextSpan(children: [
                             TextSpan(text: 'HR', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: HrBrand.heading, height: 1)),
                             TextSpan(text: 'Mate', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: HrBrand.blue, height: 1)),
                           ]),

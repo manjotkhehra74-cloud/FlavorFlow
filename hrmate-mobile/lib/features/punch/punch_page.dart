@@ -602,14 +602,14 @@ class _Centre extends StatelessWidget {
       final secs = (elapsed.inSeconds % 60).toString().padLeft(2, '0');
       child = Column(mainAxisSize: MainAxisSize.min, children: [
         Text('${hrs}h ${mins}m / ${target.inHours.toString().padLeft(2, '0')}h ${(target.inMinutes % 60).toString().padLeft(2, '0')}m',
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: HrBrand.emeraldOnNavy, fontFeatures: [FontFeature.tabularNumbers()])),
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: HrBrand.emeraldOnNavy, fontFeatures: [FontFeature('tnum')])),
         const SizedBox(height: 2),
         Text('$hrs:$mins:$secs',
             style: const TextStyle(
               fontSize: 26,
               fontWeight: FontWeight.w900,
               color: Colors.white,
-              fontFeatures: [FontFeature.tabularNumbers()],
+              fontFeatures: [FontFeature('tnum')],
               shadows: [Shadow(color: Color(0x8010B981), blurRadius: 14)],
             )),
         const SizedBox(height: 2),

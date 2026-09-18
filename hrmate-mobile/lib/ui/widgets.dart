@@ -55,7 +55,7 @@ class EmptyView extends StatelessWidget {
                   ],
                 ]),
               ),
-              Positioned.fill(child: CustomPaint(painter: const _DashedRect(radius: HrBrand.radiusCard))),
+              const Positioned.fill(child: const CustomPaint(painter: const _DashedRect(radius: HrBrand.radiusCard))),
             ]),
           ),
         ),
@@ -67,23 +67,52 @@ class _DashedRect extends CustomPainter {
   const _DashedRect({required this.radius});
   @override
   void paint(Canvas canvas, Size size) {
-    final rrect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0.75, 0.75, math.max(0, size.width - 1.5), math.max(0, size.height - 1.5)),
-      Radius.circular(radius),
-    );
-    final path = Path()..addRRect(rrect);
+    const stroke = 1.4;
     final paint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.4
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
       ..color = HrBrand.inputBorder;
-    for (final m in path.computeMetrics()) {
-      var dist = 0.0;
-      while (dist < m.length) {
-        final end = math.min(dist + 6, m.length);
-        canvas.drawPath(Path()..addPolyline(m.extractPoints(dist, end)), paint);
-        dist += 12;
+    final w = size.width;
+    final h = size.height;
+    final x0 = stroke / 2;
+    final y0 = stroke / 2;
+    final x1 = w - stroke / 2;
+    final y1 = h - stroke / 2;
+    if (x1 <= x0 || y1 <= y0) return;
+    final r = radius.clamp(0.0, math.min(w, h) / 2);
+    const dash = 6.0;
+    const gap = 6.0;
+    final step = dash + gap;
+    void dashH(double y, double xFrom, double xTo) {
+      var x = math.min(xFrom, xTo);
+      final to = math.max(xFrom, xTo);
+      while (x < to) {
+        final xe = math.min(x + dash, to);
+        canvas.drawLine(Offset(x, y), Offset(xe, y), paint);
+        x += step;
       }
     }
+
+    void dashV(double x, double yFrom, double yTo) {
+      var y = math.min(yFrom, yTo);
+      final to = math.max(yFrom, yTo);
+      while (y < to) {
+        final ye = math.min(y + dash, to);
+        canvas.drawLine(Offset(x, y), Offset(x, ye), paint);
+        y += step;
+      }
+    }
+
+    // Straight edges as dashes, corners as solid quarter arcs.
+    dashH(y0, x0 + r, x1 - r);
+    dashH(y1, x0 + r, x1 - r);
+    dashV(x0, y0 + r, y1 - r);
+    dashV(x1, y0 + r, y1 - r);
+    canvas.drawArc(Rect.fromCircle(center: Offset(x0 + r, y0 + r), radius: r), math.pi, math.pi / 2, false, paint);
+    canvas.drawArc(Rect.fromCircle(center: Offset(x1 - r, y0 + r), radius: r), math.pi * 1.5, math.pi / 2, false, paint);
+    canvas.drawArc(Rect.fromCircle(center: Offset(x1 - r, y1 - r), radius: r), 0, math.pi / 2, false, paint);
+    canvas.drawArc(Rect.fromCircle(center: Offset(x0 + r, y1 - r), radius: r), math.pi / 2, math.pi / 2, false, paint);
   }
 
   @override

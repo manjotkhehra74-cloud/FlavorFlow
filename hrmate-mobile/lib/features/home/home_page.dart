@@ -74,7 +74,7 @@ class _HomePageState extends State<HomePage> {
     try {
       leave = await cachedFetch('leaves/balance', () => api.get('/leaves/balance'), LeaveBalance.fromJson);
     } catch (_) {}
-    Cached<Holiday>? holiday;
+    Cached<Holiday?>? holiday;
     try {
       final now = DateTime.now();
       holiday = await cachedFetch('holidays/${now.year}', () => api.get('/holidays', query: {'year': now.year.toString()}),
@@ -328,7 +328,7 @@ class _NavyCard extends StatelessWidget {
               Center(
                 child: Text(
                   '${_hm(elapsed)} / ${_target(t)}',
-                  style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: HrBrand.emeraldOnNavy, fontFeatures: [FontFeature.tabularNumbers()]),
+                  style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: HrBrand.emeraldOnNavy, fontFeatures: [FontFeature('tnum')]),
                 ),
               ),
               const SizedBox(height: 2),
@@ -339,7 +339,7 @@ class _NavyCard extends StatelessWidget {
                     fontSize: 26,
                     fontWeight: FontWeight.w900,
                     color: Colors.white,
-                    fontFeatures: [FontFeature.tabularNumbers()],
+                    fontFeatures: [FontFeature('tnum')],
                     shadows: [Shadow(color: Color(0x8010B981), blurRadius: 14)],
                   ),
                 ),

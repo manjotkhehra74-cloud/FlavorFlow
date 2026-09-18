@@ -91,18 +91,18 @@ class _Header extends StatelessWidget {
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+          child: const Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
             Text.rich(
-              TextSpan(children: const [
+              TextSpan(children: [
                 TextSpan(text: 'HR', style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w900, color: HrBrand.heading, height: 1)),
                 TextSpan(text: 'Mate', style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w900, color: HrBrand.blue, height: 1)),
               ]),
             ),
-            const SizedBox(height: 1.5),
+            SizedBox(height: 1.5),
             Text(HrBrand.company,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: HrBrand.subInk, letterSpacing: 0.2)),
+                style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: HrBrand.subInk, letterSpacing: 0.2)),
           ]),
         ),
         const SizedBox(width: 8),
