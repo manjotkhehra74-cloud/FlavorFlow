@@ -1,0 +1,92 @@
+From 851767eaf7c15ecc224e7ace5b982c4925d462d3 Mon Sep 17 00:00:00 2001
+From: Arena Agent <agent@arena.ai>
+Date: Fri, 18 Sep 2026 18:01:27 +0000
+Subject: [PATCH] =?UTF-8?q?fix(mobile):=20=5FNavPunch=20raised=20circle=20?=
+ =?UTF-8?q?=E2=80=94=20negative=20Padding(top:=20-18)=20is=20an=20assertio?=
+ =?UTF-8?q?n=20(padding.isNonNegative);=20use=20negative-Offset=20Position?=
+ =?UTF-8?q?ed=20in=20an=20unclipped=20Stack=20(same=20layout:=2042px=20slo?=
+ =?UTF-8?q?t,=20same=20paint)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ mobile/lib/ui/app_shell.dart | 60 ++++++++++++++++++++++--------------
+ 1 file changed, 37 insertions(+), 23 deletions(-)
+
+diff --git a/mobile/lib/ui/app_shell.dart b/mobile/lib/ui/app_shell.dart
+index 0ef4461..de6c25a 100644
+--- a/mobile/lib/ui/app_shell.dart
++++ b/mobile/lib/ui/app_shell.dart
+@@ -250,31 +250,45 @@ class _NavPunch extends StatelessWidget {
+           borderRadius: BorderRadius.circular(32),
+           onTap: onTap,
+           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+-            Padding(
+-              padding: const EdgeInsets.only(top: -18),
+-              child: Container(
+-                width: 60,
+-                height: 60,
+-                decoration: const BoxDecoration(
+-                  color: Colors.white,
+-                  shape: BoxShape.circle,
+-                  boxShadow: [
+-                    BoxShadow(color: Color(0x5910B981), blurRadius: 16, offset: Offset(0, 6)),
+-                    BoxShadow(color: Color(0x14000000), blurRadius: 8, offset: Offset(0, 2)),
+-                  ],
+-                ),
+-                child: Container(
+-                  margin: const EdgeInsets.all(4),
+-                  decoration: const BoxDecoration(
+-                    shape: BoxShape.circle,
+-                    gradient: LinearGradient(
+-                      colors: [HrBrand.emeraldDeep, HrBrand.emerald, HrBrand.emeraldLight],
+-                      begin: Alignment.topCenter,
+-                      end: Alignment.bottomCenter,
++            // Raised emerald circle: 60 px, protruding 18 px above the bar.
++            // Negative Padding is an assertion in Flutter, so the raise is a
++            // negative-Offset Positioned inside an unclipped Stack — the
++            // layout slot stays 42 px (60 − 18), exactly as before.
++            SizedBox(
++              width: 60,
++              height: 42,
++              child: Stack(
++                clipBehavior: Clip.none,
++                children: [
++                  Positioned(
++                    left: 0,
++                    top: -18,
++                    child: Container(
++                      width: 60,
++                      height: 60,
++                      decoration: const BoxDecoration(
++                        color: Colors.white,
++                        shape: BoxShape.circle,
++                        boxShadow: [
++                          BoxShadow(color: Color(0x5910B981), blurRadius: 16, offset: Offset(0, 6)),
++                          BoxShadow(color: Color(0x14000000), blurRadius: 8, offset: Offset(0, 2)),
++                        ],
++                      ),
++                      child: Container(
++                        margin: const EdgeInsets.all(4),
++                        decoration: const BoxDecoration(
++                          shape: BoxShape.circle,
++                          gradient: LinearGradient(
++                            colors: [HrBrand.emeraldDeep, HrBrand.emerald, HrBrand.emeraldLight],
++                            begin: Alignment.topCenter,
++                            end: Alignment.bottomCenter,
++                          ),
++                        ),
++                        child: const Icon(Icons.fingerprint_rounded, color: Colors.white, size: 26),
++                      ),
+                     ),
+                   ),
+-                  child: const Icon(Icons.fingerprint_rounded, color: Colors.white, size: 26),
+-                ),
++                ],
+               ),
+             ),
+             const SizedBox(height: 2),
+-- 
+2.39.5
+

@@ -250,31 +250,45 @@ class _NavPunch extends StatelessWidget {
           borderRadius: BorderRadius.circular(32),
           onTap: onTap,
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Padding(
-              padding: const EdgeInsets.only(top: -18),
-              child: Container(
-                width: 60,
-                height: 60,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(color: Color(0x5910B981), blurRadius: 16, offset: Offset(0, 6)),
-                    BoxShadow(color: Color(0x14000000), blurRadius: 8, offset: Offset(0, 2)),
-                  ],
-                ),
-                child: Container(
-                  margin: const EdgeInsets.all(4),
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      colors: [HrBrand.emeraldDeep, HrBrand.emerald, HrBrand.emeraldLight],
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
+            // Raised emerald circle: 60 px, protruding 18 px above the bar.
+            // Negative Padding is an assertion in Flutter, so the raise is a
+            // negative-Offset Positioned inside an unclipped Stack — the
+            // layout slot stays 42 px (60 − 18), exactly as before.
+            SizedBox(
+              width: 60,
+              height: 42,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned(
+                    left: 0,
+                    top: -18,
+                    child: Container(
+                      width: 60,
+                      height: 60,
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(color: Color(0x5910B981), blurRadius: 16, offset: Offset(0, 6)),
+                          BoxShadow(color: Color(0x14000000), blurRadius: 8, offset: Offset(0, 2)),
+                        ],
+                      ),
+                      child: Container(
+                        margin: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(
+                            colors: [HrBrand.emeraldDeep, HrBrand.emerald, HrBrand.emeraldLight],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ),
+                        ),
+                        child: const Icon(Icons.fingerprint_rounded, color: Colors.white, size: 26),
+                      ),
                     ),
                   ),
-                  child: const Icon(Icons.fingerprint_rounded, color: Colors.white, size: 26),
-                ),
+                ],
               ),
             ),
             const SizedBox(height: 2),
