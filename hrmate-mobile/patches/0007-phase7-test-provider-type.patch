@@ -1,0 +1,34 @@
+From caae3f1f7699d04ec61486183f61bcb8663bb6a0 Mon Sep 17 00:00:00 2001
+From: Arena Agent <agent@arena.ai>
+Date: Fri, 18 Sep 2026 17:40:30 +0000
+Subject: [PATCH] =?UTF-8?q?fix(mobile):=20blank-screen=20test=20provider?=
+ =?UTF-8?q?=20type=20=E2=80=94=20explicit=20ChangeNotifierProvider<AuthCon?=
+ =?UTF-8?q?troller>=20(inference=20made=20it=20=5FFakeAuth,=20invisible=20?=
+ =?UTF-8?q?to=20watch<AuthController>)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ mobile/test/blank_screen_test.dart | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/mobile/test/blank_screen_test.dart b/mobile/test/blank_screen_test.dart
+index e3a5052..d14aefa 100644
+--- a/mobile/test/blank_screen_test.dart
++++ b/mobile/test/blank_screen_test.dart
+@@ -68,7 +68,10 @@ void main() {
+     await tester.pumpWidget(
+       MultiProvider(
+         providers: [
+-          ChangeNotifierProvider.value(value: auth),
++          // Explicit type: inference from `value` would make this
++          // ChangeNotifierProvider<_FakeAuth>, which the shell's
++          // context.watch<AuthController>() cannot see.
++          ChangeNotifierProvider<AuthController>.value(value: auth),
+           ChangeNotifierProvider.value(value: L10n.instance),
+         ],
+         child: MaterialApp.router(routerConfig: router, theme: buildTheme()),
+-- 
+2.39.5
+

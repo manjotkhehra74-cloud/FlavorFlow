@@ -68,7 +68,10 @@ void main() {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
-          ChangeNotifierProvider.value(value: auth),
+          // Explicit type: inference from `value` would make this
+          // ChangeNotifierProvider<_FakeAuth>, which the shell's
+          // context.watch<AuthController>() cannot see.
+          ChangeNotifierProvider<AuthController>.value(value: auth),
           ChangeNotifierProvider.value(value: L10n.instance),
         ],
         child: MaterialApp.router(routerConfig: router, theme: buildTheme()),
