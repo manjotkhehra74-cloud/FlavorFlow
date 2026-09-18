@@ -44,15 +44,40 @@ class AppShell extends StatelessWidget {
       body: SafeArea(
         bottom: false,
         child: Column(children: [
+          // TEMPORARY DIAGNOSTIC (3.2.0+33) — remove once the blank-body bug
+          // is fixed. The red strip and the tinted page area show in a
+          // screenshot exactly which layer of the body subtree is missing.
+          const _DiagStrip(),
           _Header(onProfile: () {
             Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const ProfilePage()));
           }),
-          Expanded(child: child),
+          Expanded(
+            child: Stack(children: [
+              const Positioned.fill(child: ColoredBox(color: Color(0x1F1E6FE0))),
+              child,
+            ]),
+          ),
         ]),
       ),
       bottomNavigationBar: _BottomNav(tabs: tabs, index: index, onGo: go),
     );
   }
+}
+
+/// Red marker strip under the status bar (temporary diagnostic, 3.2.0+33).
+class _DiagStrip extends StatelessWidget {
+  const _DiagStrip();
+  @override
+  Widget build(BuildContext context) => const Container(
+        height: 16,
+        color: Color(0xFFE53935),
+        alignment: Alignment.centerLeft,
+        padding: EdgeInsets.only(left: 12),
+        child: Text(
+          'DIAG 33 — body alive',
+          style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
+        ),
+      );
 }
 
 class _Tab {
@@ -72,8 +97,7 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final user = context.watch<AuthController>().user;
     return Container(
-      color: HrBrand.card,
-      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: HrBrand.lineSoft))),
+      decoration: const BoxDecoration(color: HrBrand.card, border: Border(bottom: BorderSide(color: HrBrand.lineSoft))),
       padding: const EdgeInsets.fromLTRB(16, 9, 12, 9),
       child: Row(children: [
         Container(
@@ -154,8 +178,7 @@ class _BottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        color: HrBrand.card,
-        decoration: const BoxDecoration(border: Border(top: BorderSide(color: HrBrand.lineSoft))),
+        decoration: const BoxDecoration(color: HrBrand.card, border: Border(top: BorderSide(color: HrBrand.lineSoft))),
         clipBehavior: Clip.none,
         child: SafeArea(
           top: false,
