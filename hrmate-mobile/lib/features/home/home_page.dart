@@ -30,7 +30,7 @@ class _HomePageState extends State<HomePage> {
   Cached<TodayAttendance>? _today;
   Cached<List<Announcement>>? _news;
   Cached<LeaveBalance>? _leave;
-  Cached<Holiday>? _holiday;
+  Cached<Holiday?>? _holiday;
   Cached<TeamToday>? _team;
   int? _monthPct;
   Object? _error; // only when today AND cache both fail

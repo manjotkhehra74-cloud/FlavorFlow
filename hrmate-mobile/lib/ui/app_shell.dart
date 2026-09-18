@@ -90,8 +90,8 @@ class _Header extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 10),
-        Expanded(
-          child: const Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+        const Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
             Text.rich(
               TextSpan(children: [
                 TextSpan(text: 'HR', style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w900, color: HrBrand.heading, height: 1)),

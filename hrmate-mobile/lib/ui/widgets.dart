@@ -55,7 +55,7 @@ class EmptyView extends StatelessWidget {
                   ],
                 ]),
               ),
-              const Positioned.fill(child: const CustomPaint(painter: const _DashedRect(radius: HrBrand.radiusCard))),
+              const Positioned.fill(child: CustomPaint(painter: _DashedRect(radius: HrBrand.radiusCard))),
             ]),
           ),
         ),
