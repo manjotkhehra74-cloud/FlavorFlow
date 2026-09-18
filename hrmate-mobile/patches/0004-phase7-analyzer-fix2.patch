@@ -1,0 +1,62 @@
+From 96059971f2cfa4db04401428ac57cd3efad83889 Mon Sep 17 00:00:00 2001
+From: Arena Agent <agent@arena.ai>
+Date: Fri, 18 Sep 2026 14:27:01 +0000
+Subject: [PATCH] =?UTF-8?q?fix(mobile):=20remaining=20Phase=207=20analyze?=
+ =?UTF-8?q?=20issues=20=E2=80=94=20=5Fholiday=20field=20as=20Cached<Holida?=
+ =?UTF-8?q?y=3F>,=20const=20Expanded=20in=20header,=20drop=20now-unnecessa?=
+ =?UTF-8?q?ry=20inner=20consts=20in=20widgets?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Source: FlavorFlow repo commit 9bd22e0 (hrmate-mobile/).
+---
+ mobile/lib/features/home/home_page.dart | 2 +-
+ mobile/lib/ui/app_shell.dart            | 4 ++--
+ mobile/lib/ui/widgets.dart              | 2 +-
+ 3 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/mobile/lib/features/home/home_page.dart b/mobile/lib/features/home/home_page.dart
+index 404e636..2f5ff40 100644
+--- a/mobile/lib/features/home/home_page.dart
++++ b/mobile/lib/features/home/home_page.dart
+@@ -30,7 +30,7 @@ class _HomePageState extends State<HomePage> {
+   Cached<TodayAttendance>? _today;
+   Cached<List<Announcement>>? _news;
+   Cached<LeaveBalance>? _leave;
+-  Cached<Holiday>? _holiday;
++  Cached<Holiday?>? _holiday;
+   Cached<TeamToday>? _team;
+   int? _monthPct;
+   Object? _error; // only when today AND cache both fail
+diff --git a/mobile/lib/ui/app_shell.dart b/mobile/lib/ui/app_shell.dart
+index a9c8198..167405b 100644
+--- a/mobile/lib/ui/app_shell.dart
++++ b/mobile/lib/ui/app_shell.dart
+@@ -90,8 +90,8 @@ class _Header extends StatelessWidget {
+           ),
+         ),
+         const SizedBox(width: 10),
+-        Expanded(
+-          child: const Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
++        const Expanded(
++          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+             Text.rich(
+               TextSpan(children: [
+                 TextSpan(text: 'HR', style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w900, color: HrBrand.heading, height: 1)),
+diff --git a/mobile/lib/ui/widgets.dart b/mobile/lib/ui/widgets.dart
+index b5ae331..5331d94 100644
+--- a/mobile/lib/ui/widgets.dart
++++ b/mobile/lib/ui/widgets.dart
+@@ -55,7 +55,7 @@ class EmptyView extends StatelessWidget {
+                   ],
+                 ]),
+               ),
+-              const Positioned.fill(child: const CustomPaint(painter: const _DashedRect(radius: HrBrand.radiusCard))),
++              const Positioned.fill(child: CustomPaint(painter: _DashedRect(radius: HrBrand.radiusCard))),
+             ]),
+           ),
+         ),
+-- 
+2.39.5
+
