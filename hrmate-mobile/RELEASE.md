@@ -139,7 +139,10 @@ with a **new private key**; the shell is retired and users uninstall it once (a 
    ```bash
    sudo bash /opt/hrmate/scripts/publish-apk.sh ~/app-prod-release.apk 3.0.0 30
    ```
-   (upload the APK first with the SSH-in-browser "UPLOAD FILE" button). Download page copy:
+   (upload the APK first with the SSH-in-browser "UPLOAD FILE" button). The script (v3) checks
+   the version **inside** the APK against the argument, refuses bytes that were published before,
+   picks the right `*.apk` if several are lying in the home directory, and removes the uploaded
+   file afterwards — so re-uploading an old download can no longer be published as a new version. Download page copy:
    "HRMate 3.0.0 — native app; fingerprint punch, leaves, team, holidays", version/build/date
    from `apk-info`, package `in.flavorflow.hrmate`, plus one line: *"Using HRMate 1.x? Uninstall
    it first, then install 3.0.0 (one time). Your data stays on the server."* QR must encode

@@ -163,6 +163,18 @@ curl -s https://hr.flavorflow.co.in/api/download/apk-info
 curl -s -o /dev/null -w '%{http_code} %{size_download}\n' https://hr.flavorflow.co.in/api/download/apk   # → 200 <same sizeBytes>
 ```
 
+**publish-apk.sh v3 (09-18)** — added after the 3.0.0 bytes were published as "3.1.0" by mistake
+(the old download was uploaded again; sha256 stayed `972f3445…`). The script now refuses to
+publish unless the `versionName` inside the APK equals the version argument; if the named file
+is wrong but another `*.apk` in the same directory has the right version (browsers save
+re-downloads as `app-prod-release (1).apk`) it uses that one and says so; the same bytes can
+never be published twice (`/app/data/releases/history.log`); it reports whether Firebase
+Messaging **and** the google-services resources are inside the APK (`lib-only` = built without
+`google-services.json` → push will not work); and after publishing it deletes the uploaded file
+plus any previously-published leftovers from the home directory. Inspection runs with `node`
+inside the container, so nothing is installed on the host. Works when piped
+(`curl -fsSL <raw url> | sudo bash -s -- ~/app-prod-release.apk 3.1.0 31`).
+
 ## Phase 6 — push notifications (FCM)
 
 **What changes on the server (all additive, no business rule touched):**
