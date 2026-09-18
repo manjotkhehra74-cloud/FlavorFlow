@@ -150,10 +150,11 @@ class _MorePageState extends State<MorePage> {
     final push = context.watch<PushController>();
     final user = auth.user;
     return Scaffold(
-      appBar: AppBar(title: Text(tr('More'))),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         children: [
+          PageHeader(icon: Icons.grid_view_rounded, title: tr('More'), subtitle: tr('Your account and settings')),
+          const SizedBox(height: 4),
           HrCard(
             child: Row(children: [
               Avatar(name: user?.name ?? '', url: user?.avatarUrl, size: 52),
@@ -235,7 +236,7 @@ class _MorePageState extends State<MorePage> {
               ListTile(
                 leading: const Icon(Icons.info_outline_rounded, color: HrBrand.blue),
                 title: Text(tr('About')),
-                subtitle: Text(tr('Native app · Phase 6 Push')),
+                subtitle: Text(tr('Native app · Phase 7 Polish')),
                 trailing: Text(_version.isEmpty ? '' : '${tr('Version')} $_version', style: Theme.of(context).textTheme.bodySmall),
               ),
             ]),
@@ -263,9 +264,9 @@ class _Tile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(children: [
           Container(
-            width: 38,
-            height: 38,
-            decoration: const BoxDecoration(color: HrBrand.blueContainer, shape: BoxShape.circle),
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(color: HrBrand.blueContainer, borderRadius: BorderRadius.circular(12)),
             child: Icon(icon, color: HrBrand.blue, size: 20),
           ),
           const SizedBox(width: 10),

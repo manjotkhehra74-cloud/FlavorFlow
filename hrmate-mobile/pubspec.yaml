@@ -3,7 +3,7 @@ description: HRMate — native Android app for the HRMate Workforce Portal (atte
 publish_to: "none"
 
 # Native app series = 2.x (the WebView shell was 1.x). Bump +1 per phase.
-version: 3.1.0+31
+version: 3.2.0+32
 
 environment:
   sdk: ">=3.5.0 <4.0.0"
@@ -39,3 +39,19 @@ flutter:
   uses-material-design: true
   assets:
     - assets/icon/
+  fonts:
+    # Inter v4 (OFL, assets/fonts/OFL.txt) — the webapp's typeface (Phase 7).
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Inter-ExtraBold.ttf
+          weight: 800
+        - asset: assets/fonts/Inter-Black.ttf
+          weight: 900

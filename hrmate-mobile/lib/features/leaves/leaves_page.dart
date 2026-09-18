@@ -141,7 +141,6 @@ class _LeavesPageState extends State<LeavesPage> {
       body = _content(context, isManager);
     }
     return Scaffold(
-      appBar: AppBar(title: Text(tr('Leaves'))),
       body: body,
       floatingActionButton: _loading
           ? null
@@ -166,8 +165,9 @@ class _LeavesPageState extends State<LeavesPage> {
       onRefresh: _load,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
         children: [
+          PageHeader(icon: Icons.event_note_rounded, title: tr('Leaves'), subtitle: tr('Balance, requests and approvals')),
           if (offlineSince != null) ...[
             Align(alignment: Alignment.centerLeft, child: OfflineChip(since: offlineSince)),
             const SizedBox(height: 10),
@@ -307,7 +307,7 @@ class _BalanceCard extends StatelessWidget {
           const SizedBox(height: 8),
           ClipRRect(
             borderRadius: BorderRadius.circular(99),
-            child: LinearProgressIndicator(value: ratio, minHeight: 6, backgroundColor: HrBrand.blueContainer, color: HrBrand.blue),
+            child: LinearProgressIndicator(value: ratio, minHeight: 6, backgroundColor: HrBrand.greenContainer, color: HrBrand.green),
           ),
         ]),
       ),
@@ -335,7 +335,7 @@ class _LeaveCard extends StatelessWidget {
           Container(
             width: 40,
             height: 40,
-            decoration: const BoxDecoration(color: HrBrand.blueContainer, shape: BoxShape.circle),
+            decoration: BoxDecoration(color: HrBrand.blueContainer, borderRadius: BorderRadius.circular(12)),
             alignment: Alignment.center,
             child: Text(r.code, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: HrBrand.blueDeep)),
           ),

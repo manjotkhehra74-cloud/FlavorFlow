@@ -85,7 +85,7 @@ class _TeamPageState extends State<TeamPage> {
     } else {
       body = _content(context, today);
     }
-    return Scaffold(appBar: AppBar(title: Text(tr('Team'))), body: body);
+    return Scaffold(body: body);
   }
 
   Widget _content(BuildContext context, Cached<TeamToday> cached) {
@@ -96,8 +96,9 @@ class _TeamPageState extends State<TeamPage> {
       onRefresh: _load,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         children: [
+          PageHeader(icon: Icons.groups_rounded, title: tr('Team'), subtitle: tr("Today's presence")),
           if (cached.staleSince != null) ...[
             Align(alignment: Alignment.centerLeft, child: OfflineChip(since: cached.staleSince!)),
             const SizedBox(height: 10),

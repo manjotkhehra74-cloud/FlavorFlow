@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -15,9 +16,12 @@ import '../../ui/widgets.dart';
 import '../home/home_models.dart';
 import 'punch_models.dart';
 
-/// Punch — Phase 2. Flow: load today (status + geofence) → take a GPS fix →
-/// show distance / inside-outside → fingerprint confirm → POST punch →
-/// result sheet → refresh today's punches. Punches are never queued offline.
+/// Punch — Phase 2, Phase 7 look. Flow: load today (status + geofence) →
+/// take a GPS fix → show distance / inside-outside → fingerprint confirm →
+/// POST punch → result sheet → refresh today's punches. Punches are never
+/// queued offline. The screen is now the webapp's navy punch card: ambient
+/// glows, facility pill, live clock, shift progress ring, emerald action
+/// button and translucent alert rows (the location card's states).
 class PunchPage extends StatefulWidget {
   const PunchPage({super.key});
   @override
@@ -35,14 +39,16 @@ class _PunchPageState extends State<PunchPage> with WidgetsBindingObserver {
   GeoFailure? _geoFail;
   bool _locating = false;
   bool _punching = false;
+  DateTime _now = DateTime.now();
   Timer? _clock;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _clock = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted) setState(() {});
+    // 1 s tick: the webapp's live clock + shift-elapsed timer.
+    _clock = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
     });
     _load();
   }
@@ -202,7 +208,7 @@ class _PunchPageState extends State<PunchPage> with WidgetsBindingObserver {
     } else {
       body = _content(context, today);
     }
-    return Scaffold(appBar: AppBar(title: Text(tr('Punch'))), body: body);
+    return Scaffold(body: body);
   }
 
   Widget _content(BuildContext context, TodayAttendance today) {
@@ -211,31 +217,22 @@ class _PunchPageState extends State<PunchPage> with WidgetsBindingObserver {
       onRefresh: _load,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
         children: [
-          // ---- clock + status ----
-          HrCard(
-            child: Column(children: [
-              Text(Fmt.time(DateTime.now()), style: t.headlineSmall?.copyWith(fontSize: 40, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 2),
-              Text(Fmt.weekday(DateTime.now()), style: t.bodySmall),
-              const SizedBox(height: 12),
-              _statusPill(today),
-              if (today.shiftStart != null) ...[
-                const SizedBox(height: 8),
-                Text('${today.shiftName ?? tr('Shift')} · ${today.shiftStart} – ${today.shiftEnd ?? ''}', style: t.bodySmall),
-              ],
-            ]),
+          _NavyPunchCard(
+            today: today,
+            fix: _fix,
+            fence: _fence,
+            fail: _geoFail,
+            locating: _locating,
+            punching: _punching,
+            now: _now,
+            onPunch: _punch,
+            onRetryLocate: _locate,
           ),
-          const SizedBox(height: 12),
-          // ---- location ----
-          _LocationCard(fix: _fix, fail: _geoFail, fence: _fence, locating: _locating, onRetry: _locate),
-          const SizedBox(height: 16),
-          // ---- big punch button ----
-          _PunchButton(today: today, fix: _fix, busy: _punching || _locating, onTap: _punch),
-          const SizedBox(height: 20),
+          const SizedBox(height: 18),
           // ---- today's punches ----
-          Text(tr("Today's punches"), style: t.titleMedium),
+          Text(tr("Today's punches"), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: HrBrand.heading)),
           const SizedBox(height: 10),
           if (_punches.isEmpty)
             HrCard(
@@ -259,14 +256,6 @@ class _PunchPageState extends State<PunchPage> with WidgetsBindingObserver {
       ),
     );
   }
-
-  Widget _statusPill(TodayAttendance today) {
-    if (today.holiday) return StatusPill.info(today.holidayName ?? tr('Holiday'));
-    if (today.onLeave) return StatusPill.warning(tr('On leave'));
-    if (today.punchedIn) return StatusPill.success('${tr('Punched in')} · ${Fmt.time(today.firstIn)}');
-    if (today.done) return StatusPill.info('${tr('Day complete')} · ${Fmt.duration(today.workedMinutes)}');
-    return StatusPill.danger(tr('Not punched in'));
-  }
 }
 
 class _PunchRow extends StatelessWidget {
@@ -286,7 +275,7 @@ class _PunchRow extends StatelessWidget {
       leading: Container(
         width: 36,
         height: 36,
-        decoration: BoxDecoration(color: r.isIn ? HrBrand.greenContainer : HrBrand.blueContainer, shape: BoxShape.circle),
+        decoration: BoxDecoration(color: r.isIn ? HrBrand.greenContainer : HrBrand.blueContainer, borderRadius: BorderRadius.circular(10)),
         child: Icon(r.isIn ? Icons.login_rounded : Icons.logout_rounded, size: 18, color: r.isIn ? const Color(0xFF07945D) : HrBrand.blueDeep),
       ),
       title: Text(r.isIn ? tr('Punch in') : tr('Punch out')),
@@ -296,153 +285,435 @@ class _PunchRow extends StatelessWidget {
   }
 }
 
-class _LocationCard extends StatelessWidget {
+/// The webapp's navy PunchWidget, recreated natively: gradient + ambient
+/// glows, facility pill + live clock, shift label, progress ring with the
+/// status in the centre, emerald action button, translucent alert rows.
+class _NavyPunchCard extends StatelessWidget {
+  final TodayAttendance today;
   final GeoFix? fix;
-  final GeoFailure? fail;
   final Geofence? fence;
+  final GeoFailure? fail;
   final bool locating;
-  final VoidCallback onRetry;
-  const _LocationCard({required this.fix, required this.fail, required this.fence, required this.locating, required this.onRetry});
+  final bool punching;
+  final DateTime now;
+  final VoidCallback onPunch;
+  final VoidCallback onRetryLocate;
+  const _NavyPunchCard({
+    required this.today,
+    required this.fix,
+    required this.fence,
+    required this.fail,
+    required this.locating,
+    required this.punching,
+    required this.now,
+    required this.onPunch,
+    required this.onRetryLocate,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
-    IconData icon = Icons.location_searching_rounded;
-    Color color = HrBrand.subInk;
-    String title = '';
-    String sub = '';
-    Widget? action;
-    if (locating && fix == null) {
-      icon = Icons.my_location_rounded;
-      color = HrBrand.blue;
-      title = tr('Getting your location…');
-      sub = tr('Stand in the open for a faster GPS fix');
-    } else if (fail != null) {
-      icon = Icons.location_off_rounded;
-      color = HrBrand.red;
-      switch (fail!) {
+    final t = today;
+    final elapsed = t.firstIn != null ? now.difference(t.firstIn!) : Duration.zero;
+    final target = _shiftDuration(t);
+    final progress = t.holiday || t.onLeave
+        ? 0.0
+        : t.done
+            ? 1.0
+            : t.punchedIn
+                ? (elapsed.inSeconds / target.inSeconds).clamp(0.0, 1.0).toDouble()
+                : 0.95;
+    final ringColor = t.punchedIn || t.done ? HrBrand.emerald : HrBrand.ringBlue;
+
+    final blocked = t.holiday && !t.punchedIn; // holidays: allow punch-out if somehow punched in
+    final canPunch = fix != null && !punching && !blocked && !fix!.mocked;
+
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(colors: HrBrand.punchGradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
+        borderRadius: BorderRadius.circular(HrBrand.radiusPunch),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+      ),
+      child: Stack(children: [
+        const NavyGlow(color: HrBrand.emerald, top: -64, right: -64, size: 260),
+        const NavyGlow(color: HrBrand.blue, bottom: -64, left: -64, size: 260),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            // ---- facility + live clock ----
+            Row(children: [
+              NavyPill(
+                icon: Icons.rss_feed_rounded,
+                iconSize: 11,
+                text: '${tr('Site')} · ${tr('Geofence verified')}',
+                color: HrBrand.emeraldOnNavy,
+                background: HrBrand.emerald.withValues(alpha: 0.15),
+                border: HrBrand.emerald.withValues(alpha: 0.3),
+              ),
+              const Spacer(),
+              NavyPill(
+                icon: Icons.schedule_rounded,
+                iconSize: 13,
+                iconColor: HrBrand.emeraldOnNavy,
+                text: Fmt.clock(now),
+                color: Colors.white,
+                background: Colors.white.withValues(alpha: 0.1),
+                border: Colors.white.withValues(alpha: 0.15),
+              ),
+            ]),
+            const SizedBox(height: 18),
+            // ---- shift label ----
+            Center(
+              child: Text(
+                _shiftLabel(t).toUpperCase(),
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 1.1, color: HrBrand.slateOnNavy),
+              ),
+            ),
+            const SizedBox(height: 14),
+            // ---- ring + centre status ----
+            Center(
+              child: SizedBox(
+                width: 176,
+                height: 176,
+                child: Stack(children: [
+                  Positioned.fill(child: CustomPaint(painter: _RingPainter(progress: progress, color: ringColor))),
+                  Center(child: _Centre(today: t, elapsed: elapsed, target: target)),
+                ]),
+              ),
+            ),
+            // ---- action ----
+            if (!t.done && !t.holiday && !t.onLeave) ...[
+              const SizedBox(height: 16),
+              _PunchButton(
+                label: t.punchedIn ? tr('Punch out') : tr('Punch in'),
+                canTap: canPunch,
+                busy: punching,
+                onTap: onPunch,
+              ),
+            ],
+            // ---- location / error alerts (translucent rows) ----
+            ..._alerts(),
+          ]),
+        ),
+      ]),
+    );
+  }
+
+  String _shiftLabel(TodayAttendance t) {
+    if (t.holiday) return tr('Holiday');
+    if (t.onLeave) return tr('On leave');
+    if (t.done) return tr('Shift completed');
+    final name = t.shiftName ?? tr('Shift');
+    final hours = Fmt.compact(_shiftDuration(t).inMinutes / 60);
+    if (t.punchedIn) return '$name ($hours ${tr('Hours')})';
+    if (t.shiftStart != null) return '$name (${t.shiftStart} · $hours ${tr('Hours')})';
+    return '$name ($hours ${tr('Hours')})';
+  }
+
+  static Duration _shiftDuration(TodayAttendance t) {
+    final s = _hm(t.shiftStart);
+    if (s == null) return const Duration(hours: 8);
+    final e = _hm(t.shiftEnd);
+    if (e == null) return const Duration(hours: 8);
+    var d = e - s;
+    if (d.inSeconds <= 0) d += const Duration(hours: 24);
+    return d;
+  }
+
+  static Duration? _hm(String? v) {
+    if (v == null) return null;
+    final parts = v.split(':');
+    if (parts.length < 2) return null;
+    final h = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    if (h == null || m == null) return null;
+    return Duration(hours: h, minutes: m);
+  }
+
+  List<Widget> _alerts() {
+    final f = fix;
+    if (locating && f == null) {
+      return [_alertRow(
+        bg: const Color(0xFF0EA5E9).withValues(alpha: 0.2),
+        border: const Color(0xFF38BDF8).withValues(alpha: 0.3),
+        fg: const Color(0xFFBAE6FD),
+        spinner: true,
+        title: tr('Getting your location…'),
+        sub: tr('Stand in the open for a faster GPS fix'),
+      )];
+    }
+    if (fail != null) {
+      final fr = fail!;
+      late String title;
+      late String sub;
+      late String action;
+      late VoidCallback onAction;
+      switch (fr) {
         case GeoFailure.serviceOff:
           title = tr('Location is switched off');
           sub = tr('Turn on Location (GPS) to punch');
-          action = OutlinedButton(onPressed: Geo.openSettings, child: Text(tr('Open settings')));
+          action = tr('Open settings');
+          onAction = Geo.openSettings;
         case GeoFailure.denied:
           title = tr('Location permission needed');
           sub = tr('HRMate checks that you are at the site when you punch');
-          action = OutlinedButton(onPressed: onRetry, child: Text(tr('Allow location')));
+          action = tr('Allow location');
+          onAction = onRetryLocate;
         case GeoFailure.deniedForever:
           title = tr('Location permission blocked');
           sub = tr('Allow Location for HRMate in app settings');
-          action = OutlinedButton(onPressed: Geo.openAppSettings, child: Text(tr('Open app settings')));
+          action = tr('Open app settings');
+          onAction = Geo.openAppSettings;
         case GeoFailure.timeout:
           title = tr('Could not get a GPS fix');
           sub = tr('Move near a window or outside and retry');
-          action = OutlinedButton(onPressed: onRetry, child: Text(tr('Retry')));
+          action = tr('Retry');
+          onAction = onRetryLocate;
       }
-    } else if (fix != null) {
-      final f = fix!;
-      if (fence == null) {
-        icon = Icons.location_on_rounded;
-        color = HrBrand.blue;
-        title = tr('Location captured');
-        sub = '± ${f.accuracyM.round()} m';
-      } else if (f.inside) {
-        icon = Icons.where_to_vote_rounded;
-        color = const Color(0xFF07945D);
-        title = tr('Inside the site geofence');
-        sub = '${f.distanceM!.round()} m ${tr('from site')} · ± ${f.accuracyM.round()} m';
-      } else {
-        icon = Icons.wrong_location_rounded;
-        color = HrBrand.red;
-        title = tr('Outside the site geofence');
-        sub = '${f.distanceM!.round()} m ${tr('from site')} · ${tr('allowed')} ${fence!.radiusM.round()} m';
-        action = OutlinedButton(onPressed: onRetry, child: Text(tr('Refresh location')));
-      }
-      if (f.mocked) {
-        icon = Icons.gpp_bad_rounded;
-        color = HrBrand.red;
-        title = tr('Mock location detected');
-        sub = tr('Turn off fake-GPS apps to punch');
-      }
-    } else {
-      icon = Icons.location_searching_rounded;
-      color = HrBrand.subInk;
-      title = tr('Location not checked yet');
-      sub = '';
-      action = OutlinedButton(onPressed: onRetry, child: Text(tr('Check location')));
+      return [_alertRow(
+        bg: const Color(0xFFF43F5E).withValues(alpha: 0.2),
+        border: const Color(0xFFF87171).withValues(alpha: 0.3),
+        fg: const Color(0xFFFECDD3),
+        icon: Icons.warning_rounded,
+        title: title,
+        sub: sub,
+        action: action,
+        onAction: onAction,
+      )];
     }
-    return HrCard(
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Row(children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.12), shape: BoxShape.circle),
-            child: locating && fix == null
-                ? const Padding(padding: EdgeInsets.all(10), child: CircularProgressIndicator(strokeWidth: 2.2))
-                : Icon(icon, color: color, size: 22),
+    if (f != null) {
+      if (f.mocked) {
+        return [_alertRow(
+          bg: const Color(0xFFF43F5E).withValues(alpha: 0.2),
+          border: const Color(0xFFF87171).withValues(alpha: 0.3),
+          fg: const Color(0xFFFECDD3),
+          icon: Icons.gpp_bad_rounded,
+          title: tr('Mock location detected'),
+          sub: tr('Turn off fake-GPS apps to punch'),
+        )];
+      }
+      if (fence != null && !f.inside) {
+        return [_alertRow(
+          bg: const Color(0xFFF43F5E).withValues(alpha: 0.2),
+          border: const Color(0xFFF87171).withValues(alpha: 0.3),
+          fg: const Color(0xFFFECDD3),
+          icon: Icons.wrong_location_rounded,
+          title: tr('Outside the site geofence'),
+          sub: '${f.distanceM!.round()} m ${tr('from site')} · ${tr('allowed')} ${fence!.radiusM.round()} m',
+          action: tr('Refresh location'),
+          onAction: onRetryLocate,
+        )];
+      }
+      return [_alertRow(
+        bg: HrBrand.emerald.withValues(alpha: 0.2),
+        border: HrBrand.emerald.withValues(alpha: 0.3),
+        fg: const Color(0xFFA7F3D0),
+        icon: fence == null ? Icons.location_on_rounded : Icons.where_to_vote_rounded,
+        title: fence == null ? tr('Location captured') : tr('Inside the site geofence'),
+        sub: fence == null ? '± ${f.accuracyM.round()} m' : '${f.distanceM!.round()} m ${tr('from site')} · ± ${f.accuracyM.round()} m',
+      )];
+    }
+    return [_alertRow(
+      bg: Colors.white.withValues(alpha: 0.08),
+      border: Colors.white.withValues(alpha: 0.15),
+      fg: const Color(0xFFCBD5E1),
+      icon: Icons.location_searching_rounded,
+      title: tr('Location not checked yet'),
+      action: tr('Check location'),
+      onAction: onRetryLocate,
+    )];
+  }
+
+  Widget _alertRow({
+    required Color bg,
+    required Color border,
+    required Color fg,
+    IconData? icon,
+    bool spinner = false,
+    required String title,
+    String? sub,
+    String? action,
+    VoidCallback? onAction,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(16), border: Border.all(color: border)),
+      child: Row(children: [
+        if (spinner)
+          const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF7DD3FC)))
+        else
+          Icon(icon, size: 16, color: fg),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: fg)),
+            if (sub != null && sub.isNotEmpty) Text(sub, style: TextStyle(fontSize: 11, color: fg.withValues(alpha: 0.8))),
+          ]),
+        ),
+        if (action != null)
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: onAction,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
+                child: Text(action, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white)),
+              ),
+            ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(title, style: t.titleMedium),
-              if (sub.isNotEmpty) Text(sub, style: t.bodySmall),
-            ]),
-          ),
-          if (fix != null && !locating) IconButton(onPressed: onRetry, icon: const Icon(Icons.refresh_rounded), tooltip: tr('Refresh location')),
-        ]),
-        if (action != null) ...[const SizedBox(height: 12), action],
       ]),
     );
   }
 }
 
-class _PunchButton extends StatelessWidget {
+/// Ring centre — the three webapp states (punched in / shift finished /
+/// punch in) plus holiday & leave.
+class _Centre extends StatelessWidget {
   final TodayAttendance today;
-  final GeoFix? fix;
-  final bool busy;
-  final VoidCallback onTap;
-  const _PunchButton({required this.today, required this.fix, required this.busy, required this.onTap});
+  final Duration elapsed;
+  final Duration target;
+  const _Centre({required this.today, required this.elapsed, required this.target});
 
   @override
   Widget build(BuildContext context) {
-    final isIn = today.punchedIn;
-    final blocked = today.holiday && !isIn; // holidays: allow punch-out if somehow punched in
-    final canPunch = fix != null && !busy && !blocked && !fix!.mocked;
-    final color = isIn ? HrBrand.red : HrBrand.blue;
-    return Column(children: [
-      GestureDetector(
-        onTap: canPunch ? onTap : null,
-        child: AnimatedContainer(
+    final t = today;
+    final Widget child;
+    if (t.holiday) {
+      child = Column(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.celebration_rounded, color: Color(0xFFFBBF24), size: 30),
+        const SizedBox(height: 6),
+        Text(tr('Holiday'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white)),
+        if ((t.holidayName ?? '').isNotEmpty) Text(t.holidayName!, style: const TextStyle(fontSize: 11.5, color: HrBrand.faint)),
+      ]);
+    } else if (t.onLeave) {
+      child = Column(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.event_available_rounded, color: HrBrand.emeraldOnNavy, size: 30),
+        const SizedBox(height: 6),
+        Text(tr('On leave'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white)),
+        const SizedBox(height: 2),
+        Text(tr('Enjoy your day off'), style: const TextStyle(fontSize: 11.5, color: HrBrand.faint)),
+      ]);
+    } else if (t.punchedIn) {
+      final hrs = elapsed.inHours.toString().padLeft(2, '0');
+      final mins = (elapsed.inMinutes % 60).toString().padLeft(2, '0');
+      final secs = (elapsed.inSeconds % 60).toString().padLeft(2, '0');
+      child = Column(mainAxisSize: MainAxisSize.min, children: [
+        Text('${hrs}h ${mins}m / ${target.inHours.toString().padLeft(2, '0')}h ${(target.inMinutes % 60).toString().padLeft(2, '0')}m',
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: HrBrand.emeraldOnNavy, fontFeatures: [FontFeature.tabularNumbers()])),
+        const SizedBox(height: 2),
+        Text('$hrs:$mins:$secs',
+            style: const TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+              fontFeatures: [FontFeature.tabularNumbers()],
+              shadows: [Shadow(color: Color(0x8010B981), blurRadius: 14)],
+            )),
+        const SizedBox(height: 2),
+        Text(tr('Punched in at %s').arg(Fmt.time(t.firstIn)), style: const TextStyle(fontSize: 10.5, color: HrBrand.faint)),
+      ]);
+    } else if (t.done) {
+      child = Column(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.check_circle_rounded, color: HrBrand.emeraldOnNavy, size: 32),
+        const SizedBox(height: 6),
+        Text(tr('Shift finished'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Colors.white)),
+        const SizedBox(height: 2),
+        Text(tr('Out at %s').arg(Fmt.time(t.lastOut)), style: const TextStyle(fontSize: 11, color: HrBrand.faint)),
+      ]);
+    } else {
+      final name = t.shiftName ?? tr('Shift');
+      final hours = Fmt.compact(target.inMinutes / 60);
+      child = Column(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.fingerprint_rounded, color: HrBrand.emeraldOnNavy, size: 30),
+        const SizedBox(height: 6),
+        Text(tr('Punch in'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white)),
+        const SizedBox(height: 2),
+        Text('$name (${hours}h)', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: HrBrand.emeraldOnNavy)),
+      ]);
+    }
+    return child;
+  }
+}
+
+/// Progress ring painter (track `#1E293B`, stroke 8, emerald/blue progress —
+/// the webapp's r68/stroke8 geometry).
+class _RingPainter extends CustomPainter {
+  final double progress;
+  final Color color;
+  _RingPainter({required this.progress, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final r = size.width / 2 - 8;
+    canvas.drawCircle(
+      center,
+      r,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 8
+        ..color = HrBrand.slate,
+    );
+    if (progress > 0) {
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: r),
+        -math.pi / 2,
+        2 * math.pi * progress.clamp(0.0, 1.0),
+        false,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 8
+          ..strokeCap = StrokeCap.round
+          ..color = color,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _RingPainter oldDelegate) => oldDelegate.progress != progress || oldDelegate.color != color;
+}
+
+/// Full-width emerald gradient punch button (webapp action, radius 16).
+class _PunchButton extends StatelessWidget {
+  final String label;
+  final bool canTap;
+  final bool busy;
+  final VoidCallback onTap;
+  const _PunchButton({required this.label, required this.canTap, required this.busy, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: canTap ? onTap : null,
+        child: AnimatedOpacity(
           duration: const Duration(milliseconds: 200),
-          width: 168,
-          height: 168,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: canPunch ? color : HrBrand.border,
-            boxShadow: canPunch ? [BoxShadow(color: color.withValues(alpha: 0.35), blurRadius: 28, offset: const Offset(0, 10))] : null,
-          ),
-          child: Center(
-            child: busy
-                ? const SizedBox(width: 36, height: 36, child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white))
-                : Column(mainAxisSize: MainAxisSize.min, children: [
-                    const Icon(Icons.fingerprint_rounded, size: 56, color: Colors.white),
-                    const SizedBox(height: 6),
-                    Text(isIn ? tr('Punch out') : tr('Punch in'),
-                        style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700)),
-                  ]),
+          opacity: canTap ? 1 : 0.4,
+          child: Container(
+            height: 54,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: HrBrand.punchButtonGradient, begin: Alignment.centerLeft, end: Alignment.centerRight),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: HrBrand.emeraldLight.withValues(alpha: 0.3), width: 2),
+              boxShadow: const [BoxShadow(color: Color(0x6610B981), blurRadius: 20, offset: Offset(0, 4))],
+            ),
+            child: Center(
+              child: busy
+                  ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.6, color: Colors.white))
+                  : Row(mainAxisSize: MainAxisSize.min, children: [
+                      const Icon(Icons.fingerprint_rounded, size: 20, color: Colors.white),
+                      const SizedBox(width: 8),
+                      Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white)),
+                    ]),
+            ),
           ),
         ),
       ),
-      const SizedBox(height: 12),
-      Text(
-        blocked
-            ? tr('Holiday — no punch needed')
-            : fix == null
-                ? tr('Waiting for location')
-                : (fix!.inside ? tr('Confirm with your fingerprint') : tr('You can try, but the server may reject punches outside the geofence')),
-        style: Theme.of(context).textTheme.bodySmall,
-        textAlign: TextAlign.center,
-      ),
-    ]);
+    );
   }
 }

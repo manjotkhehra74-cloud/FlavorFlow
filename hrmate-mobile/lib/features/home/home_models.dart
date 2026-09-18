@@ -71,25 +71,30 @@ class Announcement {
   }
 }
 
-/// `GET leaves/balance` — compact numbers for the Home tile.
+/// `GET leaves/balance` — compact numbers for the Home tile + KPI bar.
 class LeaveBalance {
   final double available;
+  final double total;
   final int pending;
-  const LeaveBalance({required this.available, required this.pending});
+  const LeaveBalance({required this.available, required this.total, required this.pending});
 
   factory LeaveBalance.fromJson(dynamic json) {
-    if (json is! Map) return const LeaveBalance(available: 0, pending: 0);
+    if (json is! Map) return const LeaveBalance(available: 0, total: 0, pending: 0);
     final m = json.cast<String, dynamic>();
     double avail = 0;
+    double total = 0;
     if (m['available'] is num) {
       avail = (m['available'] as num).toDouble();
+      total = m['total'] is num ? (m['total'] as num).toDouble() : 0;
     } else if (m['balances'] is List) {
       for (final b in (m['balances'] as List).whereType<Map>()) {
         final v = b['available'] ?? b['balance'];
         if (v is num) avail += v.toDouble();
+        if (b['total'] is num) total += (b['total'] as num).toDouble();
       }
     }
     final pending = (m['pending'] is num) ? (m['pending'] as num).round() : 0;
-    return LeaveBalance(available: avail, pending: pending);
+    // No per-type totals (older server) → bar shows full, numbers still right.
+    return LeaveBalance(available: avail, total: total > 0 ? total : avail, pending: pending);
   }
 }

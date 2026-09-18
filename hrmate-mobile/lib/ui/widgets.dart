@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../core/api.dart';
@@ -7,6 +9,8 @@ import '../core/theme.dart';
 
 /// Shared building blocks. Every screen uses THESE for loading / empty /
 /// error states (ARCHITECTURE.md §6) — never ad-hoc spinners.
+/// Phase 7: webapp card style (radius 16, soft blue-tinted shadow), badge
+/// tones, dashed empty state, page header, emerald gradient button.
 
 class LoadingView extends StatelessWidget {
   const LoadingView({super.key});
@@ -20,6 +24,7 @@ class LoadingView extends StatelessWidget {
       );
 }
 
+/// Webapp-style empty state: dashed rounded-16 box, icon, title, subtitle.
 class EmptyView extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -29,22 +34,60 @@ class EmptyView extends StatelessWidget {
   Widget build(BuildContext context) => Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: const BoxDecoration(color: HrBrand.blueContainer, shape: BoxShape.circle),
-              child: Icon(icon, size: 34, color: HrBrand.blue),
-            ),
-            const SizedBox(height: 16),
-            Text(title, style: Theme.of(context).textTheme.titleMedium, textAlign: TextAlign.center),
-            if (subtitle != null) ...[
-              const SizedBox(height: 6),
-              Text(subtitle!, style: Theme.of(context).textTheme.bodySmall, textAlign: TextAlign.center),
-            ],
-          ]),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 380),
+            child: Stack(children: [
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
+                decoration: BoxDecoration(color: HrBrand.card, borderRadius: BorderRadius.circular(HrBrand.radiusCard)),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(color: HrBrand.blueContainer, borderRadius: BorderRadius.circular(16)),
+                    child: Icon(icon, size: 26, color: HrBrand.blue),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(title, style: Theme.of(context).textTheme.titleSmall, textAlign: TextAlign.center),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 4),
+                    Text(subtitle!, style: Theme.of(context).textTheme.bodySmall, textAlign: TextAlign.center),
+                  ],
+                ]),
+              ),
+              Positioned.fill(child: CustomPaint(painter: const _DashedRect(radius: HrBrand.radiusCard))),
+            ]),
+          ),
         ),
       );
+}
+
+class _DashedRect extends CustomPainter {
+  final double radius;
+  const _DashedRect({required this.radius});
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rrect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0.75, 0.75, math.max(0, size.width - 1.5), math.max(0, size.height - 1.5)),
+      Radius.circular(radius),
+    );
+    final path = Path()..addRRect(rrect);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4
+      ..color = HrBrand.inputBorder;
+    for (final m in path.computeMetrics()) {
+      var dist = 0.0;
+      while (dist < m.length) {
+        final end = math.min(dist + 6, m.length);
+        canvas.drawPath(Path()..addPolyline(m.extractPoints(dist, end)), paint);
+        dist += 12;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedRect old) => old.radius != radius;
 }
 
 class ErrorRetryView extends StatelessWidget {
@@ -105,44 +148,195 @@ class HrCard extends StatelessWidget {
   }
 }
 
-/// Small status pill: present (green), absent (red), leave (amber), neutral.
+/// Small status pill — the webapp's badge tones
+/// (green #E1F8EF/#06613E · amber #FFF4E0/#D98200 · red #FDECEC/#C52B35 · blue #E7F1FF/#1556B8).
 class StatusPill extends StatelessWidget {
   final String label;
   final Color color;
   final Color background;
   const StatusPill({super.key, required this.label, required this.color, required this.background});
 
-  factory StatusPill.success(String label) => StatusPill(label: label, color: const Color(0xFF07945D), background: HrBrand.greenContainer);
-  factory StatusPill.danger(String label) => StatusPill(label: label, color: HrBrand.red, background: HrBrand.redContainer);
-  factory StatusPill.warning(String label) => StatusPill(label: label, color: const Color(0xFFB26A00), background: HrBrand.amberContainer);
+  factory StatusPill.success(String label) => StatusPill(label: label, color: HrBrand.greenText, background: HrBrand.greenContainer);
+  factory StatusPill.danger(String label) => StatusPill(label: label, color: HrBrand.redText, background: HrBrand.redContainer);
+  factory StatusPill.warning(String label) => StatusPill(label: label, color: HrBrand.amberText, background: HrBrand.amberContainer);
   factory StatusPill.info(String label) => StatusPill(label: label, color: HrBrand.blueDeep, background: HrBrand.blueContainer);
 
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(999)),
-        child: Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color)),
+        child: Text(label, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: color)),
       );
 }
 
 /// Round avatar with initials (or network image when the server has one).
+/// `online` adds the webapp's green presence dot.
 class Avatar extends StatelessWidget {
   final String name;
   final String? url;
   final double size;
-  const Avatar({super.key, required this.name, this.url, this.size = 44});
+  final bool online;
+  const Avatar({super.key, required this.name, this.url, this.size = 44, this.online = false});
   @override
   Widget build(BuildContext context) {
     final initials = name.trim().isEmpty
         ? '?'
         : name.trim().split(RegExp(r'\s+')).take(2).map((p) => p[0].toUpperCase()).join();
-    return CircleAvatar(
+    final circle = CircleAvatar(
       radius: size / 2,
       backgroundColor: HrBrand.blueContainer,
       foregroundImage: (url != null && url!.isNotEmpty) ? NetworkImage(url!) : null,
       child: Text(initials, style: TextStyle(fontSize: size * 0.36, fontWeight: FontWeight.w700, color: HrBrand.blueDeep)),
     );
+    if (!online) return circle;
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.center,
+      children: [
+        circle,
+        Positioned(
+          bottom: 0,
+          right: 0,
+          child: Container(
+            width: size * 0.3,
+            height: size * 0.3,
+            decoration: BoxDecoration(color: HrBrand.emerald, shape: BoxShape.circle, border: Border.all(color: HrBrand.card, width: 2)),
+          ),
+        ),
+      ],
+    );
   }
+}
+
+/// Webapp page header: tinted icon square + bold title + muted subtitle.
+class PageHeader extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  const PageHeader({super.key, required this.icon, required this.title, this.subtitle});
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(color: HrBrand.blueContainer, borderRadius: BorderRadius.circular(12)),
+            child: Icon(icon, size: 20, color: HrBrand.blueDeep),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: HrBrand.heading)),
+              if (subtitle != null && subtitle!.isNotEmpty) ...[
+                const SizedBox(height: 1),
+                Text(subtitle!, style: const TextStyle(fontSize: 12.5, color: HrBrand.subInk)),
+              ],
+            ]),
+          ),
+        ]),
+      );
+}
+
+/// Full-width emerald gradient action (punch card, login biometric, home
+/// "Apply Leave") — the webapp's primary gradient button.
+class HrGradientButton extends StatelessWidget {
+  final String label;
+  final IconData? icon;
+  final VoidCallback? onPressed;
+  final double height;
+  const HrGradientButton({super.key, required this.label, this.icon, this.onPressed, this.height = 50});
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onPressed != null;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: enabled ? onPressed : null,
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 200),
+          opacity: enabled ? 1 : 0.45,
+          child: Container(
+            height: height,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: HrBrand.punchButtonGradient, begin: Alignment.centerLeft, end: Alignment.centerRight),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: HrBrand.emeraldLight.withValues(alpha: 0.3)),
+              boxShadow: HrBrand.shadowPunch,
+            ),
+            child: Center(
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (icon != null) Icon(icon, size: 19, color: Colors.white),
+                if (icon != null) const SizedBox(width: 8),
+                Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white)),
+              ]),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Blurred-look ambient glow on navy surfaces (radial fade, no filters).
+class NavyGlow extends StatelessWidget {
+  final Color color;
+  final double size;
+  final double? top;
+  final double? right;
+  final double? bottom;
+  final double? left;
+  const NavyGlow({super.key, required this.color, required this.size, this.top, this.right, this.bottom, this.left});
+  @override
+  Widget build(BuildContext context) => Positioned(
+        top: top,
+        right: right,
+        bottom: bottom,
+        left: left,
+        child: IgnorePointer(
+          child: Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(colors: [color.withValues(alpha: 0.16), color.withValues(alpha: 0)]),
+            ),
+          ),
+        ),
+      );
+}
+
+/// Translucent pill on navy surfaces (facility "geofence verified", clock).
+class NavyPill extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final Color color;
+  final Color background;
+  final Color border;
+  final Color? iconColor;
+  final double iconSize;
+  const NavyPill({
+    super.key,
+    required this.icon,
+    required this.text,
+    required this.color,
+    required this.background,
+    required this.border,
+    this.iconColor,
+    this.iconSize = 12,
+  });
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(999), border: Border.all(color: border)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: iconSize, color: iconColor ?? color),
+          const SizedBox(width: 5),
+          Text(text, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+        ]),
+      );
 }
 
 void showErr(BuildContext context, Object e) {
@@ -169,10 +363,10 @@ class OfflineChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(color: HrBrand.amberContainer, borderRadius: BorderRadius.circular(999)),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.wifi_off_rounded, size: 14, color: Color(0xFFB26A00)),
+          const Icon(Icons.wifi_off_rounded, size: 14, color: HrBrand.amberText),
           const SizedBox(width: 6),
           Text(tr('Offline · last updated %s').arg(Fmt.time(since)),
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFFB26A00))),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: HrBrand.amberText)),
         ]),
       );
 }

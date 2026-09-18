@@ -7,9 +7,10 @@ import '../../core/theme.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 
-/// Login — mirrors the webapp: logo, "HRMate", company line, employee code
-/// or email + password, fingerprint unlock when a session is stored, and the
-/// language selector.
+/// Login — the webapp's login page (Phase 7): navy gradient + ambient
+/// glows, white rounded-32 card, logo + "HR" + "Mate", green uppercase
+/// company line, dark "#0F172A" submit, green biometric button, language
+/// pill top-right.
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
   @override
@@ -86,66 +87,69 @@ class _LoginPageState extends State<LoginPage> {
     final auth = context.watch<AuthController>();
     final l10n = context.watch<L10n>();
     return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 84,
-                      height: 84,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF081C33), HrBrand.navyDark, HrBrand.navyLight],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Stack(children: [
+          const NavyGlow(color: HrBrand.emerald, top: -80, right: -80, size: 320),
+          const NavyGlow(color: HrBrand.blue, bottom: -80, left: -80, size: 320),
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: Column(children: [
+                    // ---- language pill (webapp: top-right) ----
+                    Align(alignment: Alignment.topRight, child: _LangPill(l10n: l10n)),
+                    const SizedBox(height: 26),
+                    // ---- white rounded-32 card ----
+                    Container(
+                      padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
-                        color: HrBrand.navy,
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: [BoxShadow(color: HrBrand.blue.withValues(alpha: 0.3), blurRadius: 24, offset: const Offset(0, 8))],
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(HrBrand.radiusLogin),
+                        boxShadow: HrBrand.shadowPop,
                       ),
-                      clipBehavior: Clip.antiAlias,
-                      child: Image.asset(
-                        'assets/icon/app_icon.png',
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const Icon(Icons.badge_rounded, color: Colors.white, size: 44),
-                      ),
+                      child: Column(children: [
+                        Container(
+                          width: 64,
+                          height: 64,
+                          clipBehavior: Clip.antiAlias,
+                          decoration: BoxDecoration(borderRadius: BorderRadius.circular(18), boxShadow: HrBrand.shadowGlow),
+                          child: Image.asset(
+                            'assets/icon/app_icon.png',
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const Icon(Icons.badge_rounded, color: HrBrand.blue, size: 34),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Text.rich(
+                          TextSpan(children: const [
+                            TextSpan(text: 'HR', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: HrBrand.heading, height: 1)),
+                            TextSpan(text: 'Mate', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: HrBrand.blue, height: 1)),
+                          ]),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(HrBrand.company.toUpperCase(),
+                            style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, letterSpacing: 1.4, color: HrBrand.emeraldDeep)),
+                        const SizedBox(height: 3),
+                        Text(tr('Workforce Portal'), style: const TextStyle(fontSize: 12, color: HrBrand.subInk)),
+                        const SizedBox(height: 22),
+                        auth.locked ? _lockedBody(auth) : _formBody(auth),
+                      ]),
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  Text(tr('HRMate'), textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineSmall),
-                  const SizedBox(height: 4),
-                  Text('GD Foods Mfg. (I) Pvt. Ltd. · ${tr('Workforce Portal')}',
-                      textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall),
-                  const SizedBox(height: 28),
-                  HrCard(
-                    padding: const EdgeInsets.all(20),
-                    child: auth.locked ? _lockedBody(auth) : _formBody(auth),
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.language_rounded, size: 18, color: HrBrand.subInk),
-                      const SizedBox(width: 8),
-                      DropdownButton<String>(
-                        value: l10n.code,
-                        underline: const SizedBox.shrink(),
-                        style: const TextStyle(color: HrBrand.ink, fontSize: 14, fontWeight: FontWeight.w600),
-                        items: [
-                          for (final l in L10n.languages) DropdownMenuItem(value: l[0], child: Text(l[1])),
-                        ],
-                        onChanged: (v) {
-                          if (v != null) l10n.set(v);
-                        },
-                      ),
-                    ],
-                  ),
-                ],
+                  ]),
+                ),
               ),
             ),
           ),
-        ),
+        ]),
       ),
     );
   }
@@ -179,12 +183,22 @@ class _LoginPageState extends State<LoginPage> {
               ),
               validator: (v) => (v == null || v.isEmpty) ? tr('Enter your password') : null,
             ),
-            const SizedBox(height: 20),
-            FilledButton(
-              onPressed: auth.busy ? null : _submit,
-              child: auth.busy
-                  ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white))
-                  : Text(tr('Sign in')),
+            const SizedBox(height: 18),
+            // webapp: dark #0F172A "Sign In with Password"
+            SizedBox(
+              height: 48,
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: HrBrand.navyButton,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                ),
+                onPressed: auth.busy ? null : _submit,
+                child: auth.busy
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white))
+                    : Text(tr('Sign in with password')),
+              ),
             ),
           ],
         ),
@@ -193,13 +207,50 @@ class _LoginPageState extends State<LoginPage> {
   Widget _lockedBody(AuthController auth) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Icon(Icons.fingerprint_rounded, size: 64, color: HrBrand.blue),
+          const Icon(Icons.fingerprint_rounded, size: 56, color: HrBrand.emeraldDeep),
           const SizedBox(height: 12),
           Text(tr('Unlock HRMate'), textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 18),
-          FilledButton.icon(onPressed: _unlock, icon: const Icon(Icons.fingerprint_rounded), label: Text(tr('Unlock with fingerprint'))),
-          const SizedBox(height: 10),
+          HrGradientButton(onPressed: _unlock, icon: Icons.fingerprint_rounded, label: tr('Unlock with fingerprint')),
+          const SizedBox(height: 12),
+          Row(children: [
+            const Expanded(child: Divider()),
+            Padding(padding: const EdgeInsets.symmetric(horizontal: 10), child: Text(tr('or with password'), style: const TextStyle(fontSize: 11, color: HrBrand.faint))),
+            const Expanded(child: Divider()),
+          ]),
+          const SizedBox(height: 12),
           OutlinedButton(onPressed: auth.discardLocked, child: Text(tr('Sign in'))),
         ],
+      );
+}
+
+/// White/10 language pill on the navy page (webapp top-right).
+class _LangPill extends StatelessWidget {
+  final L10n l10n;
+  const _LangPill({required this.l10n});
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.only(left: 10, right: 6, top: 6, bottom: 6),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.language_rounded, size: 14, color: HrBrand.faint),
+          const SizedBox(width: 6),
+          DropdownButton<String>(
+            value: l10n.code,
+            underline: const SizedBox.shrink(),
+            style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600),
+            dropdownColor: HrBrand.navyMid,
+            items: [
+              for (final l in L10n.languages) DropdownMenuItem(value: l[0], child: Text(l[1])),
+            ],
+            onChanged: (v) {
+              if (v != null) l10n.set(v);
+            },
+          ),
+        ]),
       );
 }

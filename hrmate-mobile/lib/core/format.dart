@@ -4,12 +4,16 @@ import 'package:intl/intl.dart';
 /// One place for formats so every screen matches the webapp.
 class Fmt {
   static final _time = DateFormat('h:mm a');
+  static final _clock = DateFormat('h:mm:ss a');
   static final _date = DateFormat('d MMM yyyy');
   static final _dateShort = DateFormat('d MMM');
   static final _weekday = DateFormat('EEEE, d MMMM');
   static final _iso = DateFormat('yyyy-MM-dd');
 
   static String time(DateTime? d) => d == null ? '—' : _time.format(d.toLocal());
+
+  /// Live clock with seconds (punch card, webapp style).
+  static String clock(DateTime? d) => d == null ? '—' : _clock.format(d.toLocal());
   static String date(DateTime? d) => d == null ? '—' : _date.format(d.toLocal());
   static String dateShort(DateTime? d) => d == null ? '—' : _dateShort.format(d.toLocal());
   static String weekday(DateTime d) => _weekday.format(d.toLocal());

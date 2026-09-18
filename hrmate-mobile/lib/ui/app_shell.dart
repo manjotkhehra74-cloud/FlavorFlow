@@ -4,11 +4,14 @@ import 'package:provider/provider.dart';
 
 import '../core/i18n.dart';
 import '../core/theme.dart';
+import '../features/more/profile_page.dart';
 import '../state/auth.dart';
+import '../ui/widgets.dart';
 
-/// Authenticated shell — bottom navigation exactly like the webapp:
-/// Home · Leaves · Punch (centre, elevated) · Team · More.
-/// Team is hidden for roles without a team (server still enforces).
+/// Authenticated shell — the webapp's chrome (Phase 7):
+/// white top bar (logo + "HR" + "Mate" + company subline + user pill) and a
+/// bottom nav Home · Leaves · Punch (centre, raised emerald circle) · Team ·
+/// More. Team is hidden for roles without a team (server still enforces).
 class AppShell extends StatelessWidget {
   final Widget child;
   const AppShell({super.key, required this.child});
@@ -30,23 +33,24 @@ class AppShell extends StatelessWidget {
     var index = tabs.indexWhere((t) => location == t.path || location.startsWith('${t.path}/'));
     if (index < 0) index = 0;
 
+    // Tab switches collapse the pushed pages first (Profile, member day,
+    // sheets closed) so the shell never stacks on itself.
+    void go(String path) {
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      context.go(path);
+    }
+
     return Scaffold(
-      body: SafeArea(top: false, child: child),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: index,
-        onDestinationSelected: (i) => context.go(tabs[i].path),
-        destinations: [
-          for (final t in tabs)
-            if (t.path == '/punch')
-              NavigationDestination(
-                icon: const _PunchIcon(active: false),
-                selectedIcon: const _PunchIcon(active: true),
-                label: tr(t.label),
-              )
-            else
-              NavigationDestination(icon: Icon(t.icon), selectedIcon: Icon(t.activeIcon), label: tr(t.label)),
-        ],
+      body: SafeArea(
+        bottom: false,
+        child: Column(children: [
+          _Header(onProfile: () {
+            Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const ProfilePage()));
+          }),
+          Expanded(child: child),
+        ]),
       ),
+      bottomNavigationBar: _BottomNav(tabs: tabs, index: index, onGo: go),
     );
   }
 }
@@ -59,20 +63,205 @@ class _Tab {
   const _Tab(this.path, this.label, this.icon, this.activeIcon);
 }
 
-/// The blue elevated punch button in the middle of the bar.
-class _PunchIcon extends StatelessWidget {
-  final bool active;
-  const _PunchIcon({required this.active});
+/// White 64-ish top bar, exactly like the webapp header.
+class _Header extends StatelessWidget {
+  final VoidCallback onProfile;
+  const _Header({required this.onProfile});
+
+  @override
+  Widget build(BuildContext context) {
+    final user = context.watch<AuthController>().user;
+    return Container(
+      color: HrBrand.card,
+      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: HrBrand.lineSoft))),
+      padding: const EdgeInsets.fromLTRB(16, 9, 12, 9),
+      child: Row(children: [
+        Container(
+          width: 36,
+          height: 36,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(11)),
+          child: Image.asset(
+            'assets/icon/app_icon.png',
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => const Center(
+              child: Icon(Icons.badge_rounded, color: HrBrand.blue, size: 22),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+            Text.rich(
+              TextSpan(children: const [
+                TextSpan(text: 'HR', style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w900, color: HrBrand.heading, height: 1)),
+                TextSpan(text: 'Mate', style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w900, color: HrBrand.blue, height: 1)),
+              ]),
+            ),
+            const SizedBox(height: 1.5),
+            Text(HrBrand.company,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: HrBrand.subInk, letterSpacing: 0.2)),
+          ]),
+        ),
+        const SizedBox(width: 8),
+        _UserPill(user: user, onTap: onProfile),
+      ]),
+    );
+  }
+}
+
+/// Avatar + green dot + name, tap → profile (webapp user pill).
+class _UserPill extends StatelessWidget {
+  final HrUser? user;
+  final VoidCallback onTap;
+  const _UserPill({required this.user, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(999),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.only(left: 4, right: 12, top: 4, bottom: 4),
+            decoration: BoxDecoration(color: HrBrand.tile, borderRadius: BorderRadius.circular(999), border: Border.all(color: HrBrand.lineSoft)),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Avatar(name: user?.name ?? '', url: user?.avatarUrl, size: 30, online: true),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  user?.name ?? '',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: HrBrand.ink),
+                ),
+              ),
+            ]),
+          ),
+        ),
+      );
+}
+
+/// Bottom nav — white, top border, raised emerald Punch circle in the
+/// centre (webapp MobileNav), active icon in a blue/10 rounded box.
+class _BottomNav extends StatelessWidget {
+  final List<_Tab> tabs;
+  final int index;
+  final ValueChanged<String> onGo;
+  const _BottomNav({required this.tabs, required this.index, required this.onGo});
+
   @override
   Widget build(BuildContext context) => Container(
-        width: 46,
-        height: 46,
-        decoration: BoxDecoration(
-          color: active ? HrBrand.blueDeep : HrBrand.blue,
-          shape: BoxShape.circle,
-          boxShadow: [BoxShadow(color: HrBrand.blue.withValues(alpha: 0.35), blurRadius: 12, offset: const Offset(0, 4))],
+        color: HrBrand.card,
+        decoration: const BoxDecoration(border: Border(top: BorderSide(color: HrBrand.lineSoft))),
+        clipBehavior: Clip.none,
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 12, 10, 6),
+            child: Row(
+              children: [
+                for (var i = 0; i < tabs.length; i++)
+                  Expanded(
+                    child: tabs[i].path == '/punch'
+                        ? _NavPunch(active: index == i, onTap: () => onGo(tabs[i].path))
+                        : _NavItem(tab: tabs[i], active: index == i, onTap: () => onGo(tabs[i].path)),
+                  ),
+              ],
+            ),
+          ),
         ),
-        child: const Icon(Icons.fingerprint_rounded, color: Colors.white, size: 28),
+      );
+}
+
+class _NavItem extends StatelessWidget {
+  final _Tab tab;
+  final bool active;
+  final VoidCallback onTap;
+  const _NavItem({required this.tab, required this.active, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Container(
+              width: 34,
+              height: 28,
+              decoration: BoxDecoration(
+                color: active ? HrBrand.blueContainer : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(active ? tab.activeIcon : tab.icon, size: 22, color: active ? HrBrand.blue : HrBrand.subInk),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              tr(tab.label),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                color: active ? HrBrand.blue : HrBrand.subInk,
+              ),
+            ),
+          ]),
+        ),
+      );
+}
+
+/// The raised emerald Punch circle (56 px, white ring, emerald glow).
+class _NavPunch extends StatelessWidget {
+  final bool active;
+  final VoidCallback onTap;
+  const _NavPunch({required this.active, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(32),
+          onTap: onTap,
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Padding(
+              padding: const EdgeInsets.only(top: -18),
+              child: Container(
+                width: 60,
+                height: 60,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(color: Color(0x5910B981), blurRadius: 16, offset: Offset(0, 6)),
+                    BoxShadow(color: Color(0x14000000), blurRadius: 8, offset: Offset(0, 2)),
+                  ],
+                ),
+                child: Container(
+                  margin: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [HrBrand.emeraldDeep, HrBrand.emerald, HrBrand.emeraldLight],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                  ),
+                  child: const Icon(Icons.fingerprint_rounded, color: Colors.white, size: 26),
+                ),
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              tr('Punch'),
+              maxLines: 1,
+              style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: active ? HrBrand.emeraldDeep : HrBrand.subInk),
+            ),
+          ]),
+        ),
       );
 }
 
