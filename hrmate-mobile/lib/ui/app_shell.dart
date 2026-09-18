@@ -68,12 +68,12 @@ class AppShell extends StatelessWidget {
 class _DiagStrip extends StatelessWidget {
   const _DiagStrip();
   @override
-  Widget build(BuildContext context) => const Container(
+  Widget build(BuildContext context) => Container(
         height: 16,
-        color: Color(0xFFE53935),
+        color: const Color(0xFFE53935),
         alignment: Alignment.centerLeft,
-        padding: EdgeInsets.only(left: 12),
-        child: Text(
+        padding: const EdgeInsets.only(left: 12),
+        child: const Text(
           'DIAG 33 — body alive',
           style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
         ),

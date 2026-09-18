@@ -1,0 +1,38 @@
+From a7bf49d1c0b937fb2579ba30682e7250e986ef94 Mon Sep 17 00:00:00 2001
+From: Arena Agent <agent@arena.ai>
+Date: Fri, 18 Sep 2026 16:29:12 +0000
+Subject: [PATCH] =?UTF-8?q?fix(mobile):=20=5FDiagStrip=20const=20Container?=
+ =?UTF-8?q?=20error=20=E2=80=94=20Container=20has=20no=20const=20construct?=
+ =?UTF-8?q?or=20(const=5Fwith=5Fnon=5Fconst)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ mobile/lib/ui/app_shell.dart | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/mobile/lib/ui/app_shell.dart b/mobile/lib/ui/app_shell.dart
+index 28acc77..0ef4461 100644
+--- a/mobile/lib/ui/app_shell.dart
++++ b/mobile/lib/ui/app_shell.dart
+@@ -68,12 +68,12 @@ class AppShell extends StatelessWidget {
+ class _DiagStrip extends StatelessWidget {
+   const _DiagStrip();
+   @override
+-  Widget build(BuildContext context) => const Container(
++  Widget build(BuildContext context) => Container(
+         height: 16,
+-        color: Color(0xFFE53935),
++        color: const Color(0xFFE53935),
+         alignment: Alignment.centerLeft,
+-        padding: EdgeInsets.only(left: 12),
+-        child: Text(
++        padding: const EdgeInsets.only(left: 12),
++        child: const Text(
+           'DIAG 33 — body alive',
+           style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
+         ),
+-- 
+2.39.5
+
