@@ -1,0 +1,10 @@
+# Flutter/Dart — standard ignores (builds happen on Codemagic, never commit artifacts)
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata
+build/
+android/.gradle/
+android/local.properties
+android/app/google-services.json
+*.iml

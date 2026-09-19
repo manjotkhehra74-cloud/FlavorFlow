@@ -1,0 +1,48 @@
+name: hrmate
+description: HRMate — premium native Android app for the HRMate Workforce Portal (hr.flavorflow.co.in). Phase 8 = clean rebuild, series 4.x.
+publish_to: "none"
+
+# App series: 1.x WebView shell (retired) · 2.x-3.x native (retired 09-19, user-ordered reset) · 4.x Phase 8 clean rebuild.
+version: 4.0.0+1
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # Fixed stack (ARCHITECTURE.md §2) — no new packages without a phase note.
+  provider: ^6.1.5
+  go_router: ^14.8.1
+  http: ^1.3.0
+  shared_preferences: ^2.5.3
+  flutter_secure_storage: ^9.2.2
+  intl: ^0.20.2
+  package_info_plus: ^8.1.0
+  local_auth: ^2.3.0 # biometric session unlock (core/secure.dart) — from day one
+  # Phase 3 (punch) adds: geolocator, permission_handler.
+  # Phase 5 (push) adds: firebase_core, firebase_messaging, flutter_local_notifications.
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Inter-ExtraBold.ttf
+          weight: 800
+        - asset: assets/fonts/Inter-Black.ttf
+          weight: 900
+  assets:
+    - assets/icon/
