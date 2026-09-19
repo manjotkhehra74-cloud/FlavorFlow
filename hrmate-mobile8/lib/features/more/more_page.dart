@@ -64,9 +64,9 @@ class MorePage extends StatelessWidget {
                 [tr('Everything here works — nothing decorative.')],
           ),
           const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Text(HrBrand.company, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: HrBrand.faint)),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4),
+            child: Text(HrBrand.company, textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: HrBrand.faint)),
           ),
         ],
       ),

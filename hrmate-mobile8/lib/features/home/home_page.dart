@@ -430,7 +430,7 @@ class _KpiGrid extends StatelessWidget {
         label: tr('This month'),
         value: monthPct == null ? '—' : '$monthPct%',
         sub: tr('Attendance'),
-        bar: monthPct == null ? null : monthPct / 100,
+        bar: monthPct == null ? null : monthPct! / 100,
         color: HrBrand.blue,
         icon: Icons.insights_rounded,
         onTap: onTapMonth,
@@ -456,13 +456,13 @@ class _KpiGrid extends StatelessWidget {
     return Column(children: [
       Row(children: [
         for (var i = 0; i < (items.length > 2 ? 2 : items.length); i++)
-          Expanded(child: Padding(padding: const EdgeInsets.only(right: i == 0 ? 10 : 0), child: _KpiCard(item: items[i]))),
+          Expanded(child: Padding(padding: EdgeInsets.only(right: i == 0 ? 10 : 0), child: _KpiCard(item: items[i]))),
       ]),
       if (items.length > 2) ...[
         const SizedBox(height: 10),
         Row(children: [
           for (var i = 2; i < items.length; i++)
-            Expanded(child: Padding(padding: const EdgeInsets.only(right: i == 2 ? 10 : 0), child: _KpiCard(item: items[i]))),
+            Expanded(child: Padding(padding: EdgeInsets.only(right: i == 2 ? 10 : 0), child: _KpiCard(item: items[i]))),
         ]),
       ],
     ]);

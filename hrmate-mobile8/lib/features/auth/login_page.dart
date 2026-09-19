@@ -84,7 +84,7 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    tr('Workforce Portal') + ' · ' + HrBrand.company,
+                    '${tr('Workforce Portal')} · ${HrBrand.company}',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 12.5, color: HrBrand.slateOnNavy, fontWeight: FontWeight.w500),
@@ -97,7 +97,7 @@ class _LoginPageState extends State<LoginPage> {
                     child: Form(
                       key: _formKey,
                       child: Column(children: [
-                        TextField(
+                        TextFormField(
                           controller: _loginCtrl,
                           textInputAction: TextInputAction.next,
                           autocorrect: false,

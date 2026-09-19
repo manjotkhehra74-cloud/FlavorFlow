@@ -1,0 +1,258 @@
+From 9970fd48fc8bd21c68af5f9cfc30dbf2ef36c8d4 Mon Sep 17 00:00:00 2001
+From: Arena Agent <agent@arena.local>
+Date: Sat, 19 Sep 2026 07:56:21 +0000
+Subject: [PATCH] =?UTF-8?q?fix(mobile):=20Phase=208.0=20=E2=80=94=20pass?=
+ =?UTF-8?q?=20the=20analyze=20gate=20(7=20errors=20+=209=20lint=20infos)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Analyze-gate fixes from the first Codemagic run:
+- login: TextField has no validator param -> TextFormField; string
+  interpolation lint
+- home: monthPct! (public final field does not promote); two
+  'const EdgeInsets.only(right: i == 0 ? ...)' with a non-const loop
+  var (invalid constant)
+- widgets: Border.fromSide does not exist -> Border.all;
+  Color.transparent does not exist -> Colors.transparent;
+  Animation has no dispose() -> type the CurvedAnimation as CurvedAnimation
+- leaves/punch: missing provider import for context.watch
+- more/main/widgets: const + conditional-assignment lint cleanups
+
+Also aligns the remaining hr.flavorflow.co.in references (api default,
+pubspec description, ARCHITECTURE.md, theme doc) with the live domain
+gdfoods.duckdns.org (commit d686890) so a plain local flutter run hits
+the live API.
+---
+ mobile/ARCHITECTURE.md                      |  4 ++--
+ mobile/lib/core/api.dart                    |  4 ++--
+ mobile/lib/core/theme.dart                  |  2 +-
+ mobile/lib/features/auth/login_page.dart    |  4 ++--
+ mobile/lib/features/home/home_page.dart     |  6 +++---
+ mobile/lib/features/leaves/leaves_page.dart |  1 +
+ mobile/lib/features/more/more_page.dart     |  6 +++---
+ mobile/lib/features/punch/punch_page.dart   |  1 +
+ mobile/lib/main.dart                        |  4 +---
+ mobile/lib/ui/widgets.dart                  | 10 +++++-----
+ mobile/pubspec.yaml                         |  2 +-
+ 11 files changed, 22 insertions(+), 22 deletions(-)
+
+diff --git a/mobile/ARCHITECTURE.md b/mobile/ARCHITECTURE.md
+index 843b303..3e41e3a 100644
+--- a/mobile/ARCHITECTURE.md
++++ b/mobile/ARCHITECTURE.md
+@@ -7,7 +7,7 @@ the fixed structure below.**
+ ## 1. Mission
+ 
+ A premium, native (Flutter, **no WebView**) Android app for the HRMate
+-Workforce Portal at `hr.flavorflow.co.in`. The live webapp is the source of
++Workforce Portal at `gdfoods.duckdns.org` (moved off hr.flavorflow.co.in on 09-19). The live webapp is the source of
+ truth for WHAT the app looks like and does; this app must look recognisably
+ like the same product and behave like it — but with native polish on top.
+ 
+@@ -127,7 +127,7 @@ only build the user runs.
+   `prod` (manual, `hrmate_release` group).
+ - Both workflows: `flutter pub get` → `flutter analyze` → `flutter test`
+   → build.
+-- `--dart-define=HRMATE_API=https://hr.flavorflow.co.in/api/v1/mobile`
++- `--dart-define=HRMATE_API=https://gdfoods.duckdns.org/api/v1/mobile`
+   (prod flavor; the code default already points there).
+ - Version = `pubspec` (series 4.x). Publishing the APK to the website:
+   `publish-apk.sh` (v3) after the FINAL Phase 8 build.
+diff --git a/mobile/lib/core/api.dart b/mobile/lib/core/api.dart
+index ec5824e..f92a3c3 100644
+--- a/mobile/lib/core/api.dart
++++ b/mobile/lib/core/api.dart
+@@ -23,11 +23,11 @@ class ApiException implements Exception {
+ /// cookie (that is what broke the earlier native attempt).
+ class ApiClient {
+   /// Base URL. Release builds bake it in with
+-  /// `--dart-define=HRMATE_API=https://hr.flavorflow.co.in/api/v1/mobile`;
++  /// `--dart-define=HRMATE_API=https://gdfoods.duckdns.org/api/v1/mobile`;
+   /// the default points at production so a plain `flutter run` also works.
+   static const String base = String.fromEnvironment(
+     'HRMATE_API',
+-    defaultValue: 'https://hr.flavorflow.co.in/api/v1/mobile',
++    defaultValue: 'https://gdfoods.duckdns.org/api/v1/mobile',
+   );
+ 
+   static const requestTimeout = Duration(seconds: 20);
+diff --git a/mobile/lib/core/theme.dart b/mobile/lib/core/theme.dart
+index fe0d85b..3ea4c56 100644
+--- a/mobile/lib/core/theme.dart
++++ b/mobile/lib/core/theme.dart
+@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
+ 
+ /// HRMate design system — Phase 8 clean rebuild.
+ ///
+-/// Tokens are extracted from the live webapp (hr.flavorflow.co.in) so the
++/// Tokens are extracted from the live webapp (gdfoods.duckdns.org) so the
+ /// native app is recognisably the SAME product: same colours, same Inter
+ /// typography, same card style, same navy punch card, same emerald actions.
+ /// Premium polish (depth, motion, spacing) is added on top — the webapp is
+diff --git a/mobile/lib/features/auth/login_page.dart b/mobile/lib/features/auth/login_page.dart
+index f3ac4b3..647640c 100644
+--- a/mobile/lib/features/auth/login_page.dart
++++ b/mobile/lib/features/auth/login_page.dart
+@@ -84,7 +84,7 @@ class _LoginPageState extends State<LoginPage> {
+                   ),
+                   const SizedBox(height: 6),
+                   Text(
+-                    tr('Workforce Portal') + ' · ' + HrBrand.company,
++                    '${tr('Workforce Portal')} · ${HrBrand.company}',
+                     maxLines: 2,
+                     overflow: TextOverflow.ellipsis,
+                     style: const TextStyle(fontSize: 12.5, color: HrBrand.slateOnNavy, fontWeight: FontWeight.w500),
+@@ -97,7 +97,7 @@ class _LoginPageState extends State<LoginPage> {
+                     child: Form(
+                       key: _formKey,
+                       child: Column(children: [
+-                        TextField(
++                        TextFormField(
+                           controller: _loginCtrl,
+                           textInputAction: TextInputAction.next,
+                           autocorrect: false,
+diff --git a/mobile/lib/features/home/home_page.dart b/mobile/lib/features/home/home_page.dart
+index f359602..637a006 100644
+--- a/mobile/lib/features/home/home_page.dart
++++ b/mobile/lib/features/home/home_page.dart
+@@ -430,7 +430,7 @@ class _KpiGrid extends StatelessWidget {
+         label: tr('This month'),
+         value: monthPct == null ? '—' : '$monthPct%',
+         sub: tr('Attendance'),
+-        bar: monthPct == null ? null : monthPct / 100,
++        bar: monthPct == null ? null : monthPct! / 100,
+         color: HrBrand.blue,
+         icon: Icons.insights_rounded,
+         onTap: onTapMonth,
+@@ -456,13 +456,13 @@ class _KpiGrid extends StatelessWidget {
+     return Column(children: [
+       Row(children: [
+         for (var i = 0; i < (items.length > 2 ? 2 : items.length); i++)
+-          Expanded(child: Padding(padding: const EdgeInsets.only(right: i == 0 ? 10 : 0), child: _KpiCard(item: items[i]))),
++          Expanded(child: Padding(padding: EdgeInsets.only(right: i == 0 ? 10 : 0), child: _KpiCard(item: items[i]))),
+       ]),
+       if (items.length > 2) ...[
+         const SizedBox(height: 10),
+         Row(children: [
+           for (var i = 2; i < items.length; i++)
+-            Expanded(child: Padding(padding: const EdgeInsets.only(right: i == 2 ? 10 : 0), child: _KpiCard(item: items[i]))),
++            Expanded(child: Padding(padding: EdgeInsets.only(right: i == 2 ? 10 : 0), child: _KpiCard(item: items[i]))),
+         ]),
+       ],
+     ]);
+diff --git a/mobile/lib/features/leaves/leaves_page.dart b/mobile/lib/features/leaves/leaves_page.dart
+index 69b3438..0c20ad7 100644
+--- a/mobile/lib/features/leaves/leaves_page.dart
++++ b/mobile/lib/features/leaves/leaves_page.dart
+@@ -1,4 +1,5 @@
+ import 'package:flutter/material.dart';
++import 'package:provider/provider.dart';
+ 
+ import '../../core/i18n.dart';
+ import '../../ui/widgets.dart';
+diff --git a/mobile/lib/features/more/more_page.dart b/mobile/lib/features/more/more_page.dart
+index 32db120..92cc8d6 100644
+--- a/mobile/lib/features/more/more_page.dart
++++ b/mobile/lib/features/more/more_page.dart
+@@ -64,9 +64,9 @@ class MorePage extends StatelessWidget {
+                 [tr('Everything here works — nothing decorative.')],
+           ),
+           const SizedBox(height: 12),
+-          Padding(
+-            padding: const EdgeInsets.symmetric(horizontal: 4),
+-            child: Text(HrBrand.company, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: HrBrand.faint)),
++          const Padding(
++            padding: EdgeInsets.symmetric(horizontal: 4),
++            child: Text(HrBrand.company, textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: HrBrand.faint)),
+           ),
+         ],
+       ),
+diff --git a/mobile/lib/features/punch/punch_page.dart b/mobile/lib/features/punch/punch_page.dart
+index 987abbe..40e9055 100644
+--- a/mobile/lib/features/punch/punch_page.dart
++++ b/mobile/lib/features/punch/punch_page.dart
+@@ -1,4 +1,5 @@
+ import 'package:flutter/material.dart';
++import 'package:provider/provider.dart';
+ 
+ import '../../core/i18n.dart';
+ import '../../ui/widgets.dart';
+diff --git a/mobile/lib/main.dart b/mobile/lib/main.dart
+index 6f28632..4562b8f 100644
+--- a/mobile/lib/main.dart
++++ b/mobile/lib/main.dart
+@@ -53,9 +53,7 @@ class _HrMateAppState extends State<HrMateApp> {
+         home: const SplashScreen(),
+       );
+     }
+-    if (_router == null) {
+-      _router = buildRouter(auth);
+-    }
++    _router ??= buildRouter(auth);
+     return MaterialApp.router(
+       title: 'HRMate',
+       debugShowCheckedModeBanner: false,
+diff --git a/mobile/lib/ui/widgets.dart b/mobile/lib/ui/widgets.dart
+index 2ef7b4c..e1575cf 100644
+--- a/mobile/lib/ui/widgets.dart
++++ b/mobile/lib/ui/widgets.dart
+@@ -243,7 +243,7 @@ class PhaseScreen extends StatelessWidget {
+                 child: Column(children: [
+                   for (var i = 0; i < lines.length; i++)
+                     Padding(
+-                      padding: EdgeInsets.symmetric(vertical: 3),
++                      padding: const EdgeInsets.symmetric(vertical: 3),
+                       child: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                         const Icon(Icons.check_rounded, size: 14, color: HrBrand.green),
+                         const SizedBox(width: 7),
+@@ -291,7 +291,7 @@ class Avatar extends StatelessWidget {
+             child: Container(
+               width: size * 0.32,
+               height: size * 0.32,
+-              decoration: const BoxDecoration(color: HrBrand.green, shape: BoxShape.circle, border: Border.fromSide(BorderSide(width: 2, color: Colors.white))),
++              decoration: const BoxDecoration(color: HrBrand.green, shape: BoxShape.circle, border: Border.all(width: 2, color: Colors.white)),
+             ),
+           ),
+       ]),
+@@ -344,7 +344,7 @@ class NavyGlow extends StatelessWidget {
+           height: size,
+           decoration: BoxDecoration(
+             shape: BoxShape.circle,
+-            gradient: RadialGradient(colors: [color.withValues(alpha: 0.5), Color.transparent]),
++            gradient: RadialGradient(colors: [color.withValues(alpha: 0.5), Colors.transparent]),
+           ),
+         ),
+       );
+@@ -386,7 +386,7 @@ class LiveDot extends StatelessWidget {
+   const LiveDot({super.key});
+ 
+   @override
+-  Widget build(BuildContext context) => _Pulsing(color: HrBrand.emerald);
++  Widget build(BuildContext context) => const _Pulsing(color: HrBrand.emerald);
+ }
+ 
+ class _Pulsing extends StatefulWidget {
+@@ -399,7 +399,7 @@ class _Pulsing extends StatefulWidget {
+ class _PulsingState extends State<_Pulsing> with SingleTickerProviderStateMixin {
+   late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))
+     ..repeat(reverse: true);
+-  late final Animation<double> _a = CurvedAnimation(parent: _c, curve: Curves.easeOut);
++  late final CurvedAnimation _a = CurvedAnimation(parent: _c, curve: Curves.easeOut);
+ 
+   @override
+   void dispose() {
+diff --git a/mobile/pubspec.yaml b/mobile/pubspec.yaml
+index cb558ba..43a711c 100644
+--- a/mobile/pubspec.yaml
++++ b/mobile/pubspec.yaml
+@@ -1,5 +1,5 @@
+ name: hrmate
+-description: HRMate — premium native Android app for the HRMate Workforce Portal (hr.flavorflow.co.in). Phase 8 = clean rebuild, series 4.x.
++description: HRMate — premium native Android app for the HRMate Workforce Portal (gdfoods.duckdns.org). Phase 8 = clean rebuild, series 4.x.
+ publish_to: "none"
+ 
+ # App series: 1.x WebView shell (retired) · 2.x-3.x native (retired 09-19, user-ordered reset) · 4.x Phase 8 clean rebuild.
+-- 
+2.39.5
+

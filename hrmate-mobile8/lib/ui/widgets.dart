@@ -243,7 +243,7 @@ class PhaseScreen extends StatelessWidget {
                 child: Column(children: [
                   for (var i = 0; i < lines.length; i++)
                     Padding(
-                      padding: EdgeInsets.symmetric(vertical: 3),
+                      padding: const EdgeInsets.symmetric(vertical: 3),
                       child: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
                         const Icon(Icons.check_rounded, size: 14, color: HrBrand.green),
                         const SizedBox(width: 7),
@@ -291,7 +291,7 @@ class Avatar extends StatelessWidget {
             child: Container(
               width: size * 0.32,
               height: size * 0.32,
-              decoration: const BoxDecoration(color: HrBrand.green, shape: BoxShape.circle, border: Border.fromSide(BorderSide(width: 2, color: Colors.white))),
+              decoration: const BoxDecoration(color: HrBrand.green, shape: BoxShape.circle, border: Border.all(width: 2, color: Colors.white)),
             ),
           ),
       ]),
@@ -344,7 +344,7 @@ class NavyGlow extends StatelessWidget {
           height: size,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: RadialGradient(colors: [color.withValues(alpha: 0.5), Color.transparent]),
+            gradient: RadialGradient(colors: [color.withValues(alpha: 0.5), Colors.transparent]),
           ),
         ),
       );
@@ -386,7 +386,7 @@ class LiveDot extends StatelessWidget {
   const LiveDot({super.key});
 
   @override
-  Widget build(BuildContext context) => _Pulsing(color: HrBrand.emerald);
+  Widget build(BuildContext context) => const _Pulsing(color: HrBrand.emerald);
 }
 
 class _Pulsing extends StatefulWidget {
@@ -399,7 +399,7 @@ class _Pulsing extends StatefulWidget {
 class _PulsingState extends State<_Pulsing> with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))
     ..repeat(reverse: true);
-  late final Animation<double> _a = CurvedAnimation(parent: _c, curve: Curves.easeOut);
+  late final CurvedAnimation _a = CurvedAnimation(parent: _c, curve: Curves.easeOut);
 
   @override
   void dispose() {

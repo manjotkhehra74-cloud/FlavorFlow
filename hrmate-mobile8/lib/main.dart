@@ -53,9 +53,7 @@ class _HrMateAppState extends State<HrMateApp> {
         home: const SplashScreen(),
       );
     }
-    if (_router == null) {
-      _router = buildRouter(auth);
-    }
+    _router ??= buildRouter(auth);
     return MaterialApp.router(
       title: 'HRMate',
       debugShowCheckedModeBanner: false,
