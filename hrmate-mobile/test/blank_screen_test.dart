@@ -10,6 +10,7 @@ import 'package:hrmate/features/leaves/leaves_page.dart';
 import 'package:hrmate/features/punch/punch_page.dart';
 import 'package:hrmate/router.dart';
 import 'package:hrmate/state/auth.dart';
+import 'package:hrmate/ui/app_shell.dart';
 
 /// Phase 7 regression: after the webapp-style shell redesign (white header +
 /// custom bottom nav) the 3.2.0+32 device build rendered a BLANK body on
@@ -79,6 +80,46 @@ void main() {
     );
     await tester.pump(); // commit the initial /home route
     await tester.pump(const Duration(milliseconds: 60)); // settle _load microtasks
+
+    // ---- TEMPORARY DIAGNOSTIC REPORT (remove once the blank body is fixed)
+    // The header renders but the page content does not, with no exception.
+    // This dump tells us exactly what the router handed to the shell and
+    // which widgets exist, so the next fix is surgical.
+    final report = StringBuffer('=== BLANK-SCREEN REPORT ===');
+    final shellFinder = find.byType(AppShell);
+    report.writeln('AppShell: ${shellFinder.evaluate().length}');
+    if (shellFinder.evaluate().isNotEmpty) {
+      final child = tester.widget<AppShell>(shellFinder.first).child;
+      report.writeln('SHELL CHILD runtimeType: ${child.runtimeType}');
+    }
+    for (final probe in <(Type, String)>[
+      (HomePage, 'HomePage'),
+      (Scaffold, 'Scaffold'),
+      (ListView, 'ListView'),
+      (RefreshIndicator, 'RefreshIndicator'),
+      (Stack, 'Stack'),
+      (Text, 'Text'),
+    ]) {
+      report.writeln('${probe.$2}: ${find.byType(probe.$1).evaluate().length}');
+    }
+    report.writeln("text 'DIAG 33': ${find.textContaining('DIAG 33').evaluate().length}");
+    report.writeln('text company subline: ${find.text(HrBrand.company).evaluate().length}');
+    report.writeln("text 'Apply for leave': ${find.text('Apply for leave').evaluate().length}");
+    report.writeln("text greeting(wave): ${find.textContaining('👋').evaluate().length}");
+    report.writeln("text 'Sign in' (login leak): ${find.text('Sign in').evaluate().length}");
+    report.writeln("text 'Punch': ${find.text('Punch').evaluate().length}");
+    final homeFinder = find.byType(HomePage);
+    if (homeFinder.evaluate().isNotEmpty) {
+      report.writeln('HomePage rect: ${tester.getRect(homeFinder.first)}');
+      report.writeln('--- AppShell element tree (layout dump) ---');
+      report.writeln(tester.element(shellFinder.first).debugGetDiagString());
+    } else {
+      report.writeln('HomePage: NOT IN TREE (check SHELL CHILD type above)');
+    }
+    final shellRect = shellFinder.evaluate().isNotEmpty ? tester.getRect(shellFinder.first) : null;
+    report.writeln('AppShell rect: $shellRect');
+    debugPrint(report.toString());
+    // ---- END DIAGNOSTIC REPORT ----
 
     // --- header (webapp top bar) ---
     expect(find.text(HrBrand.company), findsOneWidget, reason: 'header company subline must render');
