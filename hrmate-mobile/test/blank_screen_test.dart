@@ -112,7 +112,12 @@ void main() {
     if (homeFinder.evaluate().isNotEmpty) {
       report.writeln('HomePage rect: ${tester.getRect(homeFinder.first)}');
       report.writeln('--- AppShell element tree (layout dump) ---');
-      report.writeln(tester.element(shellFinder.first).debugGetDiagString());
+      report.writeln(
+        tester.element(shellFinder.first)
+            .debugDescribeChildren()
+            .map((node) => node.toStringDeep())
+            .join('\n'),
+      );
     } else {
       report.writeln('HomePage: NOT IN TREE (check SHELL CHILD type above)');
     }

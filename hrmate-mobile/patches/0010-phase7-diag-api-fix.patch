@@ -1,0 +1,35 @@
+From 502ccd1965a6d0a2e6dbb760e917cb67cf83861c Mon Sep 17 00:00:00 2001
+From: Arena Agent <agent@arena.ai>
+Date: Sat, 19 Sep 2026 02:41:52 +0000
+Subject: [PATCH] =?UTF-8?q?diag(mobile):=20blank-screen=20test=20=E2=80=94?=
+ =?UTF-8?q?=20use=20debugDescribeChildren/toStringDeep=20(debugGetDiagStri?=
+ =?UTF-8?q?ng=20does=20not=20exist=20on=20Element)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ mobile/test/blank_screen_test.dart | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/mobile/test/blank_screen_test.dart b/mobile/test/blank_screen_test.dart
+index 3a0095f..894a09e 100644
+--- a/mobile/test/blank_screen_test.dart
++++ b/mobile/test/blank_screen_test.dart
+@@ -112,7 +112,12 @@ void main() {
+     if (homeFinder.evaluate().isNotEmpty) {
+       report.writeln('HomePage rect: ${tester.getRect(homeFinder.first)}');
+       report.writeln('--- AppShell element tree (layout dump) ---');
+-      report.writeln(tester.element(shellFinder.first).debugGetDiagString());
++      report.writeln(
++        tester.element(shellFinder.first)
++            .debugDescribeChildren()
++            .map((node) => node.toStringDeep())
++            .join('\n'),
++      );
+     } else {
+       report.writeln('HomePage: NOT IN TREE (check SHELL CHILD type above)');
+     }
+-- 
+2.39.5
+
