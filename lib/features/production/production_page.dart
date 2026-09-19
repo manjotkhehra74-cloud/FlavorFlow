@@ -10,6 +10,11 @@ import '../../core/item_code.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 
+/// The factory's shrink-tray sizes — a fixed list, the SAME for every
+/// product (white vinegar or soya sauce): 610 / 740 / 1.0 L / 1.3 L.
+/// Planning in trays offers only these sizes (user-specified 09-19).
+const _traySizes = ['610', '740', '1.0', '1.3'];
+
 /// Production — batch execution board (create → start → complete).
 /// Completion moves finished goods (CB + trays) into inventory and can
 /// auto-consume packing material per the product BOM.
@@ -255,6 +260,10 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
   String autoCode = '';
   DateTime planned = DateTime.now(); // default: today (factory logs same-day)
   bool busy = false;
+  // Planned-quantity unit (new batches only): 'cb' or 'tray'.
+  String unit = 'cb';
+  // Selected tray size from the fixed [_traySizes] list.
+  String traySize = '610';
 
   bool get editing => widget.batch != null;
   bool get completed => widget.batch != null && widget.batch!['status'] == 'COMPLETED';
@@ -288,6 +297,65 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
   }
 
   String get _plannedYmd => '${planned.year}-${planned.month.toString().padLeft(2, '0')}-${planned.day.toString().padLeft(2, '0')}';
+
+  Map<String, dynamic>? get _selProduct {
+    for (final p in products) {
+      if (p['id'] == productId) return p;
+    }
+    return null;
+  }
+
+  /// Live trays→CB math + validation, shown under the quantity field in tray
+  /// mode. Derived entirely from the product master's packing spec
+  /// (bottles per tray / per CB / kg per CB) — no hidden constants.
+  Widget _trayPlanHint() {
+    final p = _selProduct;
+    final n = int.tryParse(cb.text) ?? 0;
+    final bpt = (p?['bottles_per_tray'] as num? ?? 0).toDouble();
+    final bpc = (p?['bottles_per_cb'] as num? ?? 0).toDouble();
+    final wpc = (p?['weight_per_cb'] as num? ?? 0).toDouble();
+    final base = TextStyle(fontSize: 11.5);
+    if (bpt <= 0 || bpc <= 0) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Text(
+          tr('This product has no tray packing (bottles per tray = 0). Set it in Products, or plan in CB.'),
+          style: base.copyWith(color: Theme.of(context).colorScheme.error),
+        ),
+      );
+    }
+    final lines = <Text>[];
+    if (n <= 0) {
+      lines.add(Text('Enter the number of ${U.trayLc} — the ${U.cb.toLowerCase()} equivalent shows here.', style: base.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)));
+    } else {
+      final cbEq = (n * bpt / bpc).ceil();
+      var t = '$n ${U.trayLc} ($traySize) × $bpt ${U.piece} ÷ $bpc/${U.cb.toLowerCase()} = $cbEq ${U.cb}';
+      if (wpc > 0) t += ' (~${qty(cbEq * wpc)} kg)';
+      lines.add(Text(t, style: base.copyWith(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600)));
+      final ps = _productSize(p!['name'] as String);
+      if (ps != null && ps != traySize) {
+        lines.add(Text('Heads-up: this product looks like size $ps, but tray $traySize is selected.', style: base.copyWith(color: const Color(0xFFD98200))));
+      }
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: lines),
+    );
+  }
+
+  /// Size embedded in a product name — "White Vinegar 610ml" → '610',
+  /// "Dark Soya 1 Ltr" → '1.0', "Vinegar 1000ml" → '1.0'. null when absent.
+  static String? _productSize(String name) {
+    final m = RegExp(r'(\d+(?:\.\d+)?)\s*(ml|gm|ltr|litre|litres|l)\b', caseSensitive: false).firstMatch(name);
+    if (m == null) return null;
+    final v = double.tryParse(m.group(1)!);
+    if (v == null) return null;
+    if (m.group(2)!.toLowerCase().startsWith('l')) {
+      final liters = v >= 100 ? v / 1000 : v; // 1000ml → 1.0 L
+      return liters.toStringAsFixed(1);
+    }
+    return v == v.roundToDouble() ? v.round().toString() : v.toString();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -328,19 +396,60 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
                     onChanged: (v) => setState(() => productId = v),
                   ),
                 const SizedBox(height: 12),
-                Row(children: [
-                  Expanded(
-                    child: TextField(
-                      controller: cb,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(labelText: completed ? 'Produced ${U.carton.toLowerCase()} (${U.cb}) *' : 'Planned quantity (${U.cb}) *'),
+                if (!editing) ...[
+                  // Plan in CB or in Trays (fixed sizes 610 / 740 / 1.0 / 1.3).
+                  Row(children: [
+                    Expanded(
+                      flex: 2,
+                      child: DropdownButtonFormField<String>(
+                        initialValue: unit,
+                        isExpanded: true,
+                        decoration: InputDecoration(labelText: tr('Planned in *')),
+                        items: [
+                          DropdownMenuItem(value: 'cb', child: Text(U.cb)),
+                          if (CompanyProfile.usesTrays) DropdownMenuItem(value: 'tray', child: Text(U.trayLc)),
+                        ],
+                        onChanged: (v) => setState(() => unit = v ?? 'cb'),
+                      ),
                     ),
-                  ),
-                  if (completed && hasTray) ...[
-                    const SizedBox(width: 12),
-                    Expanded(child: TextField(controller: trays, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${tr('Produced')} ${U.trayLc}'))),
-                  ],
-                ]),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 3,
+                      child: TextField(
+                        controller: cb,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(labelText: unit == 'tray' ? tr('Planned quantity (Trays) *') : 'Planned quantity (${U.cb}) *'),
+                      ),
+                    ),
+                    if (unit == 'tray') ...[
+                      const SizedBox(width: 10),
+                      Expanded(
+                        flex: 2,
+                        child: DropdownButtonFormField<String>(
+                          initialValue: traySize,
+                          isExpanded: true,
+                          decoration: InputDecoration(labelText: tr('Tray size')),
+                          items: [for (final s in _traySizes) DropdownMenuItem(value: s, child: Text(s))],
+                          onChanged: (v) => setState(() => traySize = v ?? '610'),
+                        ),
+                      ),
+                    ],
+                  ]),
+                  if (unit == 'tray') _trayPlanHint(),
+                ] else
+                  Row(children: [
+                    Expanded(
+                      child: TextField(
+                        controller: cb,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(labelText: completed ? 'Produced ${U.carton.toLowerCase()} (${U.cb}) *' : 'Planned quantity (${U.cb}) *'),
+                      ),
+                    ),
+                    if (completed && hasTray) ...[
+                      const SizedBox(width: 12),
+                      Expanded(child: TextField(controller: trays, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${tr('Produced')} ${U.trayLc}'))),
+                    ],
+                  ]),
                 if (completed)
                   Padding(
                     padding: const EdgeInsets.only(top: 8, bottom: 4),
@@ -378,6 +487,19 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
               : () async {
                   setState(() => busy = true);
                   try {
+                    // Tray plan → the server's plannedCb via the product's
+                    // packing spec (trays × bottles/tray ÷ bottles/CB, ceil).
+                    int plannedCb = int.tryParse(cb.text) ?? 0;
+                    if (!completed && unit == 'tray') {
+                      final p = _selProduct;
+                      final bpt = (p?['bottles_per_tray'] as num? ?? 0).toDouble();
+                      final bpc = (p?['bottles_per_cb'] as num? ?? 0).toDouble();
+                      if (bpt <= 0 || bpc <= 0) {
+                        showErr(context, tr('Set tray packing on the product first (Products → edit → bottles per tray), or plan in CB.'));
+                        return;
+                      }
+                      plannedCb = (plannedCb * bpt / bpc).ceil();
+                    }
                     final body = completed
                         ? {
                             'code': code.text.trim(),
@@ -389,7 +511,7 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
                         : {
                             'code': code.text.trim(),
                             'productId': productId,
-                            'plannedCb': int.tryParse(cb.text) ?? 0,
+                            'plannedCb': plannedCb,
                             'plannedDate': _plannedYmd,
                             'remarks': remarks.text.trim(),
                           };
