@@ -23,11 +23,11 @@ class ApiException implements Exception {
 /// cookie (that is what broke the earlier native attempt).
 class ApiClient {
   /// Base URL. Release builds bake it in with
-  /// `--dart-define=HRMATE_API=https://hr.flavorflow.co.in/api/v1/mobile`;
+  /// `--dart-define=HRMATE_API=https://gdfoods.duckdns.org/api/v1/mobile`;
   /// the default points at production so a plain `flutter run` also works.
   static const String base = String.fromEnvironment(
     'HRMATE_API',
-    defaultValue: 'https://hr.flavorflow.co.in/api/v1/mobile',
+    defaultValue: 'https://gdfoods.duckdns.org/api/v1/mobile',
   );
 
   static const requestTimeout = Duration(seconds: 20);

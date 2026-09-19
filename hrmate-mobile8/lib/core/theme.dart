@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 /// HRMate design system — Phase 8 clean rebuild.
 ///
-/// Tokens are extracted from the live webapp (hr.flavorflow.co.in) so the
+/// Tokens are extracted from the live webapp (gdfoods.duckdns.org) so the
 /// native app is recognisably the SAME product: same colours, same Inter
 /// typography, same card style, same navy punch card, same emerald actions.
 /// Premium polish (depth, motion, spacing) is added on top — the webapp is

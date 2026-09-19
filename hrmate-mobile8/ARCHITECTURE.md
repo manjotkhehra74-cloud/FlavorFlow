@@ -7,7 +7,7 @@ the fixed structure below.**
 ## 1. Mission
 
 A premium, native (Flutter, **no WebView**) Android app for the HRMate
-Workforce Portal at `hr.flavorflow.co.in`. The live webapp is the source of
+Workforce Portal at `gdfoods.duckdns.org` (moved off hr.flavorflow.co.in on 09-19). The live webapp is the source of
 truth for WHAT the app looks like and does; this app must look recognisably
 like the same product and behave like it — but with native polish on top.
 
@@ -127,7 +127,7 @@ only build the user runs.
   `prod` (manual, `hrmate_release` group).
 - Both workflows: `flutter pub get` → `flutter analyze` → `flutter test`
   → build.
-- `--dart-define=HRMATE_API=https://hr.flavorflow.co.in/api/v1/mobile`
+- `--dart-define=HRMATE_API=https://gdfoods.duckdns.org/api/v1/mobile`
   (prod flavor; the code default already points there).
 - Version = `pubspec` (series 4.x). Publishing the APK to the website:
   `publish-apk.sh` (v3) after the FINAL Phase 8 build.
