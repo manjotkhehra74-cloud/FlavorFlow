@@ -276,7 +276,8 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
     if (b != null) {
       // Batches planned in trays (server: plan_unit/planned_trays) reopen in
       // the same unit, with the quantity shown in that unit.
-      if (!completed && String(b['plan_unit'] ?? 'cb') == 'tray') unit = 'tray';
+      final storedUnit = b['plan_unit']?.toString() ?? 'cb';
+      if (!completed && storedUnit == 'tray') unit = 'tray';
       cb.text = completed
           ? '${b['produced_cb']}'
           : (unit == 'tray' ? '${b['planned_trays'] ?? 0}' : '${b['planned_cb']}');
