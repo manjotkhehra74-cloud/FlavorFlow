@@ -274,11 +274,18 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
     super.initState();
     final b = widget.batch;
     if (b != null) {
-      cb.text = completed ? '${b['produced_cb']}' : '${b['planned_cb']}';
+      // Batches planned in trays (server: plan_unit/planned_trays) reopen in
+      // the same unit, with the quantity shown in that unit.
+      if (!completed && String(b['plan_unit'] ?? 'cb') == 'tray') unit = 'tray';
+      cb.text = completed
+          ? '${b['produced_cb']}'
+          : (unit == 'tray' ? '${b['planned_trays'] ?? 0}' : '${b['planned_cb']}');
       trays.text = '${b['produced_trays'] ?? 0}';
       code.text = b['code'] as String;
       remarks.text = b['remarks'] as String? ?? '';
       planned = DateTime.tryParse('${b['planned_date']}'.split(' ').first) ?? planned;
+      final ps = _canonicalTraySize(_productSize(b['product_name']?.toString() ?? ''));
+      if (ps != null) traySize = ps;
     }
     final api = context.read<AuthController>().api;
     api.get('/products').then((json) {
@@ -303,6 +310,37 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
       if (p['id'] == productId) return p;
     }
     return null;
+  }
+
+  /// The selected product's name (product master once loaded, else the
+  /// batch's stored product_name in edit mode).
+  String get _selName => _selProduct?['name']?.toString() ?? widget.batch?['product_name']?.toString() ?? '';
+
+  /// Maps a raw product size ('610', '1', '1.3', '740'…) onto the canonical
+  /// tray-size list by NUMBER — '1' and '1.0' are the same tray.
+  static String? _canonicalTraySize(String? raw) {
+    if (raw == null) return null;
+    final v = double.tryParse(raw);
+    if (v == null) return null;
+    for (final t in _traySizes) {
+      if (double.tryParse(t) == v) return t;
+    }
+    return null;
+  }
+
+  /// Tray planning exists only for the four tray sizes — Soya 740 / 1.3 and
+  /// Vinegar 610 / 1.0 (size is the one embedded in the product name).
+  bool get _trayEligible => _canonicalTraySize(_productSize(_selName)) != null;
+
+  /// The tray size follows the product (Soya Sauce 1.3kg → '1.3'); picking a
+  /// product without a tray size silently falls back to CB planning.
+  void _followTraySize() {
+    final c = _canonicalTraySize(_productSize(_selName));
+    if (c == null) {
+      if (unit == 'tray') unit = 'cb';
+    } else {
+      traySize = c;
+    }
   }
 
   /// Live trays→CB math + validation, shown under the quantity field in tray
@@ -332,7 +370,7 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
       var t = '$n ${U.trayLc} ($traySize) × $bpt ${U.piece} ÷ $bpc/${U.cb.toLowerCase()} = $cbEq ${U.cb}';
       if (wpc > 0) t += ' (~${qty(cbEq * wpc)} kg)';
       lines.add(Text(t, style: base.copyWith(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600)));
-      final ps = _productSize(p!['name'] as String);
+      final ps = _canonicalTraySize(_productSize(p!['name'] as String));
       if (ps != null && ps != traySize) {
         lines.add(Text('Heads-up: this product looks like size $ps, but tray $traySize is selected.', style: base.copyWith(color: const Color(0xFFD98200))));
       }
@@ -346,13 +384,16 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
   /// Size embedded in a product name — "White Vinegar 610ml" → '610',
   /// "Dark Soya 1 Ltr" → '1.0', "Vinegar 1000ml" → '1.0'. null when absent.
   static String? _productSize(String name) {
-    final m = RegExp(r'(\d+(?:\.\d+)?)\s*(ml|gm|ltr|litre|litres|l)\b', caseSensitive: false).firstMatch(name);
+    final m = RegExp(r'(\d+(?:\.\d+)?)\s*(ml|gm|kg|ltr|litre|litres|l)\b', caseSensitive: false).firstMatch(name);
     if (m == null) return null;
     final v = double.tryParse(m.group(1)!);
     if (v == null) return null;
     if (m.group(2)!.toLowerCase().startsWith('l')) {
-      final liters = v >= 100 ? v / 1000 : v; // 1000ml → 1.0 L
+      final liters = v >= 100 ? v / 1000 : v;
       return liters.toStringAsFixed(1);
+    }
+    if (m.group(2)!.toLowerCase() == 'ml' && v >= 1000 && v.truncateToDouble() % 1000 == 0) {
+      return (v / 1000).toStringAsFixed(1); // 1000ml → 1.0 L
     }
     return v == v.roundToDouble() ? v.round().toString() : v.toString();
   }
@@ -393,11 +434,16 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
                     decoration: InputDecoration(labelText: tr('Product *'), suffixIcon: ScanPickButton(rows: products, onPicked: (p) => setState(() => productId = p['id'] as int))),
                     isExpanded: true,
                     items: [for (final p in products) DropdownMenuItem(value: p['id'] as int, child: Text(ItemCode.pick(p), overflow: TextOverflow.ellipsis))],
-                    onChanged: (v) => setState(() => productId = v),
+                    onChanged: (v) => setState(() {
+                          productId = v;
+                          _followTraySize();
+                        }),
                   ),
                 const SizedBox(height: 12),
-                if (!editing) ...[
+                if (!completed) ...[
                   // Plan in CB or in Trays (fixed sizes 610 / 740 / 1.0 / 1.3).
+                  // Tray is offered only for the tray-size products (Soya
+                  // 740 / 1.3, Vinegar 610 / 1.0) — see [_trayEligible].
                   Row(children: [
                     Expanded(
                       flex: 2,
@@ -407,7 +453,7 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
                         decoration: InputDecoration(labelText: tr('Planned in *')),
                         items: [
                           DropdownMenuItem(value: 'cb', child: Text(U.cb)),
-                          if (CompanyProfile.usesTrays) DropdownMenuItem(value: 'tray', child: Text(U.trayLc)),
+                          if (CompanyProfile.usesTrays && _trayEligible) DropdownMenuItem(value: 'tray', child: Text(U.trayLc)),
                         ],
                         onChanged: (v) => setState(() => unit = v ?? 'cb'),
                       ),
@@ -512,6 +558,10 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
                             'code': code.text.trim(),
                             'productId': productId,
                             'plannedCb': plannedCb,
+                            // Unit the quantity was entered in (server: same
+                            // code+product+date is allowed once per unit).
+                            'plannedUnit': unit,
+                            'plannedTrays': unit == 'tray' ? (int.tryParse(cb.text) ?? 0) : 0,
                             'plannedDate': _plannedYmd,
                             'remarks': remarks.text.trim(),
                           };
