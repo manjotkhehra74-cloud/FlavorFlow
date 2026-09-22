@@ -14,7 +14,7 @@ SELECT b.id, b.code, substr(COALESCE(p.name,'?'),1,22) product,
        COALESCE(b.planned_date,'') planned_date,
        b.produced_cb, COALESCE(b.used_cb,0) used_cb,
        b.produced_cb - COALESCE(b.used_cb,0) left_cb,
-       CAST(julianday('now') - julianday(COALESCE(b.planned_date,''))) AS INTEGER days_old
+       CAST(julianday('now') - julianday(COALESCE(b.planned_date,'')) AS INTEGER) AS days_old
 FROM batches b LEFT JOIN products p ON p.id = b.product_id
 WHERE UPPER(COALESCE(b.status,''))='COMPLETED'
   AND (b.produced_cb - COALESCE(b.used_cb,0)) > 0
