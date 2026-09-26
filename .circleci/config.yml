@@ -1,9 +1,7 @@
 version: 2.1
 
-# FlavorFlow Android release builds on CircleCI.
-# The approval gate means pushes do not consume build credits by themselves.
-# In CircleCI, open the latest pipeline and approve "approve-release" only
-# when an AAB/APK is actually needed.
+# FlavorFlow Android/web builds on CircleCI.
+# Release and web jobs start automatically for the listed Arena branches.
 
 executors:
   flutter_android:
@@ -201,27 +199,7 @@ jobs:
 workflows:
   play-store-release:
     jobs:
-      - approve-release:
-          type: approval
-          filters:
-            branches:
-              only:
-                - arena/01a003d0-flavorflow
-                - arena/01a01af5-flavorflow
-                - arena/01a0858b-flavorflow
-                - arena/01a0dc70-flavorflow
       - build-play-store-release:
-          requires:
-            - approve-release
-          filters:
-            branches:
-              only:
-                - arena/01a003d0-flavorflow
-                - arena/01a01af5-flavorflow
-                - arena/01a0858b-flavorflow
-                - arena/01a0dc70-flavorflow
-      - approve-web:
-          type: approval
           filters:
             branches:
               only:
@@ -230,8 +208,6 @@ workflows:
                 - arena/01a0858b-flavorflow
                 - arena/01a0dc70-flavorflow
       - build-web:
-          requires:
-            - approve-web
           filters:
             branches:
               only:
