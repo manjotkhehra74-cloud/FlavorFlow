@@ -263,7 +263,6 @@ class _StockTabState extends State<_StockTab> {
         all = widget.rawOnly
             ? all.where((m) => m['category'] == 'Raw Material').toList()
             : all.where((m) => m['category'] != 'Raw Material').toList();
-        final s = (snap.data!['summary'] as Map).cast<String, dynamic>();
         final lowCount = all.where((m) => (m['low'] as int? ?? 0) == 1).length;
         final categories = <String>{for (final m in all) m['category'] as String};
         final hasCodes = ItemCode.anyIn(all);
@@ -280,19 +279,19 @@ class _StockTabState extends State<_StockTab> {
         }
         rows.sort((a, b) => pairKey(a).compareTo(pairKey(b)));
         return ListView(padding: const EdgeInsets.all(20), children: [
-          LayoutBuilder(builder: (context, c) {
-            final cols = c.maxWidth > 1000 ? 3 : 1;
-            final ratio = ((c.maxWidth - (cols - 1) * 12) / cols / 84).clamp(1.6, 5.0);
-            return GridView.count(
-              crossAxisCount: cols, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 12, crossAxisSpacing: 12, childAspectRatio: ratio,
-              children: [
-                KpiCard(label: widget.rawOnly ? 'Raw Materials' : 'Packing Items', value: qtyInt(all.length), icon: widget.rawOnly ? Icons.science_rounded : Icons.widgets_rounded, tint: AppColors.blue),
-                KpiCard(label: 'Categories', value: qtyInt(categories.length), icon: Icons.category_rounded, tint: AppColors.teal),
-                KpiCard(label: 'Running Low', value: qtyInt(lowCount), icon: Icons.warning_amber_rounded, tint: AppColors.red),
-              ],
-            );
-          }),
+          _PackingHealthCard(
+            itemCount: all.length,
+            categoryCount: categories.length,
+            lowCount: lowCount,
+            rawOnly: widget.rawOnly,
+          ),
+          const SizedBox(height: 12),
+          _PackingMetrics(
+            itemCount: all.length,
+            categoryCount: categories.length,
+            lowCount: lowCount,
+            rawOnly: widget.rawOnly,
+          ),
           const SizedBox(height: 16),
           Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
             ChoiceChip(label: Text(tr('All')), selected: _category.isEmpty && !_lowOnly, onSelected: (_) => setState(() { _category = ''; _lowOnly = false; _future = _load(); })),
@@ -473,6 +472,115 @@ class _StockTabState extends State<_StockTab> {
               style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
         ]);
       },
+    );
+  }
+}
+
+class _PackingHealthCard extends StatelessWidget {
+  final int itemCount;
+  final int categoryCount;
+  final int lowCount;
+  final bool rawOnly;
+  const _PackingHealthCard({required this.itemCount, required this.categoryCount, required this.lowCount, required this.rawOnly});
+
+  @override
+  Widget build(BuildContext context) {
+    final label = rawOnly ? 'Raw materials tracked' : 'Packing items tracked';
+    final title = rawOnly ? 'Raw Material Stock' : 'Packing Stock';
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 17),
+      decoration: BoxDecoration(
+        gradient: AppBrand.gradient,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: AppBrand.blue.withValues(alpha: .18), blurRadius: 14, offset: const Offset(0, 7))],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800))),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(color: Colors.white.withValues(alpha: .18), borderRadius: BorderRadius.circular(20)),
+            child: Text('$categoryCount categories', style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600)),
+          ),
+        ]),
+        const SizedBox(height: 8),
+        Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Text(qtyInt(itemCount), style: const TextStyle(color: Colors.white, fontSize: 34, fontWeight: FontWeight.w800, height: 1)),
+          const SizedBox(width: 8),
+          Padding(padding: const EdgeInsets.only(bottom: 2), child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600))),
+        ]),
+        const SizedBox(height: 12),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            height: 7,
+            decoration: BoxDecoration(color: Colors.white.withValues(alpha: .23)),
+            child: FractionallySizedBox(
+              widthFactor: itemCount <= 0 ? 0.0 : ((itemCount - lowCount) / itemCount).clamp(0.0, 1.0).toDouble(),
+              alignment: Alignment.centerLeft,
+              child: Container(decoration: const BoxDecoration(color: Color(0xFF63E6C1))),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(child: Text('${itemCount - lowCount} healthy stock items', style: const TextStyle(color: Colors.white, fontSize: 12.5))),
+          Text('$lowCount running low', style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w700)),
+        ]),
+      ]),
+    );
+  }
+}
+
+class _PackingMetrics extends StatelessWidget {
+  final int itemCount;
+  final int categoryCount;
+  final int lowCount;
+  final bool rawOnly;
+  const _PackingMetrics({required this.itemCount, required this.categoryCount, required this.lowCount, required this.rawOnly});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 104,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          _PackingMetric(label: rawOnly ? 'Raw materials' : 'Packing items', value: qtyInt(itemCount), icon: rawOnly ? Icons.science_rounded : Icons.widgets_rounded, tint: AppColors.blue),
+          _PackingMetric(label: 'Categories', value: qtyInt(categoryCount), icon: Icons.category_rounded, tint: AppColors.teal),
+          _PackingMetric(label: 'Running low', value: qtyInt(lowCount), icon: Icons.warning_amber_rounded, tint: AppColors.red),
+        ],
+      ),
+    );
+  }
+}
+
+class _PackingMetric extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color tint;
+  const _PackingMetric({required this.label, required this.value, required this.icon, required this.tint});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: 166,
+      margin: const EdgeInsets.only(right: 10),
+      padding: const EdgeInsets.fromLTRB(14, 12, 12, 10),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant),
+        boxShadow: [BoxShadow(color: scheme.shadow.withValues(alpha: .06), blurRadius: 7, offset: const Offset(0, 3))],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [Icon(icon, size: 18, color: tint), const Spacer(), Container(width: 7, height: 7, decoration: BoxDecoration(shape: BoxShape.circle, color: tint))]),
+        const Spacer(),
+        Text(value, style: TextStyle(color: scheme.onSurface, fontSize: 20, fontWeight: FontWeight.w800)),
+        Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5, fontWeight: FontWeight.w600)),
+      ]),
     );
   }
 }
