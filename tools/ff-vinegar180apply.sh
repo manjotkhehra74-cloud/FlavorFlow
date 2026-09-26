@@ -127,6 +127,9 @@ try {
   const insertCols = ['code', 'product_id', 'planned_cb', 'produced_cb', 'status', 'planned_date', 'used_cb'];
   if (bc.includes('produced_trays')) insertCols.push('produced_trays');
   if (bc.includes('used_trays')) insertCols.push('used_trays');
+  // Production databases may require created_at without a SQL default.
+  // Supply it explicitly for newly-created sheet rows.
+  if (bc.includes('created_at')) insertCols.push('created_at');
   const insert = db.prepare(
     'INSERT INTO batches (' + insertCols.join(', ') + ') VALUES (' + insertCols.map(() => '?').join(', ') + ')'
   );
@@ -140,6 +143,7 @@ try {
       const values = [code, product.id, desired, desired, 'COMPLETED', date, 0];
       if (bc.includes('produced_trays')) values.push(0);
       if (bc.includes('used_trays')) values.push(0);
+      if (bc.includes('created_at')) values.push(new Date().toISOString());
       insert.run(...values);
       console.log('CREATED ' + date + ' / ' + code + ' → ' + desired + ' CB');
     }
