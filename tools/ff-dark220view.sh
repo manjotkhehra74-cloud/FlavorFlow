@@ -54,7 +54,17 @@ if (!m.includes('ff-dark220-visible-batches')) {
   changed = true;
   console.log('MODULE: Dark Soya 220 current batch whitelist installed ✓');
 } else {
-  console.log('MODULE: Dark Soya 220 current batch whitelist already installed ✓');
+  const old = "if (!((d === '2026-09-21' && c === '6I1516AKS') || (d === '2026-09-25' && c === '6I0021AKS'))) continue;";
+  const upgraded = "if (!((d === '2026-09-21' && c === '6I1516AKS') || (d === '2026-09-25' && c === '6I0021AKS') || (d === '2026-09-26' && c === '6I0021AKS'))) continue;";
+  if (!m.includes("d === '2026-09-26' && c === '6I0021AKS'")) {
+    if (!m.includes(old)) { console.log('MODULE: whitelist exists but upgrade anchor not found'); process.exit(2); }
+    m = m.replace(old, upgraded);
+    fs.writeFileSync(mf, m);
+    changed = true;
+    console.log('MODULE: Dark Soya 220 whitelist upgraded for today\'s batch ✓');
+  } else {
+    console.log('MODULE: Dark Soya 220 current batch whitelist already current ✓');
+  }
 }
 try { cp.execFileSync('node', ['--check', mf]); console.log('MODULE: syntax OK'); }
 catch (e) { console.log('MODULE: syntax FAIL — restoring backup'); cp.copyFileSync(process.env.FF_BK + '/batchrecon.js.bak-dark220view-' + process.env.FF_TS, mf); process.exit(3); }
@@ -98,7 +108,17 @@ if (!dsrc.includes('ff-dark220-dispatch-visible')) {
     }
   }
 } else {
-  console.log('DISPATCH: Dark Soya 220 batch whitelist already installed ✓');
+  const old = "OR (date(COALESCE(b.planned_date, '')) = '2026-09-25' AND UPPER(TRIM(COALESCE(b.code, ''))) = '6I0021AKS'))";
+  const upgraded = "OR (date(COALESCE(b.planned_date, '')) = '2026-09-25' AND UPPER(TRIM(COALESCE(b.code, ''))) = '6I0021AKS') OR (date(COALESCE(b.planned_date, '')) = '2026-09-26' AND UPPER(TRIM(COALESCE(b.code, ''))) = '6I0021AKS'))";
+  if (!dsrc.includes("date(COALESCE(b.planned_date, '')) = '2026-09-26'")) {
+    if (!dsrc.includes(old)) { console.log('DISPATCH: whitelist exists but upgrade anchor not found'); process.exit(2); }
+    dsrc = dsrc.replace(old, upgraded);
+    fs.writeFileSync(df, dsrc);
+    changed = true;
+    console.log('DISPATCH: Dark Soya 220 whitelist upgraded for today\'s batch ✓');
+  } else {
+    console.log('DISPATCH: Dark Soya 220 batch whitelist already current ✓');
+  }
 }
 try { cp.execFileSync('node', ['--check', df]); console.log('DISPATCH: syntax OK'); }
 catch (e) { console.log('DISPATCH: syntax FAIL — restoring backup'); cp.copyFileSync(process.env.FF_BK + '/dispatch.js.bak-dark220view-' + process.env.FF_TS, df); process.exit(3); }
@@ -117,4 +137,4 @@ if [ "$RC" -eq 0 ] || [ "$RC" -eq 4 ] || [ "$RC" -eq 1 ]; then
   sleep 3
   curl -s -m 6 http://127.0.0.1:4000/api/health && echo "" || { echo "HEALTH CHECK FAILED"; exit 1; }
 fi
-echo "DARK220VIEW VERIFIED ✓ — current app views show only 21/09 + 6I1516AKS and 25/09 + 6I0021AKS; history retained"
+echo "DARK220VIEW VERIFIED ✓ — current app views show 21/09 + 6I1516AKS, 25/09 + 6I0021AKS and today’s 26/09 batch; history retained"
