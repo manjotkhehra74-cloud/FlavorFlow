@@ -239,9 +239,16 @@ class _BatchStockSection extends StatefulWidget {
   State<_BatchStockSection> createState() => _BatchStockSectionState();
 }
 
+String _shortRegisterDate(String raw) {
+  final m = RegExp(r'^\d{4}-(\d{1,2})-(\d{1,2})').firstMatch(raw.trim());
+  if (m == null) return raw.isEmpty ? '—' : raw;
+  return '${m.group(2)!.padLeft(2, '0')}/${m.group(1)!.padLeft(2, '0')}';
+}
+
 class _BatchStockSectionState extends State<_BatchStockSection> {
   late Future<Map<String, dynamic>> _future;
   bool _exporting = false;
+  final Set<String> _collapsed = <String>{};
 
   @override
   void initState() {
@@ -283,6 +290,131 @@ class _BatchStockSectionState extends State<_BatchStockSection> {
     }
   }
 
+  List<_BatchRegisterGroup> _parseGroups(Map<String, dynamic> data) {
+    final groups = <_BatchRegisterGroup>[];
+    _BatchRegisterGroup? current;
+    final raw = (data['rows'] as List?) ?? const [];
+    for (final rawRow in raw) {
+      final row = (rawRow as List).cast<dynamic>();
+      if (row.isEmpty) continue;
+      final first = '${row[0] ?? ''}';
+      if (first.startsWith('▶')) {
+        current = _BatchRegisterGroup(first.replaceFirst('▶', '').trim());
+        groups.add(current);
+        continue;
+      }
+      if (first == 'TOTAL' || first == 'GRAND TOTAL' || first.isEmpty) {
+        if (first == 'TOTAL' && current != null && row.length > 2) {
+          current.totalCb = row[2];
+          current.totalTrays = row.length > 3 ? row[3] : null;
+        }
+        continue;
+      }
+      if (current != null && row.length > 2) {
+        current.entries.add(_BatchRegisterEntry(
+          date: _shortRegisterDate('${row[0] ?? '—'}'),
+          code: '${row.length > 1 ? row[1] ?? '—' : '—'}',
+          cb: row[2],
+          trays: row.length > 3 ? row[3] : null,
+        ));
+      }
+    }
+    return groups;
+  }
+
+  Widget _textCell(String value, {required int flex, TextAlign align = TextAlign.left, bool strong = false}) {
+    return Expanded(
+      flex: flex,
+      child: Text(
+        value,
+        textAlign: align,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(fontSize: 12.5, fontWeight: strong ? FontWeight.w700 : FontWeight.w500),
+      ),
+    );
+  }
+
+  Widget _group(BuildContext context, _BatchRegisterGroup group, bool showTrays) {
+    final scheme = Theme.of(context).colorScheme;
+    final collapsed = _collapsed.contains(group.name);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => setState(() {
+              if (collapsed) {
+                _collapsed.remove(group.name);
+              } else {
+                _collapsed.add(group.name);
+              }
+            }),
+            child: Ink(
+              decoration: const BoxDecoration(gradient: AppBrand.gradient),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+              child: Row(children: [
+                Icon(collapsed ? Icons.expand_more_rounded : Icons.expand_less_rounded, color: Colors.white, size: 21),
+                const SizedBox(width: 8),
+                Expanded(child: Text(group.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13.5, letterSpacing: .2))),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: .92), borderRadius: BorderRadius.circular(20)),
+                  child: Text('${qtyInt(group.totalCb)} ${U.cb}', style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w800, fontSize: 12)),
+                ),
+              ]),
+            ),
+          ),
+        ),
+        if (!collapsed) ...[
+          Container(
+            color: scheme.primaryContainer.withValues(alpha: .55),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            child: Row(children: [
+              _textCell('Mfg. Date', flex: 2, strong: true),
+              _textCell('Batch Code', flex: 3, strong: true),
+              _textCell('Stock (${U.cb})', flex: 2, align: TextAlign.right, strong: true),
+              if (showTrays) _textCell(U.tray, flex: 1, align: TextAlign.right, strong: true),
+            ]),
+          ),
+          for (var i = 0; i < group.entries.length; i++)
+            Container(
+              color: i.isEven ? scheme.surface : scheme.primaryContainer.withValues(alpha: .22),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(children: [
+                Expanded(
+                  flex: 2,
+                  child: Row(children: [
+                    Container(width: 7, height: 7, decoration: BoxDecoration(shape: BoxShape.circle, color: i.isEven ? AppColors.blue : AppColors.teal)),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(group.entries[i].date, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500))),
+                  ]),
+                ),
+                _textCell(group.entries[i].code, flex: 3, strong: true),
+                _textCell(qtyInt(group.entries[i].cb), flex: 2, align: TextAlign.right),
+                if (showTrays) _textCell(qtyInt(group.entries[i].trays), flex: 1, align: TextAlign.right),
+              ]),
+            ),
+          Container(
+            color: scheme.secondaryContainer.withValues(alpha: .65),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(children: [
+              _textCell('TOTAL', flex: 5, strong: true),
+              _textCell('${qtyInt(group.totalCb)} ${U.cb}', flex: 2, align: TextAlign.right, strong: true),
+              if (showTrays) _textCell(qtyInt(group.totalTrays), flex: 1, align: TextAlign.right, strong: true),
+            ]),
+          ),
+        ],
+      ]),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<Map<String, dynamic>>(
@@ -301,12 +433,9 @@ class _BatchStockSectionState extends State<_BatchStockSection> {
           );
         }
         final data = snap.data!;
-        // Server table is written for the default industry (CB / Trays) —
-        // drop the tray column for industries without it, unitize headers.
-        final (columns, rows) = U.table(
-          (data['columns'] as List).cast<String>(),
-          (data['rows'] as List).map((r) => (r as List).cast<dynamic>()).toList(),
-        );
+        final groups = _parseGroups(data);
+        final columns = (data['columns'] as List?)?.cast<String>() ?? const <String>[];
+        final showTrays = CompanyProfile.usesTrays && columns.length >= 4;
         return SectionCard(
           title: IndustryPack.current.runStockTitle,
           stackTrailingOnNarrow: true,
@@ -315,42 +444,38 @@ class _BatchStockSectionState extends State<_BatchStockSection> {
               onPressed: _exporting ? null : () => _export(data, pdf: true),
               icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
               label: Text(tr('PDF')),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFFB91C1C),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                minimumSize: const Size(0, 32),
-              ),
+              style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFFB91C1C), padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8), minimumSize: const Size(0, 32)),
             ),
             OutlinedButton.icon(
               onPressed: _exporting ? null : () => _export(data, pdf: false),
               icon: const Icon(Icons.table_view_outlined, size: 16),
               label: Text(tr('Excel')),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF047857),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                minimumSize: const Size(0, 32),
-              ),
+              style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFF047857), padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8), minimumSize: const Size(0, 32)),
             ),
           ]),
-          child: rows.isEmpty
+          child: groups.isEmpty
               ? EmptyState(U.ize('No completed batches with remaining stock'))
-              : AppDataTable(
-                  columns: columns,
-                  rows: [
-                    for (final r in rows)
-                      [
-                        // product headers / totals bold, batch rows normal
-                        r[0].toString().startsWith('▶') || r[0] == 'TOTAL' || r[0] == 'GRAND TOTAL'
-                            ? Text('${r[0]}', style: const TextStyle(fontWeight: FontWeight.w800))
-                            : '${r[0]}',
-                        for (var c = 1; c < r.length; c++) r[c],
-                      ],
-                  ],
-                ),
+              : Column(children: [for (final group in groups) _group(context, group, showTrays)]),
         );
       },
     );
   }
+}
+
+class _BatchRegisterGroup {
+  final String name;
+  final List<_BatchRegisterEntry> entries = [];
+  dynamic totalCb;
+  dynamic totalTrays;
+  _BatchRegisterGroup(this.name);
+}
+
+class _BatchRegisterEntry {
+  final String date;
+  final String code;
+  final dynamic cb;
+  final dynamic trays;
+  const _BatchRegisterEntry({required this.date, required this.code, required this.cb, required this.trays});
 }
 
 /// Set exact stock (opening stock / correction) — replaces current quantities.
