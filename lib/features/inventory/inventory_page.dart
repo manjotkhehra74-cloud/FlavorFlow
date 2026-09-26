@@ -102,20 +102,21 @@ class _InventoryPageState extends State<InventoryPage> {
         final items = allItems.where((it) => ItemCode.matches(it, _q.text)).toList();
         final s = (snap.data!['summary'] as Map).cast<String, dynamic>();
         return ListView(padding: const EdgeInsets.all(20), children: [
-          LayoutBuilder(builder: (context, c) {
-            final cols = c.maxWidth > 1000 ? 4 : 2;
-            final ratio = ((c.maxWidth - (cols - 1) * 12) / cols / 84).clamp(1.6, 5.0);
-            return GridView.count(
-              crossAxisCount: cols, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 12, crossAxisSpacing: 12, childAspectRatio: ratio,
+          _InventoryHealthCard(summary: s, productCount: allItems.length),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 104,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
               children: [
-                KpiCard(label: 'Stock on Hand (${U.cb})', value: qtyInt(s['total_cb']), icon: Icons.warehouse_rounded, tint: AppColors.cyan),
-                if (CompanyProfile.usesTrays) KpiCard(label: '${U.tray} on Hand', value: qtyInt(s['total_trays']), icon: Icons.dinner_dining_rounded, tint: AppColors.teal),
-                KpiCard(label: 'Total ${U.piece}', value: qtyInt(s['total_bottles']), icon: Icons.liquor_rounded, tint: AppColors.blue),
-                KpiCard(label: 'Low Stock Items', value: qtyInt(s['low_count']), icon: Icons.warning_amber_rounded, tint: AppColors.red),
+                _InventoryMetric(label: 'Low stock items', value: qtyInt(s['low_count']), icon: Icons.warning_amber_rounded, tint: AppColors.red),
+                _InventoryMetric(label: 'Total products', value: qtyInt(allItems.length), icon: Icons.category_outlined, tint: AppColors.blue),
+                _InventoryMetric(label: 'Total ${U.piece}', value: qtyInt(s['total_bottles']), icon: Icons.liquor_rounded, tint: AppColors.cyan),
+                if (CompanyProfile.usesTrays)
+                  _InventoryMetric(label: '${U.tray} on hand', value: qtyInt(s['total_trays']), icon: Icons.dinner_dining_rounded, tint: AppColors.teal),
               ],
-            );
-          }),
+            ),
+          ),
           const SizedBox(height: 16),
           Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
             ChoiceChip(
@@ -181,6 +182,10 @@ class _InventoryPageState extends State<InventoryPage> {
             ),
           ),
           const SizedBox(height: 12),
+          // Factory batch register comes first so current production stock is
+          // visible before the detailed product table.
+          const _BatchStockSection(),
+          const SizedBox(height: 16),
           SectionCard(
             title: _lowOnly ? 'Low Stock Products' : 'Stock on Hand',
             child: items.isEmpty
@@ -221,11 +226,82 @@ class _InventoryPageState extends State<InventoryPage> {
                     ],
                   ),
           ),
-          const SizedBox(height: 16),
-          // Batch-wise stock (factory register style) below Stock on Hand.
-          const _BatchStockSection(),
         ]);
       },
+    );
+  }
+}
+
+class _InventoryHealthCard extends StatelessWidget {
+  final Map<String, dynamic> summary;
+  final int productCount;
+  const _InventoryHealthCard({required this.summary, required this.productCount});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 17),
+      decoration: BoxDecoration(
+        gradient: AppBrand.gradient,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: AppBrand.blue.withValues(alpha: .18), blurRadius: 14, offset: const Offset(0, 7))],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Expanded(child: Text('Stock Health', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800))),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(color: Colors.white.withValues(alpha: .18), borderRadius: BorderRadius.circular(20)),
+            child: Text(fmtDate(todayYmd()), style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600)),
+          ),
+        ]),
+        const SizedBox(height: 8),
+        Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Text(qtyInt(summary['total_cb']), style: const TextStyle(color: Colors.white, fontSize: 34, fontWeight: FontWeight.w800, height: 1)),
+          const SizedBox(width: 8),
+          Padding(padding: const EdgeInsets.only(bottom: 2), child: Text('${U.cb} on hand', style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600))),
+        ]),
+        const SizedBox(height: 12),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Container(height: 7, decoration: BoxDecoration(color: Colors.white.withValues(alpha: .23)), child: FractionallySizedBox(widthFactor: 1, alignment: Alignment.centerLeft, child: Container(decoration: const BoxDecoration(color: Color(0xFF63E6C1))))),
+        ),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(child: Text('$productCount products tracked', style: const TextStyle(color: Colors.white, fontSize: 12.5))),
+          Text('${qtyInt(summary['low_count'])} low stock alerts', style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w700)),
+        ]),
+      ]),
+    );
+  }
+}
+
+class _InventoryMetric extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color tint;
+  const _InventoryMetric({required this.label, required this.value, required this.icon, required this.tint});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: 166,
+      margin: const EdgeInsets.only(right: 10),
+      padding: const EdgeInsets.fromLTRB(14, 12, 12, 10),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant),
+        boxShadow: [BoxShadow(color: scheme.shadow.withValues(alpha: .06), blurRadius: 7, offset: const Offset(0, 3))],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [Icon(icon, size: 18, color: tint), const Spacer(), Container(width: 7, height: 7, decoration: BoxDecoration(shape: BoxShape.circle, color: tint))]),
+        const Spacer(),
+        Text(value, style: TextStyle(color: scheme.onSurface, fontSize: 20, fontWeight: FontWeight.w800)),
+        Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5, fontWeight: FontWeight.w600)),
+      ]),
     );
   }
 }
