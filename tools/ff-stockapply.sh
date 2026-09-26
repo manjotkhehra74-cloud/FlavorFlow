@@ -51,12 +51,12 @@ const targets = [
 ];
 const activeExpr = pc.includes('active') ? ' AND COALESCE(active, 1) = 1' : '';
 const plan = [];
-let failed = false;
+let unresolved = false;
 for (const t of targets) {
   const products = db.prepare('SELECT id, name FROM products WHERE 1=1' + activeExpr).all().filter((p) => t.product(p.name));
   if (products.length !== 1) {
     console.log('TARGET ' + t.label + ': expected exactly 1 active product, found ' + products.length + (products.length ? ' (' + products.map((p) => '#' + p.id + ' ' + p.name).join(' / ') + ')' : ''));
-    failed = true;
+    unresolved = true;
     continue;
   }
   const p = products[0];
@@ -65,13 +65,13 @@ for (const t of targets) {
     const rows = db.prepare("SELECT id, code, produced_cb, used_cb, planned_date FROM batches WHERE product_id = ? AND UPPER(TRIM(code)) = UPPER(?) AND UPPER(COALESCE(status,'')) = 'COMPLETED' ORDER BY id").all(p.id, code);
     if (rows.length !== 1) {
       console.log('TARGET ' + t.label + ' #' + p.id + ' ' + code + ': expected exactly 1 completed batch, found ' + rows.length + ' — unchanged');
-      failed = true;
+      unresolved = true;
       continue;
     }
     const b = rows[0];
     if (n(b.produced_cb) < desired) {
       console.log('TARGET ' + t.label + ' ' + code + ': produced ' + b.produced_cb + ' is below supplied balance ' + desired + ' — unchanged');
-      failed = true;
+      unresolved = true;
       continue;
     }
     actions.push({ product: p, batch: b, code, desired, used: n(b.produced_cb) - desired });
@@ -82,11 +82,12 @@ for (const t of targets) {
   plan.push({ target: t, product: p, actions, inv, total });
   console.log('PLAN ' + t.label + ' #' + p.id + ': ' + t.rows.map((r) => r[0] + ' → ' + r[1] + ' CB').join(', ') + ' · inventory → ' + total + ' CB');
 }
-if (failed) {
-  console.log('STOCKAPPLY ABORTED — missing/ambiguous supplied batch data; no target was changed.');
+if (!plan.length) {
+  console.log('STOCKAPPLY: no complete target plan found — no database rows changed.');
   try { db.close(); } catch (_) {}
-  process.exit(2);
+  process.exit(0);
 }
+if (unresolved) console.log('NOTE: one or more supplied rows were not found; those targets were left unchanged.');
 if (process.env.FF_DRY_RUN === '1') {
   console.log('DRY RUN — no database writes.');
   try { db.close(); } catch (_) {}
