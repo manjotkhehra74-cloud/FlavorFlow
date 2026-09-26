@@ -94,7 +94,10 @@ class _InventoryPageState extends State<InventoryPage> {
       builder: (context, snap) {
         if (snap.hasError) return ErrorState(snap.error!, onRetry: _reload);
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        final allItems = (snap.data!['items'] as List).cast<Map<String, dynamic>>();
+        final allItems = (snap.data!['items'] as List)
+            .cast<Map<String, dynamic>>()
+            .where((it) => (it['active'] as num? ?? 1) != 0)
+            .toList();
         final hasCodes = ItemCode.anyIn(allItems);
         final items = allItems.where((it) => ItemCode.matches(it, _q.text)).toList();
         final s = (snap.data!['summary'] as Map).cast<String, dynamic>();
@@ -442,7 +445,10 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
     super.initState();
     context.read<AuthController>().api.get('/products').then((json) {
       setState(() {
-        products = ((json as Map)['products'] as List).cast<Map<String, dynamic>>();
+        products = ((json as Map)['products'] as List)
+            .cast<Map<String, dynamic>>()
+            .where((p) => (p['active'] as num? ?? 1) != 0)
+            .toList();
         productId = products.isNotEmpty ? products.first['id'] as int : null;
       });
     }).catchError((e) {

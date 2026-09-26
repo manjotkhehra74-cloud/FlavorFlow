@@ -697,7 +697,10 @@ class _TxnDialogState extends State<_TxnDialog> {
     if (widget.kind == 'consume' && !widget.rawOnly) {
       context.read<AuthController>().api.get('/products').then((json) {
         if (!mounted) return;
-        setState(() => products = ((json as Map)['products'] as List).cast<Map<String, dynamic>>());
+        setState(() => products = ((json as Map)['products'] as List)
+            .cast<Map<String, dynamic>>()
+            .where((p) => (p['active'] as num? ?? 1) != 0)
+            .toList());
       }).catchError((_) {});
     }
   }

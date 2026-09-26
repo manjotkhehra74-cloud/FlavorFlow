@@ -37,7 +37,10 @@ class _ProductsPageState extends State<ProductsPage> {
 
   Future<List<Map<String, dynamic>>> _load() async {
     final json = await context.read<AuthController>().api.get('/products');
-    return ((json as Map)['products'] as List).cast<Map<String, dynamic>>();
+    return ((json as Map)['products'] as List)
+        .cast<Map<String, dynamic>>()
+        .where((p) => (p['active'] as num? ?? 1) != 0)
+        .toList();
   }
 
   void _reload() => setState(() => _future = _load());

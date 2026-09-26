@@ -291,7 +291,10 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
     final api = context.read<AuthController>().api;
     api.get('/products').then((json) {
       setState(() {
-        products = ((json as Map)['products'] as List).cast<Map<String, dynamic>>();
+        products = ((json as Map)['products'] as List)
+            .cast<Map<String, dynamic>>()
+            .where((p) => (p['active'] as num? ?? 1) != 0)
+            .toList();
         productId = b != null
             ? b['product_id'] as int
             : (products.isNotEmpty ? products.first['id'] as int : null);

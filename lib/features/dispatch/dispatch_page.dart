@@ -100,6 +100,7 @@ class _DispatchPageState extends State<DispatchPage> with SingleTickerProviderSt
 
 class _Line {
   int? productId;
+  int? batchId;
   final cartons = TextEditingController();
   final trays = TextEditingController();
   final batchCode = TextEditingController();
@@ -109,16 +110,46 @@ class _Line {
 Map<String, dynamic> _prod(List<Map<String, dynamic>> products, int? id) =>
     products.firstWhere((p) => p['id'] == id, orElse: () => {'bottles_per_cb': 0, 'bottles_per_tray': 0});
 
+/// Batch dates are deliberately formatted from the date string rather than a
+/// timezone-aware DateTime. A batch made late at night must still show the
+/// factory date on every device (and the dispatch screen only needs dd/mm).
+String _shortBatchDate(Object? raw) {
+  final value = '${raw ?? ''}'.trim().split(RegExp(r'[ T]')).first;
+  final m = RegExp(r'^(?:\d{4}-)?(\d{1,2})-(\d{1,2})$').firstMatch(value);
+  if (m == null) return value.isEmpty ? '—' : value;
+  return '${m.group(2)!.padLeft(2, '0')}/${m.group(1)!.padLeft(2, '0')}';
+}
+
+String _batchAvailability(Map<String, dynamic> batch) {
+  final cb = qtyInt(batch['remaining_cb'] ?? batch['remainingCb'] ?? 0);
+  final trays = qtyInt(batch['remaining_trays'] ?? batch['remainingTrays'] ?? 0);
+  if (trays != '0') return '$cb ${U.cb} · $trays ${U.trayLc}';
+  return '$cb ${U.cb}';
+}
+
 class _LinesEditor extends StatelessWidget {
   final List<Map<String, dynamic>> products;
   final List<_Line> lines;
   final VoidCallback onAdd, onChanged;
   final void Function(int) onRemove;
-  /// Camera scan picked a product for line [i] — parent must setState so the
-  /// dropdown (keyed on productId) rebuilds with the new value.
-  final void Function(int i, int productId) onScanPick;
+  /// Product changes clear the previous batch and load the new product's
+  /// available batches. This avoids dispatching a code belonging to another
+  /// product after the operator changes the product dropdown.
+  final void Function(int i, int productId) onProductChanged;
   final bool showBatch;
-  const _LinesEditor({required this.products, required this.lines, required this.onAdd, required this.onRemove, required this.onChanged, required this.onScanPick, this.showBatch = false});
+  final Map<int, List<Map<String, dynamic>>> batchOptions;
+  final Set<int> batchLoading;
+  const _LinesEditor({
+    required this.products,
+    required this.lines,
+    required this.onAdd,
+    required this.onRemove,
+    required this.onChanged,
+    required this.onProductChanged,
+    this.showBatch = false,
+    this.batchOptions = const {},
+    this.batchLoading = const {},
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -140,9 +171,11 @@ class _LinesEditor extends StatelessWidget {
                   key: ValueKey('dl-$i-${lines[i].productId}'),
                   initialValue: lines[i].productId,
                   isExpanded: true,
-                  decoration: InputDecoration(labelText: tr('Product ${i + 1} *'), suffixIcon: ScanPickButton(rows: products, onPicked: (p) => onScanPick(i, p['id'] as int))),
+                  decoration: InputDecoration(labelText: tr('Product ${i + 1} *'), suffixIcon: ScanPickButton(rows: products, onPicked: (p) => onProductChanged(i, p['id'] as int))),
                   items: [for (final p in products) DropdownMenuItem(value: p['id'] as int, child: Text(ItemCode.pick(p), overflow: TextOverflow.ellipsis))],
-                  onChanged: (v) { lines[i].productId = v; onChanged(); },
+                  onChanged: (v) {
+                    if (v != null) onProductChanged(i, v);
+                  },
                 ),
               ),
               IconButton(
@@ -179,28 +212,15 @@ class _LinesEditor extends StatelessWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     flex: 2,
-                    child: TextField(
-                      controller: lines[i].batchCode,
-                      textCapitalization: TextCapitalization.characters,
-                      decoration: InputDecoration(
-                        labelText: U.ize('Batch code'),
-                        hintText: 'e.g. B-2603',
-                        helperText: U.ize('Stock deducts batch-wise'),
-                        helperMaxLines: 1,
-                        // QR/barcode scan — no typing on the factory floor
-                        suffixIcon: IconButton(
-                          tooltip: U.ize('Scan batch code'),
-                          icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
-                          onPressed: () async {
-                            final v = await ScanPage.scan(context, title: U.ize('Scan batch code'));
-                            if (v != null) {
-                              lines[i].batchCode.text = v.toUpperCase();
-                              onChanged();
-                            }
-                          },
-                        ),
-                      ),
-                      onChanged: (_) => onChanged(),
+                    child: _BatchField(
+                      line: lines[i],
+                      batches: batchOptions[lines[i].productId] ?? const [],
+                      loading: lines[i].productId != null && batchLoading.contains(lines[i].productId),
+                      onChanged: (value) {
+                        lines[i].batchCode.text = '${value?['code'] ?? ''}'.toUpperCase();
+                        lines[i].batchId = value?['id'] as int?;
+                        onChanged();
+                      },
                     ),
                   ),
                 ],
@@ -210,6 +230,94 @@ class _LinesEditor extends StatelessWidget {
         ),
       TextButton.icon(onPressed: onAdd, icon: const Icon(Icons.add_rounded, size: 18), label: Text(tr('Add product line'))),
     ]);
+  }
+}
+
+/// Batch selector for a dispatch line. The server supplies only COMPLETED
+/// batches with remaining stock; each option keeps the short manufacturing date
+/// visible so an operator can distinguish old stock from a newer batch.
+class _BatchField extends StatelessWidget {
+  final _Line line;
+  final List<Map<String, dynamic>> batches;
+  final bool loading;
+  final ValueChanged<Map<String, dynamic>?> onChanged;
+
+  const _BatchField({required this.line, required this.batches, required this.loading, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = line.batchCode.text.trim().toUpperCase();
+    final hasSelected = line.batchId != null
+        ? batches.any((b) => b['id'] == line.batchId)
+        : batches.any((b) => '${b['code'] ?? ''}'.trim().toUpperCase() == selected);
+    if (loading) {
+      return TextField(
+        readOnly: true,
+        decoration: InputDecoration(
+          labelText: U.ize('Batch code'),
+          hintText: 'Loading batches…',
+          suffixIcon: const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))),
+        ),
+      );
+    }
+    if (batches.isEmpty) {
+      // Opening stock / old servers can legitimately have no production batch.
+      // Keep manual entry available, while all new production stock uses the
+      // controlled selector above.
+      return TextField(
+        controller: line.batchCode,
+        textCapitalization: TextCapitalization.characters,
+        decoration: InputDecoration(
+          labelText: U.ize('Batch code'),
+          hintText: 'No batch stock — enter code if known',
+          helperText: U.ize('Stock deducts batch-wise'),
+          helperMaxLines: 1,
+          suffixIcon: IconButton(
+            tooltip: U.ize('Scan batch code'),
+            icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
+            onPressed: () async {
+              final value = await ScanPage.scan(context, title: U.ize('Scan batch code'));
+              if (value != null) onChanged({'code': value.toUpperCase()});
+            },
+          ),
+        ),
+        onChanged: (_) => onChanged({'code': line.batchCode.text}),
+      );
+    }
+    final selectedBatch = hasSelected
+        ? (line.batchId != null
+            ? batches.firstWhere((b) => b['id'] == line.batchId)
+            : batches.firstWhere((b) => '${b['code'] ?? ''}'.trim().toUpperCase() == selected))
+        : null;
+    return DropdownButtonFormField<int>(
+      key: ValueKey('batch-${line.productId}-${batches.map((b) => '${b['id']}:${b['code']}:${b['planned_date'] ?? b['plannedDate']}').join('|')}'),
+      initialValue: hasSelected ? selectedBatch!['id'] as int : null,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: U.ize('Batch code'),
+        helperText: selectedBatch == null ? U.ize('Select batch to deduct stock') : 'Available: ${_batchAvailability(selectedBatch)}',
+        helperMaxLines: 1,
+        suffixIcon: IconButton(
+          tooltip: U.ize('Scan batch code'),
+          icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
+          onPressed: () async {
+            final value = await ScanPage.scan(context, title: U.ize('Scan batch code'));
+            if (value != null) onChanged({'code': value.toUpperCase()});
+          },
+        ),
+      ),
+      items: [
+        for (final batch in batches)
+          DropdownMenuItem<int>(
+            value: batch['id'] as int,
+            child: Text(
+              '${batch['code']} · ${_shortBatchDate(batch['planned_date'] ?? batch['plannedDate'])} · ${_batchAvailability(batch)}',
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+      ],
+      onChanged: (id) => onChanged(id == null ? null : batches.firstWhere((b) => b['id'] == id)),
+    );
   }
 }
 
@@ -305,6 +413,11 @@ class _SummaryCard extends StatelessWidget {
 
 mixin _CalcMixin<T extends StatefulWidget> on State<T> {
   List<Map<String, dynamic>> products = [];
+  /// Available stock-bearing batches, keyed by product id. This is loaded
+  /// lazily when a product is selected so a large product master does not
+  /// make Dispatch fire dozens of requests on open.
+  final Map<int, List<Map<String, dynamic>>> batchOptions = {};
+  final Set<int> batchLoading = {};
   /// true once /products answered — an empty master then shows a hint
   /// instead of spinning forever (new companies start with zero products).
   bool productsLoaded = false;
@@ -317,14 +430,49 @@ mixin _CalcMixin<T extends StatefulWidget> on State<T> {
       final json = await context.read<AuthController>().api.get('/products');
       if (!mounted) return;
       setState(() {
-        products = ((json as Map)['products'] as List).cast<Map<String, dynamic>>();
+        products = ((json as Map)['products'] as List)
+            .cast<Map<String, dynamic>>()
+            .where((p) => (p['active'] as num? ?? 1) != 0)
+            .toList();
         productsLoaded = true;
         for (final l in lines) { l.productId ??= products.isNotEmpty ? products.first['id'] as int : null; }
       });
+      for (final l in lines) {
+        if (l.productId != null) loadBatches(l.productId!);
+      }
       if (products.isNotEmpty) recalc();
     } catch (e) {
       if (mounted) { setState(() => productsLoaded = true); showErr(context, e); }
     }
+  }
+
+  Future<void> loadBatches(int productId, {bool refresh = false}) async {
+    if (!refresh && (batchOptions.containsKey(productId) || batchLoading.contains(productId))) return;
+    if (mounted) setState(() => batchLoading.add(productId));
+    try {
+      final json = await context.read<AuthController>().api.get('/dispatch/batches?productId=$productId');
+      final raw = (json as Map)['batches'];
+      final rows = raw is List ? raw.cast<Map<String, dynamic>>() : <Map<String, dynamic>>[];
+      if (mounted) setState(() => batchOptions[productId] = rows);
+    } catch (_) {
+      // Older servers simply leave the manual batch field available. The
+      // dispatch route still validates the code and stock on submit.
+      if (mounted) setState(() => batchOptions[productId] = const []);
+    } finally {
+      if (mounted) setState(() => batchLoading.remove(productId));
+    }
+  }
+
+  void selectProduct(int i, int productId) {
+    if (i >= lines.length) return;
+    setState(() {
+      lines[i].productId = productId;
+      lines[i].batchId = null;
+      // Never carry a batch from the previous product into the new line.
+      lines[i].batchCode.clear();
+    });
+    loadBatches(productId, refresh: true);
+    recalcDebounced();
   }
 
   List<Map<String, dynamic>> items() => [
@@ -334,6 +482,7 @@ mixin _CalcMixin<T extends StatefulWidget> on State<T> {
             'cartons': int.tryParse(l.cartons.text) ?? 0,
             'trays': int.tryParse(l.trays.text) ?? 0,
             if (l.batchCode.text.trim().isNotEmpty) 'batchCode': l.batchCode.text.trim().toUpperCase(),
+            if (l.batchId != null) 'batchId': l.batchId,
           },
       ];
 
@@ -359,10 +508,17 @@ mixin _CalcMixin<T extends StatefulWidget> on State<T> {
     }
   }
 
-  void addLine() => setState(() => lines.add(_Line()..productId = products.isNotEmpty ? products.first['id'] as int : null));
-  void scanPick(int i, int productId) => setState(() { lines[i].productId = productId; recalcDebounced(); });
+  void addLine() {
+    final line = _Line()..productId = products.isNotEmpty ? products.first['id'] as int : null;
+    setState(() => lines.add(line));
+    if (line.productId != null) loadBatches(line.productId!);
+  }
+
   void removeLine(int i) => setState(() { lines.removeAt(i).dispose(); recalc(); });
-  void disposeLines() { _debounce?.cancel(); for (final l in lines) { l.dispose(); } }
+  void disposeLines() {
+    _debounce?.cancel();
+    for (final l in lines) { l.dispose(); }
+  }
 }
 
 /// Date picker field that always shows the weekday with the date.
@@ -528,7 +684,7 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
       'date': date.toIso8601String(),
       'lines': [
         for (final l in lines)
-          {'productId': l.productId, 'cartons': l.cartons.text, 'trays': l.trays.text, 'batchCode': l.batchCode.text},
+          {'productId': l.productId, 'batchId': l.batchId, 'cartons': l.cartons.text, 'trays': l.trays.text, 'batchCode': l.batchCode.text},
       ],
     };
     // survive app restarts too (fire-and-forget)
@@ -583,6 +739,7 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
       for (final ld in ls.cast<Map<String, dynamic>>()) {
         final l = _Line();
         l.productId = ld['productId'] as int?;
+        l.batchId = ld['batchId'] as int?;
         l.cartons.text = ld['cartons'] as String? ?? '';
         l.trays.text = ld['trays'] as String? ?? '';
         l.batchCode.text = ld['batchCode'] as String? ?? '';
@@ -654,9 +811,26 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
       showErr(context, 'Please type the destination name.');
       return;
     }
+    final list = nonZeroItems();
+    // A product with production batches must never be dispatched without a
+    // batch. Previously the inventory quantity was reduced but used_cb stayed
+    // untouched, which is exactly why old dispatched stock kept appearing in
+    // the batch register. Products that only have opening/unassigned stock
+    // remain dispatchable through the manual field.
+    for (final item in list) {
+      final pid = item['productId'] as int?;
+      if (pid == null) continue;
+      if (batchLoading.contains(pid)) {
+        showErr(context, 'Batch stock is still loading. Please select a batch and try again.');
+        return;
+      }
+      if ((batchOptions[pid]?.isNotEmpty ?? false) && (item['batchCode'] as String?) == null) {
+        showErr(context, 'Select a batch code for every product line before dispatch.');
+        return;
+      }
+    }
     setState(() => saving = true);
     try {
-      final list = nonZeroItems();
       final loc = await _locationStamp();
       final json = await context.read<AuthController>().api.post('/dispatch', {
         'dispatchDate': ymd(date),
@@ -670,7 +844,7 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
       rememberDest(_destination); // company's own list grows automatically
       _clearDraft(); // success — draft is no longer needed (memory + disk)
       _hasDraft = false;
-      for (final l in lines) { l.cartons.clear(); l.trays.clear(); l.batchCode.clear(); }
+      for (final l in lines) { l.cartons.clear(); l.trays.clear(); l.batchCode.clear(); l.batchId = null; }
       remarks.clear();
       showOk(context, '${json['code']} dispatched to $_destination · ${qty(json['totals']['grossWeight'])} kg gross (${json['weekday']}).');
       context.push('/dispatch/$id');
@@ -786,7 +960,7 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
               ? (productsLoaded
                   ? _NoProductsHint(onAdd: () => context.go('/products'))
                   : const SizedBox(height: 60, child: Center(child: CircularProgressIndicator())))
-              : _LinesEditor(products: products, lines: lines, onAdd: addLine, onRemove: removeLine, onChanged: recalcDebounced, onScanPick: scanPick, showBatch: true),
+              : _LinesEditor(products: products, lines: lines, onAdd: addLine, onRemove: removeLine, onChanged: recalcDebounced, onProductChanged: selectProduct, batchOptions: batchOptions, batchLoading: batchLoading, showBatch: true),
         ]));
         final side = SectionCard(title: 'Before you dispatch', child: Column(children: [
           if (calc != null) ...[
@@ -896,7 +1070,7 @@ class _CalculatorTabState extends State<_CalculatorTab> with _CalcMixin {
               ? (productsLoaded
                   ? _NoProductsHint(onAdd: () => context.go('/products'))
                   : const SizedBox(height: 60, child: Center(child: CircularProgressIndicator())))
-              : _LinesEditor(products: products, lines: lines, onAdd: addLine, onRemove: removeLine, onChanged: recalcDebounced, onScanPick: scanPick),
+              : _LinesEditor(products: products, lines: lines, onAdd: addLine, onRemove: removeLine, onChanged: recalcDebounced, onProductChanged: selectProduct),
         ]));
         final side = SectionCard(title: 'Calculated Weights', child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           if (calc != null) ...[

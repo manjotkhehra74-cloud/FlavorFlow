@@ -136,7 +136,10 @@ class _AdjustmentFormDialogState extends State<AdjustmentFormDialog> {
     super.initState();
     context.read<AuthController>().api.get('/products').then((json) {
       setState(() {
-        products = ((json as Map)['products'] as List).cast<Map<String, dynamic>>();
+        products = ((json as Map)['products'] as List)
+            .cast<Map<String, dynamic>>()
+            .where((p) => (p['active'] as num? ?? 1) != 0)
+            .toList();
         productId = products.isNotEmpty ? products.first['id'] as int : null;
       });
     }).catchError((e) { if (mounted) showErr(context, e); });
