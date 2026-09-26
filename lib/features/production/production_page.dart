@@ -410,8 +410,8 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
         width: 440,
         child: products.isEmpty
             ? const SizedBox(height: 90, child: Center(child: CircularProgressIndicator()))
-            // Scrollable: on phones (adjustPan + frozen insets) a tall dialog
-            // could overlap its own buttons — scrolling keeps fields inside.
+            // Scrollable: on phones a tall dialog can overlap its own
+            // buttons — scrolling keeps fields inside while the IME resizes the window.
             : SingleChildScrollView(
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
                 TextField(
