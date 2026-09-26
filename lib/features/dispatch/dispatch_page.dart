@@ -184,8 +184,26 @@ class _LinesEditor extends StatelessWidget {
                 icon: Icon(Icons.remove_circle_outline_rounded, color: lines.length <= 1 ? scheme.outline : scheme.error),
               ),
             ]),
-            const SizedBox(height: 10),
-            // Row 2: quantities (and optional batch code) with room to breathe.
+            // Batch selector gets its own full-width row directly under the
+            // product. This keeps the production date/code/available stock
+            // readable on phones instead of squeezing it beside quantities.
+            if (showBatch) ...[
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: _BatchField(
+                  line: lines[i],
+                  batches: batchOptions[lines[i].productId] ?? const [],
+                  loading: lines[i].productId != null && batchLoading.contains(lines[i].productId),
+                  onChanged: (value) {
+                    lines[i].batchCode.text = '${value?['code'] ?? ''}'.toUpperCase();
+                    lines[i].batchId = value?['id'] as int?;
+                    onChanged();
+                  },
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+            // CB and trays are entered on their own row below the batch.
             Padding(
               padding: const EdgeInsets.only(right: 6),
               child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -205,22 +223,6 @@ class _LinesEditor extends StatelessWidget {
                       keyboardType: TextInputType.number,
                       decoration: InputDecoration(labelText: U.tray, helperText: lines[i].productId == null ? null : '${_prod(products, lines[i].productId)['bottles_per_tray']}/${U.trayLc}', helperMaxLines: 1),
                       onChanged: (_) => onChanged(),
-                    ),
-                  ),
-                ],
-                if (showBatch) ...[
-                  const SizedBox(width: 10),
-                  Expanded(
-                    flex: 2,
-                    child: _BatchField(
-                      line: lines[i],
-                      batches: batchOptions[lines[i].productId] ?? const [],
-                      loading: lines[i].productId != null && batchLoading.contains(lines[i].productId),
-                      onChanged: (value) {
-                        lines[i].batchCode.text = '${value?['code'] ?? ''}'.toUpperCase();
-                        lines[i].batchId = value?['id'] as int?;
-                        onChanged();
-                      },
                     ),
                   ),
                 ],
@@ -254,7 +256,7 @@ class _BatchField extends StatelessWidget {
       return TextField(
         readOnly: true,
         decoration: InputDecoration(
-          labelText: U.ize('Batch code'),
+          labelText: U.ize('Batch code · date · available stock'),
           hintText: 'Loading batches…',
           suffixIcon: const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))),
         ),
@@ -268,7 +270,7 @@ class _BatchField extends StatelessWidget {
         controller: line.batchCode,
         textCapitalization: TextCapitalization.characters,
         decoration: InputDecoration(
-          labelText: U.ize('Batch code'),
+          labelText: U.ize('Batch code · date · available stock'),
           hintText: 'No batch stock — enter code if known',
           helperText: U.ize('Stock deducts batch-wise'),
           helperMaxLines: 1,
@@ -294,7 +296,7 @@ class _BatchField extends StatelessWidget {
       initialValue: hasSelected ? selectedBatch!['id'] as int : null,
       isExpanded: true,
       decoration: InputDecoration(
-        labelText: U.ize('Batch code'),
+        labelText: U.ize('Batch code · date · available stock'),
         helperText: selectedBatch == null ? U.ize('Select batch to deduct stock') : 'Available: ${_batchAvailability(selectedBatch)}',
         helperMaxLines: 1,
         suffixIcon: IconButton(
