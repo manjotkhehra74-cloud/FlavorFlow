@@ -26,6 +26,7 @@ class ProductionPage extends StatefulWidget {
 
 class _ProductionPageState extends State<ProductionPage> {
   String _status = '';
+  String _query = '';
   late Future<List<Map<String, dynamic>>> _future;
 
   @override
@@ -52,7 +53,17 @@ class _ProductionPageState extends State<ProductionPage> {
         if (snap.hasError) return ErrorState(snap.error!, onRetry: _reload);
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
         final rows = snap.data!;
+        final visibleRows = _query.trim().isEmpty
+            ? rows
+            : rows.where((b) {
+                final haystack = '${b['code'] ?? ''} ${b['product_name'] ?? ''} ${b['item_code'] ?? ''}'.toLowerCase();
+                return haystack.contains(_query.trim().toLowerCase());
+              }).toList();
         return ListView(padding: const EdgeInsets.all(20), children: [
+          _ProductionHealthCard(rows: rows),
+          const SizedBox(height: 12),
+          _ProductionMetrics(rows: rows),
+          const SizedBox(height: 16),
           // Chips in a Wrap so they never overlap the table below on narrow screens.
           Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
             for (final s in ['', 'PLANNED', 'IN_PROGRESS', 'COMPLETED'])
@@ -74,15 +85,26 @@ class _ProductionPageState extends State<ProductionPage> {
                 ),
               ),
           ]),
+          const SizedBox(height: 12),
+          TextField(
+            onChanged: (value) => setState(() => _query = value),
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.search_rounded),
+              hintText: U.ize('Search batch or product'),
+              suffixIcon: _query.isEmpty
+                  ? null
+                  : IconButton(icon: const Icon(Icons.clear_rounded), onPressed: () => setState(() => _query = '')),
+            ),
+          ),
           const SizedBox(height: 16),
           SectionCard(
-            title: U.ize('Production Batches'),
-            child: rows.isEmpty
-                ? EmptyState(U.ize('No batches yet'))
+            title: U.ize('Batch Execution'),
+            child: visibleRows.isEmpty
+                ? EmptyState(U.ize(_query.trim().isEmpty ? 'No batches yet' : 'No matching batches'))
                 : AppDataTable(
                     columns: [U.ize('Batch'), 'Product', 'Planned ${U.cb}', 'Produced ${U.cb}', if (CompanyProfile.usesTrays) U.tray, 'Gross kg (planned)', 'Planned Date', 'Status', 'Actions'],
                     rows: [
-                      for (final b in rows)
+                      for (final b in visibleRows)
                         [
                           Text(b['code'] as String, style: const TextStyle(fontWeight: FontWeight.w700)),
                           ItemNameCell(name: '${b['product_name']}', code: '${b['item_code'] ?? ''}'), // not ItemCode.of — b['code'] is the batch code
@@ -240,6 +262,132 @@ class _ProductionPageState extends State<ProductionPage> {
       _reload();
       if (context.mounted) showOk(context, '${b['code']} completed — stock updated, watchers notified.');
     }
+  }
+}
+
+int _productionInt(Object? value) {
+  if (value is num) return value.round();
+  return int.tryParse('${value ?? ''}') ?? 0;
+}
+
+class _ProductionHealthCard extends StatelessWidget {
+  final List<Map<String, dynamic>> rows;
+  const _ProductionHealthCard({required this.rows});
+
+  @override
+  Widget build(BuildContext context) {
+    final planned = rows.fold<int>(0, (sum, row) => sum + _productionInt(row['planned_cb']));
+    final produced = rows.fold<int>(0, (sum, row) => sum + _productionInt(row['produced_cb']));
+    final inProgress = rows.where((row) => '${row['status']}'.toUpperCase() == 'IN_PROGRESS').length;
+    final completed = rows.where((row) => '${row['status']}'.toUpperCase() == 'COMPLETED').length;
+    final plannedCount = rows.where((row) => '${row['status']}'.toUpperCase() == 'PLANNED').length;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 17),
+      decoration: BoxDecoration(
+        gradient: AppBrand.gradient,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: AppBrand.blue.withValues(alpha: .18), blurRadius: 14, offset: const Offset(0, 7))],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Expanded(child: Text('Production Overview', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800))),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(color: Colors.white.withValues(alpha: .18), borderRadius: BorderRadius.circular(20)),
+            child: Text('${rows.length} batches', style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600)),
+          ),
+        ]),
+        const SizedBox(height: 8),
+        Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Text(qtyInt(planned), style: const TextStyle(color: Colors.white, fontSize: 34, fontWeight: FontWeight.w800, height: 1)),
+          const SizedBox(width: 8),
+          Padding(padding: const EdgeInsets.only(bottom: 2), child: Text('${U.cb} planned', style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600))),
+        ]),
+        const SizedBox(height: 12),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            height: 7,
+            decoration: BoxDecoration(color: Colors.white.withValues(alpha: .23)),
+            child: FractionallySizedBox(
+              widthFactor: planned <= 0 ? 0.0 : (produced / planned).clamp(0.0, 1.0).toDouble(),
+              alignment: Alignment.centerLeft,
+              child: Container(decoration: const BoxDecoration(color: Color(0xFF63E6C1))),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(child: Text('${qtyInt(produced)} ${U.cb} produced', style: const TextStyle(color: Colors.white, fontSize: 12.5))),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              '$inProgress in progress · $plannedCount planned · $completed complete',
+              textAlign: TextAlign.right,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ]),
+      ]),
+    );
+  }
+}
+
+class _ProductionMetrics extends StatelessWidget {
+  final List<Map<String, dynamic>> rows;
+  const _ProductionMetrics({required this.rows});
+
+  @override
+  Widget build(BuildContext context) {
+    final planned = rows.fold<int>(0, (sum, row) => sum + _productionInt(row['planned_cb']));
+    final produced = rows.fold<int>(0, (sum, row) => sum + _productionInt(row['produced_cb']));
+    final inProgress = rows.where((row) => '${row['status']}'.toUpperCase() == 'IN_PROGRESS').length;
+    final completed = rows.where((row) => '${row['status']}'.toUpperCase() == 'COMPLETED').length;
+    return SizedBox(
+      height: 104,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          _ProductionMetric(label: 'Planned ${U.cb}', value: qtyInt(planned), icon: Icons.event_note_outlined, tint: AppColors.blue),
+          _ProductionMetric(label: 'Produced ${U.cb}', value: qtyInt(produced), icon: Icons.factory_outlined, tint: AppColors.teal),
+          _ProductionMetric(label: 'In progress', value: '$inProgress', icon: Icons.pending_actions_rounded, tint: AppColors.orange),
+          _ProductionMetric(label: 'Completed', value: '$completed', icon: Icons.check_circle_outline_rounded, tint: AppColors.green),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProductionMetric extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color tint;
+  const _ProductionMetric({required this.label, required this.value, required this.icon, required this.tint});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: 166,
+      margin: const EdgeInsets.only(right: 10),
+      padding: const EdgeInsets.fromLTRB(14, 12, 12, 10),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant),
+        boxShadow: [BoxShadow(color: scheme.shadow.withValues(alpha: .06), blurRadius: 7, offset: const Offset(0, 3))],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [Icon(icon, size: 18, color: tint), const Spacer(), Container(width: 7, height: 7, decoration: BoxDecoration(shape: BoxShape.circle, color: tint))]),
+        const Spacer(),
+        Text(value, style: TextStyle(color: scheme.onSurface, fontSize: 20, fontWeight: FontWeight.w800)),
+        Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5, fontWeight: FontWeight.w600)),
+      ]),
+    );
   }
 }
 
