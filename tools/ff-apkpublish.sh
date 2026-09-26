@@ -4,7 +4,7 @@
 #   "⬇ Download for Android (APK)" button ethe hi point karda hai)
 #
 # SOURCE — phone ton upload di lorh NAHI, VM khud CircleCI ton download kardi hai:
-#   curl -s https://raw.githubusercontent.com/manjotkhehra74-cloud/FlavorFlow/arena/01a0858b-flavorflow/tools/ff-apkpublish.sh | sudo bash
+#   curl -s https://raw.githubusercontent.com/manjotkhehra74-cloud/FlavorFlow/arena/01a0dc70-flavorflow/tools/ff-apkpublish.sh | sudo bash
 #     → branch di sab ton navi SUCCESSFUL build-play-store-release da FlavorFlow-release.apk
 #   ... | sudo bash -s 211                    khaas CircleCI build number
 #   ... | sudo bash -s 'https://.../x.apk'    kise vi URL ton
@@ -21,7 +21,7 @@ DEST="$WEB/download/flavorflow-erp.apk"
 INFO="$WEB/download/apk-info.txt"
 BACKUPS="${FF_BACKUPS:-/opt/flavorflow-saas/backups}"
 REPO="manjotkhehra74-cloud/FlavorFlow"
-BRANCH="${FF_BRANCH:-arena/01a0858b-flavorflow}"
+BRANCH="${FF_BRANCH:-arena/01a0dc70-flavorflow}"
 BRANCH_ENC=$(printf '%s' "$BRANCH" | sed 's#/#%2F#g')
 ARG="${1:-}"
 [ "$ARG" = "ci" ] && ARG=""
