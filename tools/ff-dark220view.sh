@@ -6,6 +6,7 @@
 # and Dispatch batch selectors:
 #   2026-09-21 / 6I1516AKS
 #   2026-09-25 / 6I0021AKS
+#   2026-09-26 / 6I0021AKS (today's newly added stock)
 #
 # This is a view/API filter only. It does not delete or rewrite historical
 # batches, dispatches, or reports that are intended to retain history.
@@ -47,7 +48,7 @@ if (!m.includes('ff-dark220-visible-batches')) {
   const filter =
     "    /* ff-dark220-visible-batches */\n" +
     "    const dark220 = String(productNames.get(r.pid) || '').toLowerCase().replace(/[^a-z0-9]+/g, '') === 'darksoya220gm';\n" +
-    "    if (dark220) { const d = String(r.d || '').slice(0, 10); const c = String(r.code || '').trim().toUpperCase(); if (!((d === '2026-09-21' && c === '6I1516AKS') || (d === '2026-09-25' && c === '6I0021AKS'))) continue; }\n";
+    "    if (dark220) { const d = String(r.d || '').slice(0, 10); const c = String(r.code || '').trim().toUpperCase(); if (!((d === '2026-09-21' && c === '6I1516AKS') || (d === '2026-09-25' && c === '6I0021AKS') || (d === '2026-09-26' && c === '6I0021AKS'))) continue; }\n";
   m = m.slice(0, after) + filter + m.slice(after);
   fs.writeFileSync(mf, m);
   changed = true;
@@ -78,7 +79,7 @@ if (!dsrc.includes('ff-dark220-dispatch-visible')) {
     const viewVars =
       "  /* ff-dark220-dispatch-visible */\n" +
       "  const dark220 = String(product.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '') === 'darksoya220gm';\n" +
-      "  const dark220Where = dark220 ? \"AND ((date(COALESCE(b.planned_date, '')) = '2026-09-21' AND UPPER(TRIM(COALESCE(b.code, ''))) = '6I1516AKS') OR (date(COALESCE(b.planned_date, '')) = '2026-09-25' AND UPPER(TRIM(COALESCE(b.code, ''))) = '6I0021AKS')) \" : '';\n";
+      "  const dark220Where = dark220 ? \"AND ((date(COALESCE(b.planned_date, '')) = '2026-09-21' AND UPPER(TRIM(COALESCE(b.code, ''))) = '6I1516AKS') OR (date(COALESCE(b.planned_date, '')) = '2026-09-25' AND UPPER(TRIM(COALESCE(b.code, ''))) = '6I0021AKS') OR (date(COALESCE(b.planned_date, '')) = '2026-09-26' AND UPPER(TRIM(COALESCE(b.code, ''))) = '6I0021AKS')) \" : '';\n";
     if (!block.includes(colsAnchor)) {
       console.log('DISPATCH: columns anchor not found — module changed, dispatch unchanged');
     } else {
