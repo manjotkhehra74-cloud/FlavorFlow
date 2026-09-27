@@ -159,6 +159,17 @@ class _ReportsPageState extends State<ReportsPage> {
 
   List<String> get _columns => U.table((_data?['columns'] as List? ?? const []).cast<String>(), const []).$1;
 
+  /// Friendly mobile labels keep the report library readable while the
+  /// server-provided report id and data remain unchanged.
+  String _displayTitle(Map<String, dynamic> report) {
+    final key = '${report['id'] ?? ''} ${report['title'] ?? ''}'.toLowerCase();
+    if (key.contains('inventory') && key.contains('stock')) return 'Stock on Hand';
+    if (key.contains('batch')) return 'Batch Register';
+    if (key.contains('production')) return 'Production';
+    if (key.contains('dispatch')) return 'Dispatch History';
+    return '${report['title'] ?? ''}';
+  }
+
   /// Empty-state text that tells a NEW company what feeds each report.
   String _emptyHint(String id) {
     if (id.contains('raw')) return 'No data yet — add raw materials (Raw Material → New Material) and receive stock; consumption appears here.';
@@ -195,7 +206,7 @@ class _ReportsPageState extends State<ReportsPage> {
     setState(() => _exporting = true);
     try {
       final bytes = await ReportPdf.build(
-        title: U.ize(_data!['title'] as String),
+        title: U.ize(_displayTitle(_selected!)),
         desc: U.ize(_selected!['desc'] as String? ?? ''),
         columns: _columns,
         rows: _rows,
@@ -265,7 +276,7 @@ class _ReportsPageState extends State<ReportsPage> {
           borderRadius: BorderRadius.circular(5),
           border: Border.all(color: sel ? AppColors.blue : const Color(0xFFC3CEDA)),
         ),
-        child: Text(U.ize(tr(r['title'] as String)),
+        child: Text(U.ize(tr(_displayTitle(r))),
             style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: sel ? Theme.of(context).colorScheme.onPrimaryContainer : Theme.of(context).colorScheme.onSurface)),
       ),
     );
@@ -286,7 +297,7 @@ class _ReportsPageState extends State<ReportsPage> {
           ),
           padding: EdgeInsets.fromLTRB(sel ? 9 : 12, 9, 10, 9),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(U.ize(tr(r['title'] as String)),
+            Text(U.ize(tr(_displayTitle(r))),
                 style: TextStyle(fontSize: 12.6, fontWeight: FontWeight.w600, color: sel ? Theme.of(context).colorScheme.onPrimaryContainer : Theme.of(context).colorScheme.onSurface)),
             const SizedBox(height: 2),
             Text(U.ize(tr(r['desc'] as String)),
@@ -302,7 +313,7 @@ class _ReportsPageState extends State<ReportsPage> {
   Widget _reportBody() {
     if (_selected == null) return const SizedBox.shrink();
     return SectionCard(
-      title: U.ize(_selected!['title'] as String),
+      title: U.ize(_displayTitle(_selected!)),
       stackTrailingOnNarrow: true,
       trailing: Wrap(spacing: 8, runSpacing: 8, children: [
         OutlinedButton.icon(
