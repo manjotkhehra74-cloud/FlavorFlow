@@ -423,14 +423,16 @@ class _ProductionBatchCard extends StatelessWidget {
                 const SizedBox(height: 3),
                 Text('Batch Code: $batchCode', style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w500)),
               ])),
-              if (status.isNotEmpty) StatusChip(status),
               IconButton(tooltip: expanded ? 'Collapse' : 'Expand', onPressed: onToggle, icon: Icon(expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded)),
             ]),
           ),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(28, 0, 14, 12),
-          child: Text('Mfg. Date: ${fmtDate(batch['planned_date'])}', style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+          child: Row(children: [
+            Expanded(child: Text('Mfg. Date: ${fmtDate(batch['planned_date'])}', style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w600))),
+            if (status.isNotEmpty) StatusChip(status),
+          ]),
         ),
         if (expanded) ...[
           Divider(height: 1, color: scheme.outlineVariant),
