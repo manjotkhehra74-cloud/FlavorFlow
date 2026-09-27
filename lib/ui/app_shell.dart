@@ -257,6 +257,7 @@ class _AppShellState extends State<AppShell> {
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
         title: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text(title)),
+        centerTitle: title == tr('Reports'),
         titleSpacing: 0,
         actions: [topBar.actionsPadding(child: topBar.bellAction(context)), topBar.userAction(context, compact: true)],
       ),

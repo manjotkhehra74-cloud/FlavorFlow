@@ -36,29 +36,18 @@ class _ReportsOverview extends StatelessWidget {
     final dispatch = _count('dispatch|truck|shipment');
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Container(
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+        padding: const EdgeInsets.fromLTRB(18, 20, 18, 20),
         decoration: BoxDecoration(
           gradient: AppBrand.gradient,
           borderRadius: BorderRadius.circular(20),
           boxShadow: [BoxShadow(color: AppBrand.blue.withValues(alpha: .18), blurRadius: 14, offset: const Offset(0, 7))],
         ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            const Expanded(child: Text('Reports Overview', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800))),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(color: Colors.white.withValues(alpha: .18), borderRadius: BorderRadius.circular(20)),
-              child: Text('${reports.length} available', style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600)),
-            ),
-          ]),
-          const SizedBox(height: 8),
-          Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Text('${reports.length}', style: const TextStyle(color: Colors.white, fontSize: 38, fontWeight: FontWeight.w800, height: 1)),
-            const SizedBox(width: 8),
-            const Padding(padding: EdgeInsets.only(bottom: 3), child: Text('reports', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600))),
-          ]),
-          const SizedBox(height: 8),
-          const Text('PDF and Excel exports available', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+        child: Column(children: [
+          const Text('Reports Overview', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 10),
+          Text('${reports.length}', style: const TextStyle(color: Colors.white, fontSize: 52, fontWeight: FontWeight.w800, height: .95)),
+          const SizedBox(height: 9),
+          const Text('PDF and Excel exports available', style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w500)),
         ]),
       ),
       const SizedBox(height: 12),
@@ -69,11 +58,11 @@ class _ReportsOverview extends StatelessWidget {
           physics: const NeverScrollableScrollPhysics(),
           mainAxisSpacing: 10,
           crossAxisSpacing: 10,
-          childAspectRatio: constraints.maxWidth >= 700 ? 1.7 : 1.35,
+          childAspectRatio: constraints.maxWidth >= 700 ? 1.5 : 1.25,
           children: [
-            _ReportMetric(label: 'Stock', value: '$stock', icon: Icons.inventory_2_outlined, tint: AppColors.blue),
-            _ReportMetric(label: 'Production', value: '$production', icon: Icons.factory_outlined, tint: AppColors.teal),
-            _ReportMetric(label: 'Dispatch', value: '$dispatch', icon: Icons.local_shipping_outlined, tint: AppColors.orange),
+            _ReportMetric(label: 'Stock', value: '$stock', sub: 'reports', icon: Icons.inventory_2_outlined, tint: AppColors.blue),
+            _ReportMetric(label: 'Production', value: '$production', sub: 'reports', icon: Icons.factory_outlined, tint: AppColors.teal),
+            _ReportMetric(label: 'Dispatch', value: '$dispatch', sub: 'reports', icon: Icons.local_shipping_outlined, tint: AppColors.orange),
           ],
         );
       }),
@@ -84,9 +73,10 @@ class _ReportsOverview extends StatelessWidget {
 class _ReportMetric extends StatelessWidget {
   final String label;
   final String value;
+  final String sub;
   final IconData icon;
   final Color tint;
-  const _ReportMetric({required this.label, required this.value, required this.icon, required this.tint});
+  const _ReportMetric({required this.label, required this.value, required this.sub, required this.icon, required this.tint});
 
   @override
   Widget build(BuildContext context) {
@@ -100,10 +90,10 @@ class _ReportMetric extends StatelessWidget {
         boxShadow: [BoxShadow(color: scheme.shadow.withValues(alpha: .06), blurRadius: 7, offset: const Offset(0, 3))],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [Icon(icon, size: 18, color: tint), const Spacer(), Container(width: 7, height: 7, decoration: BoxDecoration(shape: BoxShape.circle, color: tint))]),
+        Row(children: [Icon(icon, size: 20, color: tint), const Spacer(), Container(width: 7, height: 7, decoration: BoxDecoration(shape: BoxShape.circle, color: tint))]),
         const Spacer(),
-        Text(value, style: TextStyle(color: scheme.onSurface, fontSize: 21, fontWeight: FontWeight.w800)),
-        Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11, fontWeight: FontWeight.w700)),
+        Text(value, style: TextStyle(color: scheme.onSurface, fontSize: 22, fontWeight: FontWeight.w800)),
+        Text('$label · $sub', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w700)),
       ]),
     );
   }
@@ -236,12 +226,10 @@ class _ReportsPageState extends State<ReportsPage> {
             _ReportsOverview(reports: reports),
             const SizedBox(height: 16),
             if (!wide) ...[
-              SizedBox(
-                height: 42,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  children: [for (final r in reports) Padding(padding: const EdgeInsets.only(right: 8), child: _reportChip(r))],
-                ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [for (final r in reports) _reportChip(r)],
               ),
               const SizedBox(height: 14),
               _reportBody(),
@@ -316,24 +304,26 @@ class _ReportsPageState extends State<ReportsPage> {
       title: U.ize(_displayTitle(_selected!)),
       stackTrailingOnNarrow: true,
       trailing: Wrap(spacing: 8, runSpacing: 8, children: [
-        OutlinedButton.icon(
+        FilledButton.icon(
           onPressed: (_data == null || _exporting) ? null : _exportPdf,
           icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
           label: Text(tr('Export PDF')),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: const Color(0xFFB91C1C),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            minimumSize: const Size(0, 32),
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFFE65353),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            minimumSize: const Size(0, 36),
           ),
         ),
-        OutlinedButton.icon(
+        FilledButton.icon(
           onPressed: _exporting ? null : _exportExcel,
           icon: const Icon(Icons.table_view_outlined, size: 16),
           label: Text(tr('Export Excel')),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: const Color(0xFF047857),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            minimumSize: const Size(0, 32),
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFF4CAF70),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            minimumSize: const Size(0, 36),
           ),
         ),
       ]),
