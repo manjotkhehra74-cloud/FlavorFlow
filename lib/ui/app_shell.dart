@@ -20,7 +20,7 @@ const List<Map<String, String>> kStandardNav = [
   {'path': '/dashboard', 'label': 'Dashboard', 'icon': 'dashboard', 'perm': 'dashboard.view', 'group': 'Overview'},
   {'path': '/products', 'label': 'Product Master', 'icon': 'inventory_2', 'perm': 'products.view', 'group': 'Operations'},
   {'path': '/inventory', 'label': 'Inventory', 'icon': 'warehouse', 'perm': 'inventory.view', 'group': 'Operations'},
-  {'path': '/packing', 'label': 'Packing Material', 'icon': 'widgets', 'perm': 'packing.view', 'group': 'Operations'},
+  {'path': '/packing', 'label': 'Packing', 'icon': 'widgets', 'perm': 'packing.view', 'group': 'Operations'},
   {'path': '/production', 'label': 'Production', 'icon': 'manufacturing', 'perm': 'production.view', 'group': 'Operations'},
   {'path': '/dispatch', 'label': 'Dispatch', 'icon': 'local_shipping', 'perm': 'dispatch.view', 'group': 'Operations'},
   {'path': '/adjustments', 'label': 'Stock Adjustments', 'icon': 'tune', 'perm': 'adjustments.view', 'group': 'Stock Control'},

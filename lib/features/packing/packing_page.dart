@@ -54,7 +54,7 @@ class _PackingPageState extends State<PackingPage> with SingleTickerProviderStat
             tabAlignment: TabAlignment.start,
             tabs: [
               Tab(text: tr('Packing Stock')),
-              if (CompanyProfile.usesBom) Tab(text: tr('Packing per Product (BOM)')),
+              if (CompanyProfile.usesBom) Tab(text: tr('Packing per Product BOM')),
               Tab(text: tr('Ledger')),
             ],
           ),
@@ -265,6 +265,7 @@ class _StockTabState extends State<_StockTab> {
             : all.where((m) => m['category'] != 'Raw Material').toList();
         final lowCount = all.where((m) => (m['low'] as int? ?? 0) == 1).length;
         final categories = <String>{for (final m in all) m['category'] as String};
+        final categoryList = categories.toList()..sort();
         final hasCodes = ItemCode.anyIn(all);
         final rows = (_category.isEmpty ? all : all.where((m) => m['category'] == _category).toList()).where((m) => ItemCode.matches(m, _q.text)).toList();
         // Pair every "Tray (X)" with its "Tray Cap (X)" right below it —
@@ -278,6 +279,8 @@ class _StockTabState extends State<_StockTab> {
           return n.toUpperCase();
         }
         rows.sort((a, b) => pairKey(a).compareTo(pairKey(b)));
+        Widget chip(Widget child) => Padding(padding: const EdgeInsets.only(right: 8), child: child);
+        Widget action(Widget child) => Padding(padding: const EdgeInsets.only(right: 8), child: child);
         return ListView(padding: const EdgeInsets.all(20), children: [
           _PackingHealthCard(
             itemCount: all.length,
@@ -293,113 +296,122 @@ class _StockTabState extends State<_StockTab> {
             rawOnly: widget.rawOnly,
           ),
           const SizedBox(height: 16),
-          Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-            ChoiceChip(label: Text(tr('All')), selected: _category.isEmpty && !_lowOnly, onSelected: (_) => setState(() { _category = ''; _lowOnly = false; _future = _load(); })),
-            ChoiceChip(
-              label: Text(tr('Low stock')),
-              selected: _lowOnly,
-              avatar: const Icon(Icons.warning_amber_rounded, size: 16),
-              onSelected: (_) => setState(() { _lowOnly = true; _category = ''; _future = _load(); }),
-            ),
-            if (!widget.rawOnly)
-              for (final cat in categories)
-                ChoiceChip(label: Text(tr(cat)), selected: !_lowOnly && _category == cat, onSelected: (_) => setState(() { _category = cat; _lowOnly = false; _future = _load(); })),
-            if (canManage) ...[
-              Padding(
-                padding: const EdgeInsets.only(left: 8),
-                child: FilledButton.icon(
-                  onPressed: () async {
-                    final saved = await showFastDialog<bool>(context, (_) => _TxnDialog(kind: 'receive', rawOnly: widget.rawOnly));
-                    if (saved == true) _reload();
-                  },
-                  icon: const Icon(Icons.south_west_rounded, size: 18),
-                  label: Text(tr('Receive Stock')),
-                ),
-              ),
-              if (auth.canManageBilling)
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    await context.push('/billing/purchases/new');
-                    _reload();
-                  },
-                  icon: const Icon(Icons.receipt_long_outlined, size: 18),
-                  label: Text(tr('Enter Supplier Bill')),
-                ),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  final saved = await showFastDialog<bool>(context, (_) => _TxnDialog(kind: 'consume', rawOnly: widget.rawOnly));
-                  if (saved == true) _reload();
-                },
-                icon: const Icon(Icons.north_east_rounded, size: 18),
-                label: Text(tr('Extra Consumption')),
-              ),
-              if (widget.rawOnly && CompanyProfile.usesRecipes) ...[
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final saved = await showFastDialog<bool>(context, (_) => const _RecipeConsumeDialog());
-                    if (saved == true) _reload();
-                  },
-                  icon: const Icon(Icons.science_rounded, size: 18),
-                  label: Text(tr('Recipe Consumption')),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final saved = await showFastDialog<bool>(context, (_) => const _RecipeEditDialog());
-                    if (saved == true) _reload();
-                  },
-                  icon: const Icon(Icons.edit_note_rounded, size: 18),
-                  label: Text(tr('Edit Recipes')),
-                ),
-              ],
-              if (widget.rawOnly) ...[
-                OutlinedButton.icon(
-                  onPressed: _exporting ? null : () => _exportRaw(all, pdf: true),
-                  icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
-                  label: Text(tr('Export PDF')),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _exporting ? null : () => _exportRaw(all, pdf: false),
-                  icon: const Icon(Icons.table_view_outlined, size: 18),
-                  label: Text(tr('Export Excel')),
-                ),
-              ],
-              OutlinedButton.icon(
-                onPressed: () async {
-                  final saved = await showFastDialog<bool>(context, (_) => _MaterialFormDialog(rawOnly: widget.rawOnly));
-                  if (saved == true) _reload();
-                },
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: Text(tr('New Material')),
-              ),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  final saved = await showImportDialog(context, ImportKind.materials, rawOnly: widget.rawOnly);
-                  if (saved == true) _reload();
-                },
-                icon: const Icon(Icons.upload_file_rounded, size: 18),
-                label: Text(tr('Import')),
-              ),
-              if (hasCodes)
-                OutlinedButton.icon(
-                  onPressed: () => showLabelDialog(context, rows),
-                  icon: const Icon(Icons.qr_code_2_rounded, size: 18),
-                  label: Text(tr('Labels')),
-                ),
-              if (all.isEmpty)
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final added = await showFastDialog<bool>(context, (_) => _StarterListDialog(rawOnly: widget.rawOnly));
-                    if (added == true) _reload();
-                  },
-                  icon: const Icon(Icons.playlist_add_rounded, size: 18),
-                  label: Text(tr('Add industry starter list')),
-                ),
-            ],
-          ]),
-          const SizedBox(height: 12),
           SizedBox(
-            width: 360,
-            child: TextField(
+            height: 42,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                chip(ChoiceChip(label: Text(tr('All')), selected: _category.isEmpty && !_lowOnly, onSelected: (_) => setState(() { _category = ''; _lowOnly = false; _future = _load(); }))),
+                chip(ChoiceChip(
+                  label: Text(tr('Low stock')),
+                  selected: _lowOnly,
+                  avatar: const Icon(Icons.warning_amber_rounded, size: 16),
+                  onSelected: (_) => setState(() { _lowOnly = true; _category = ''; _future = _load(); }),
+                )),
+                if (!widget.rawOnly)
+                  for (final cat in categoryList)
+                    chip(ChoiceChip(label: Text(tr(cat)), selected: !_lowOnly && _category == cat, onSelected: (_) => setState(() { _category = cat; _lowOnly = false; _future = _load(); }))),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (canManage)
+            SizedBox(
+              height: 48,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  action(FilledButton.icon(
+                    onPressed: () async {
+                      final saved = await showFastDialog<bool>(context, (_) => _TxnDialog(kind: 'receive', rawOnly: widget.rawOnly));
+                      if (saved == true) _reload();
+                    },
+                    icon: const Icon(Icons.south_west_rounded, size: 18),
+                    label: Text(tr('Receive Stock')),
+                  )),
+                  action(OutlinedButton.icon(
+                    onPressed: () async {
+                      final saved = await showFastDialog<bool>(context, (_) => _TxnDialog(kind: 'consume', rawOnly: widget.rawOnly));
+                      if (saved == true) _reload();
+                    },
+                    icon: const Icon(Icons.north_east_rounded, size: 18),
+                    label: Text(tr('Extra Consumption')),
+                  )),
+                  action(OutlinedButton.icon(
+                    onPressed: () async {
+                      final saved = await showFastDialog<bool>(context, (_) => _MaterialFormDialog(rawOnly: widget.rawOnly));
+                      if (saved == true) _reload();
+                    },
+                    icon: const Icon(Icons.add_rounded, size: 18),
+                    label: Text(tr('New Material')),
+                  )),
+                  if (auth.canManageBilling)
+                    action(OutlinedButton.icon(
+                      onPressed: () async {
+                        await context.push('/billing/purchases/new');
+                        _reload();
+                      },
+                      icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                      label: Text(tr('Enter Supplier Bill')),
+                    )),
+                  if (widget.rawOnly && CompanyProfile.usesRecipes) ...[
+                    action(OutlinedButton.icon(
+                      onPressed: () async {
+                        final saved = await showFastDialog<bool>(context, (_) => const _RecipeConsumeDialog());
+                        if (saved == true) _reload();
+                      },
+                      icon: const Icon(Icons.science_rounded, size: 18),
+                      label: Text(tr('Recipe Consumption')),
+                    )),
+                    action(OutlinedButton.icon(
+                      onPressed: () async {
+                        final saved = await showFastDialog<bool>(context, (_) => const _RecipeEditDialog());
+                        if (saved == true) _reload();
+                      },
+                      icon: const Icon(Icons.edit_note_rounded, size: 18),
+                      label: Text(tr('Edit Recipes')),
+                    )),
+                  ],
+                  if (widget.rawOnly) ...[
+                    action(OutlinedButton.icon(
+                      onPressed: _exporting ? null : () => _exportRaw(all, pdf: true),
+                      icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                      label: Text(tr('Export PDF')),
+                    )),
+                    action(OutlinedButton.icon(
+                      onPressed: _exporting ? null : () => _exportRaw(all, pdf: false),
+                      icon: const Icon(Icons.table_view_outlined, size: 18),
+                      label: Text(tr('Export Excel')),
+                    )),
+                  ],
+                  action(OutlinedButton.icon(
+                    onPressed: () async {
+                      final saved = await showImportDialog(context, ImportKind.materials, rawOnly: widget.rawOnly);
+                      if (saved == true) _reload();
+                    },
+                    icon: const Icon(Icons.upload_file_rounded, size: 18),
+                    label: Text(tr('Import')),
+                  )),
+                  if (hasCodes)
+                    action(OutlinedButton.icon(
+                      onPressed: () => showLabelDialog(context, rows),
+                      icon: const Icon(Icons.qr_code_2_rounded, size: 18),
+                      label: Text(tr('Labels')),
+                    )),
+                  if (all.isEmpty)
+                    action(OutlinedButton.icon(
+                      onPressed: () async {
+                        final added = await showFastDialog<bool>(context, (_) => _StarterListDialog(rawOnly: widget.rawOnly));
+                        if (added == true) _reload();
+                      },
+                      icon: const Icon(Icons.playlist_add_rounded, size: 18),
+                      label: Text(tr('Add industry starter list')),
+                    )),
+                ],
+              ),
+            ),
+          const SizedBox(height: 12),
+          TextField(
               controller: _q,
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
@@ -409,12 +421,11 @@ class _StockTabState extends State<_StockTab> {
                 suffixIcon: _q.text.isEmpty ? null : IconButton(icon: const Icon(Icons.clear_rounded, size: 18), onPressed: () => setState(_q.clear)),
               ),
             ),
-          ),
           const SizedBox(height: 12),
           SectionCard(
             title: widget.rawOnly
                 ? (_lowOnly ? 'Low Stock Raw Material' : 'Raw Material Stock')
-                : (_lowOnly ? 'Low Stock Packing Material' : 'Packing Material Stock'),
+                : (_lowOnly ? 'Low Stock Packing Material' : 'FlavorFlow Packing Material Stock'),
             child: rows.isEmpty
                 ? EmptyState(_lowOnly
                     ? 'Nothing running low 🎉'
@@ -485,48 +496,25 @@ class _PackingHealthCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = rawOnly ? 'Raw materials tracked' : 'Packing items tracked';
     final title = rawOnly ? 'Raw Material Stock' : 'Packing Stock';
+    final itemLabel = rawOnly ? 'raw materials' : 'items';
     return Container(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 17),
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
       decoration: BoxDecoration(
         gradient: AppBrand.gradient,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [BoxShadow(color: AppBrand.blue.withValues(alpha: .18), blurRadius: 14, offset: const Offset(0, 7))],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Expanded(child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800))),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(color: Colors.white.withValues(alpha: .18), borderRadius: BorderRadius.circular(20)),
-            child: Text('$categoryCount categories', style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600)),
-          ),
-        ]),
+        Center(child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800))),
         const SizedBox(height: 8),
-        Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Text(qtyInt(itemCount), style: const TextStyle(color: Colors.white, fontSize: 34, fontWeight: FontWeight.w800, height: 1)),
-          const SizedBox(width: 8),
-          Padding(padding: const EdgeInsets.only(bottom: 2), child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600))),
-        ]),
+        Center(child: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Text(qtyInt(itemCount), style: const TextStyle(color: Colors.white, fontSize: 43, fontWeight: FontWeight.w800, height: .95)),
+          const SizedBox(width: 7),
+          Padding(padding: const EdgeInsets.only(bottom: 4), child: Text(itemLabel, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600))),
+        ])),
         const SizedBox(height: 12),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: Container(
-            height: 7,
-            decoration: BoxDecoration(color: Colors.white.withValues(alpha: .23)),
-            child: FractionallySizedBox(
-              widthFactor: itemCount <= 0 ? 0.0 : ((itemCount - lowCount) / itemCount).clamp(0.0, 1.0).toDouble(),
-              alignment: Alignment.centerLeft,
-              child: Container(decoration: const BoxDecoration(color: Color(0xFF63E6C1))),
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
-        Row(children: [
-          Expanded(child: Text('${itemCount - lowCount} healthy stock items', style: const TextStyle(color: Colors.white, fontSize: 12.5))),
-          Text('$lowCount running low', style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w700)),
-        ]),
+        Center(child: Text('$categoryCount categories  |  $lowCount low stock', style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500))),
       ]),
     );
   }
@@ -541,17 +529,21 @@ class _PackingMetrics extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 104,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
+    return LayoutBuilder(builder: (context, constraints) {
+      return GridView.count(
+        crossAxisCount: 3,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        mainAxisSpacing: 10,
+        crossAxisSpacing: 10,
+        childAspectRatio: constraints.maxWidth >= 700 ? 1.7 : 1.35,
         children: [
-          _PackingMetric(label: rawOnly ? 'Raw materials' : 'Packing items', value: qtyInt(itemCount), icon: rawOnly ? Icons.science_rounded : Icons.widgets_rounded, tint: AppColors.blue),
+          _PackingMetric(label: rawOnly ? 'Raw Materials' : 'Packing Items', value: qtyInt(itemCount), icon: rawOnly ? Icons.science_rounded : Icons.widgets_rounded, tint: AppColors.blue),
           _PackingMetric(label: 'Categories', value: qtyInt(categoryCount), icon: Icons.category_rounded, tint: AppColors.teal),
-          _PackingMetric(label: 'Running low', value: qtyInt(lowCount), icon: Icons.warning_amber_rounded, tint: AppColors.red),
+          _PackingMetric(label: 'Running Low', value: qtyInt(lowCount), icon: Icons.warning_amber_rounded, tint: AppColors.red),
         ],
-      ),
-    );
+      );
+    });
   }
 }
 
@@ -566,9 +558,7 @@ class _PackingMetric extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
-      width: 166,
-      margin: const EdgeInsets.only(right: 10),
-      padding: const EdgeInsets.fromLTRB(14, 12, 12, 10),
+      padding: const EdgeInsets.fromLTRB(12, 12, 10, 10),
       decoration: BoxDecoration(
         color: scheme.surface,
         borderRadius: BorderRadius.circular(16),
@@ -578,8 +568,8 @@ class _PackingMetric extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [Icon(icon, size: 18, color: tint), const Spacer(), Container(width: 7, height: 7, decoration: BoxDecoration(shape: BoxShape.circle, color: tint))]),
         const Spacer(),
-        Text(value, style: TextStyle(color: scheme.onSurface, fontSize: 20, fontWeight: FontWeight.w800)),
-        Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5, fontWeight: FontWeight.w600)),
+        Text(value, style: TextStyle(color: scheme.onSurface, fontSize: 22, fontWeight: FontWeight.w800)),
+        Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w700)),
       ]),
     );
   }
