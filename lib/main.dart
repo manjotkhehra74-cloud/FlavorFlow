@@ -55,10 +55,16 @@ class _ErpAppState extends State<ErpApp> {
     final auth = context.watch<AuthController>();
     context.watch<L10n>(); // rebuild screens when the language changes
     final settings = context.watch<AppSettings>();
-    Widget scaled(Widget child) => MediaQuery(
-          data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(settings.textScale)),
-          child: child,
-        );
+    Widget scaled(Widget child) {
+      // Do not add a second MediaQuery wrapper for the normal 1.0 scale. The
+      // extra inherited widget was rebuilt with every IME inset frame and made
+      // Android keyboard transitions feel delayed on large pages.
+      if (settings.textScale == 1.0) return child;
+      return MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(settings.textScale)),
+        child: child,
+      );
+    }
     if (!auth.ready) {
       return MaterialApp(
         debugShowCheckedModeBanner: false,

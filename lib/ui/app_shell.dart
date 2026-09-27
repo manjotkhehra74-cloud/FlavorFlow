@@ -99,20 +99,22 @@ class _AppShellState extends State<AppShell> {
     if (mounted) setState(() => _unread = NotificationBadge.count.value);
   }
 
+  bool _keyboardOpen() => WidgetsBinding.instance.platformDispatcher.views.any((v) => v.viewInsets.bottom > 0);
+
   Future<void> _loadUnread() async {
-    if (_polling) return; // previous poll still running
-    // Keyboard open = the user is typing — skip this cycle entirely so the
-    // download/parse never competes with text input (keyboard-lag fix).
-    final keyboardOpen = WidgetsBinding.instance.platformDispatcher.views.any((v) => v.viewInsets.bottom > 0);
-    if (keyboardOpen) return;
+    if (_polling || _keyboardOpen()) return; // never compete with the IME
     _polling = true;
     final syncRevision = NotificationBadge.beginSync();
     try {
       final auth = context.read<AuthController>();
       final json = await auth.api.get('/notifications');
+      // The request may have started before the keyboard opened. Do not parse,
+      // notify, or update inherited UI state during the IME animation.
+      if (_keyboardOpen()) return;
       final items = ((json as Map)['notifications'] as List).cast<Map<String, dynamic>>();
       final unread = items.where((n) => n['is_read'] == 0).length;
       NotificationBadge.syncFromServer(unread, syncRevision);
+      if (_keyboardOpen()) return;
       // New unread items → real phone notifications (sound + status bar).
       await PhoneNotifier.showNew(items);
     } catch (_) {/* transient */} finally {
