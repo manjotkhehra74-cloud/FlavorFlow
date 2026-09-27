@@ -28,6 +28,7 @@ class ProductionPage extends StatefulWidget {
 class _ProductionPageState extends State<ProductionPage> {
   String _status = '';
   String _query = '';
+  int? _expandedBatchId;
   late Future<List<Map<String, dynamic>>> _future;
 
   @override
@@ -62,30 +63,39 @@ class _ProductionPageState extends State<ProductionPage> {
               }).toList();
         return ListView(padding: const EdgeInsets.all(20), children: [
           _ProductionHealthCard(rows: rows),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           _ProductionMetrics(rows: rows),
           const SizedBox(height: 16),
-          // Chips in a Wrap so they never overlap the table below on narrow screens.
-          Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-            for (final s in ['', 'PLANNED', 'IN_PROGRESS', 'COMPLETED'])
-              ChoiceChip(
-                label: Text(s.isEmpty ? tr('All') : tr(s.replaceAll('_', ' ').toLowerCase())),
-                selected: _status == s,
-                onSelected: (_) => setState(() { _status = s; _future = _load(); }),
+          SizedBox(
+            height: 42,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                for (final s in ['', 'PLANNED', 'IN_PROGRESS', 'COMPLETED'])
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(s.isEmpty ? tr('All') : tr(s.replaceAll('_', ' ').toLowerCase())),
+                      selected: _status == s,
+                      onSelected: (_) => setState(() { _status = s; _future = _load(); }),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (auth.can('production.manage'))
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () async {
+                  final saved = await showFastDialog<bool>(context, (_) => const BatchFormDialog());
+                  if (saved == true) _reload();
+                },
+                icon: const Icon(Icons.add_rounded),
+                label: Text(U.ize(tr('New Batch'))),
               ),
-            if (auth.can('production.manage'))
-              Padding(
-                padding: const EdgeInsets.only(left: 8),
-                child: FilledButton.icon(
-                  onPressed: () async {
-                    final saved = await showFastDialog<bool>(context, (_) => const BatchFormDialog());
-                    if (saved == true) _reload();
-                  },
-                  icon: const Icon(Icons.add_rounded),
-                  label: Text(U.ize(tr('New Batch'))),
-                ),
-              ),
-          ]),
+            ),
           const SizedBox(height: 12),
           TextField(
             onChanged: (value) => setState(() => _query = value),
@@ -99,60 +109,34 @@ class _ProductionPageState extends State<ProductionPage> {
           ),
           const SizedBox(height: 16),
           SectionCard(
-            title: U.ize('Batch Execution'),
+            title: U.ize('Batch Register'),
             child: visibleRows.isEmpty
                 ? EmptyState(U.ize(_query.trim().isEmpty ? 'No batches yet' : 'No matching batches'))
-                : AppDataTable(
-                    columns: [U.ize('Batch'), 'Product', 'Planned ${U.cb}', 'Produced ${U.cb}', if (CompanyProfile.usesTrays) U.tray, 'Gross kg (planned)', 'Planned Date', 'Status', 'Actions'],
-                    rows: [
-                      for (final b in visibleRows)
-                        [
-                          Text(b['code'] as String, style: const TextStyle(fontWeight: FontWeight.w700)),
-                          ItemNameCell(name: '${b['product_name']}', code: '${b['item_code'] ?? ''}'), // not ItemCode.of — b['code'] is the batch code
-                          qtyInt(b['planned_cb']),
-                          qtyInt(b['produced_cb']),
-                          if (CompanyProfile.usesTrays) qtyInt(b['produced_trays'] ?? 0),
-                          qty((b['planned_cb'] as num) * (b['weight_per_cb'] as num)),
-                          fmtDate(b['planned_date']),
-                          StatusChip(b['status'] as String),
-                          Row(mainAxisSize: MainAxisSize.min, children: [
-                            IconButton(
-                              tooltip: U.ize('View batch'),
-                              icon: const Icon(Icons.visibility_outlined, size: 19),
-                              onPressed: () async {
-                                await context.push('/production/batches/${b['id']}');
-                                _reload();
-                              },
-                            ),
-                            if (auth.can('production.manage') && b['status'] != 'IN_PROGRESS')
-                              IconButton(
-                                tooltip: U.ize('Edit batch'),
-                                icon: const Icon(Icons.edit_outlined, size: 19),
-                                onPressed: () async {
-                                  final saved = await showFastDialog<bool>(context, (_) => BatchFormDialog(batch: b));
-                                  if (saved == true) _reload();
-                                },
-                              ),
-                            if (auth.can('production.manage'))
-                              IconButton(
-                                tooltip: U.ize('Delete batch'),
-                                icon: Icon(Icons.delete_outline_rounded, size: 19, color: Theme.of(context).colorScheme.error),
-                                onPressed: () => _delete(context, b),
-                              ),
-                            if (canExecute && b['status'] == 'PLANNED')
-                              TextButton.icon(
-                                onPressed: () => _start(context, b),
-                                icon: const Icon(Icons.play_arrow_rounded, size: 18),
-                                label: Text(tr('Start')),
-                              ),
-                            if (canExecute && b['status'] == 'IN_PROGRESS')
-                              TextButton.icon(
-                                onPressed: () => _complete(context, b),
-                                icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
-                                label: Text(tr('Complete')),
-                              ),
-                          ]),
-                        ],
+                : Column(
+                    children: [
+                      for (var i = 0; i < visibleRows.length; i++)
+                        _ProductionBatchCard(
+                          batch: visibleRows[i],
+                          expanded: _expandedBatchId == visibleRows[i]['id'] || (_expandedBatchId == null && i == 0),
+                          canManage: auth.can('production.manage'),
+                          canExecute: canExecute,
+                          onToggle: () {
+                            final id = visibleRows[i]['id'] as int;
+                            final expanded = _expandedBatchId == id || (_expandedBatchId == null && i == 0);
+                            setState(() => _expandedBatchId = expanded ? -1 : id);
+                          },
+                          onView: () async {
+                            await context.push('/production/batches/${visibleRows[i]['id']}');
+                            _reload();
+                          },
+                          onEdit: () async {
+                            final saved = await showFastDialog<bool>(context, (_) => BatchFormDialog(batch: visibleRows[i]));
+                            if (saved == true) _reload();
+                          },
+                          onDelete: () => _delete(context, visibleRows[i]),
+                          onStart: () => _start(context, visibleRows[i]),
+                          onComplete: () => _complete(context, visibleRows[i]),
+                        ),
                     ],
                   ),
           ),
@@ -271,6 +255,11 @@ int _productionInt(Object? value) {
   return int.tryParse('${value ?? ''}') ?? 0;
 }
 
+num _productionNum(Object? value) {
+  if (value is num) return value;
+  return num.tryParse('${value ?? ''}') ?? 0;
+}
+
 class _ProductionHealthCard extends StatelessWidget {
   final List<Map<String, dynamic>> rows;
   const _ProductionHealthCard({required this.rows});
@@ -278,10 +267,17 @@ class _ProductionHealthCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final planned = rows.fold<int>(0, (sum, row) => sum + _productionInt(row['planned_cb']));
-    final produced = rows.fold<int>(0, (sum, row) => sum + _productionInt(row['produced_cb']));
     final inProgress = rows.where((row) => '${row['status']}'.toUpperCase() == 'IN_PROGRESS').length;
     final completed = rows.where((row) => '${row['status']}'.toUpperCase() == 'COMPLETED').length;
     final plannedCount = rows.where((row) => '${row['status']}'.toUpperCase() == 'PLANNED').length;
+
+    Widget status(String value, String label) => Expanded(
+          child: Column(children: [
+            Text(value, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 2),
+            Text(label, style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600)),
+          ]),
+        );
 
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 17),
@@ -291,46 +287,20 @@ class _ProductionHealthCard extends StatelessWidget {
         boxShadow: [BoxShadow(color: AppBrand.blue.withValues(alpha: .18), blurRadius: 14, offset: const Offset(0, 7))],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          const Expanded(child: Text('Production Overview', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800))),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(color: Colors.white.withValues(alpha: .18), borderRadius: BorderRadius.circular(20)),
-            child: Text('${rows.length} batches', style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600)),
-          ),
-        ]),
+        const Text('Production Health', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
         Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
           Text(qtyInt(planned), style: const TextStyle(color: Colors.white, fontSize: 34, fontWeight: FontWeight.w800, height: 1)),
           const SizedBox(width: 8),
           Padding(padding: const EdgeInsets.only(bottom: 2), child: Text('${U.cb} planned', style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600))),
         ]),
-        const SizedBox(height: 12),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: Container(
-            height: 7,
-            decoration: BoxDecoration(color: Colors.white.withValues(alpha: .23)),
-            child: FractionallySizedBox(
-              widthFactor: planned <= 0 ? 0.0 : (produced / planned).clamp(0.0, 1.0).toDouble(),
-              alignment: Alignment.centerLeft,
-              child: Container(decoration: const BoxDecoration(color: Color(0xFF63E6C1))),
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 7),
+        Text('${rows.length} production batches', style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 14),
         Row(children: [
-          Expanded(child: Text('${qtyInt(produced)} ${U.cb} produced', style: const TextStyle(color: Colors.white, fontSize: 12.5))),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              '$inProgress in progress · $plannedCount planned · $completed complete',
-              textAlign: TextAlign.right,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w700),
-            ),
-          ),
+          status('$plannedCount', 'Planned'),
+          status('$inProgress', 'In Progress'),
+          status('$completed', 'Completed'),
         ]),
       ]),
     );
@@ -347,18 +317,23 @@ class _ProductionMetrics extends StatelessWidget {
     final produced = rows.fold<int>(0, (sum, row) => sum + _productionInt(row['produced_cb']));
     final inProgress = rows.where((row) => '${row['status']}'.toUpperCase() == 'IN_PROGRESS').length;
     final completed = rows.where((row) => '${row['status']}'.toUpperCase() == 'COMPLETED').length;
-    return SizedBox(
-      height: 104,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
+    return LayoutBuilder(builder: (context, constraints) {
+      final columns = constraints.maxWidth >= 900 ? 4 : 2;
+      return GridView.count(
+        crossAxisCount: columns,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        mainAxisSpacing: 10,
+        crossAxisSpacing: 10,
+        childAspectRatio: columns == 2 ? 2.65 : 2.15,
         children: [
           _ProductionMetric(label: 'Planned ${U.cb}', value: qtyInt(planned), icon: Icons.event_note_outlined, tint: AppColors.blue),
           _ProductionMetric(label: 'Produced ${U.cb}', value: qtyInt(produced), icon: Icons.factory_outlined, tint: AppColors.teal),
           _ProductionMetric(label: 'In progress', value: '$inProgress', icon: Icons.pending_actions_rounded, tint: AppColors.orange),
           _ProductionMetric(label: 'Completed', value: '$completed', icon: Icons.check_circle_outline_rounded, tint: AppColors.green),
         ],
-      ),
-    );
+      );
+    });
   }
 }
 
@@ -373,8 +348,6 @@ class _ProductionMetric extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
-      width: 166,
-      margin: const EdgeInsets.only(right: 10),
       padding: const EdgeInsets.fromLTRB(14, 12, 12, 10),
       decoration: BoxDecoration(
         color: scheme.surface,
@@ -390,6 +363,122 @@ class _ProductionMetric extends StatelessWidget {
       ]),
     );
   }
+}
+
+class _ProductionBatchCard extends StatelessWidget {
+  final Map<String, dynamic> batch;
+  final bool expanded;
+  final bool canManage;
+  final bool canExecute;
+  final VoidCallback onToggle;
+  final Future<void> Function() onView;
+  final Future<void> Function() onEdit;
+  final Future<void> Function() onDelete;
+  final Future<void> Function() onStart;
+  final Future<void> Function() onComplete;
+
+  const _ProductionBatchCard({
+    required this.batch,
+    required this.expanded,
+    required this.canManage,
+    required this.canExecute,
+    required this.onToggle,
+    required this.onView,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onStart,
+    required this.onComplete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final status = '${batch['status'] ?? ''}';
+    final product = '${batch['product_name'] ?? 'Product'}';
+    final batchCode = '${batch['code'] ?? '—'}';
+    final planned = _productionNum(batch['planned_cb']);
+    final weightPerCb = _productionNum(batch['weight_per_cb']);
+    final gross = planned * weightPerCb;
+    final hasTray = CompanyProfile.usesTrays && (_productionNum(batch['bottles_per_tray']) > 0 || _productionNum(batch['produced_trays']) > 0);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant),
+        boxShadow: [BoxShadow(color: scheme.shadow.withValues(alpha: .06), blurRadius: 7, offset: const Offset(0, 3))],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        InkWell(
+          onTap: onToggle,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 13, 8, 8),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Container(width: 4, height: 46, decoration: BoxDecoration(gradient: AppBrand.gradient, borderRadius: BorderRadius.circular(8))),
+              const SizedBox(width: 10),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('$product Batch', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 3),
+                Text('Batch Code: $batchCode', style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w500)),
+              ])),
+              if (status.isNotEmpty) StatusChip(status),
+              IconButton(tooltip: expanded ? 'Collapse' : 'Expand', onPressed: onToggle, icon: Icon(expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded)),
+            ]),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(28, 0, 14, 12),
+          child: Text('Mfg. Date: ${fmtDate(batch['planned_date'])}', style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+        ),
+        if (expanded) ...[
+          Divider(height: 1, color: scheme.outlineVariant),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(28, 13, 14, 4),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: _quantity('Planned ${U.cb}', qtyInt(batch['planned_cb']), scheme)),
+              Expanded(child: _quantity('Produced ${U.cb}', qtyInt(batch['produced_cb']), scheme)),
+              if (hasTray) Expanded(child: _quantity(U.tray, qtyInt(batch['produced_trays']), scheme)),
+            ]),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(28, 2, 14, 4),
+            child: Text('Gross planned: ${qty(gross)} kg', style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 12, 13),
+            child: Wrap(spacing: 8, runSpacing: 8, children: [
+              if (canExecute && status == 'PLANNED')
+                FilledButton.icon(onPressed: onStart, icon: const Icon(Icons.play_arrow_rounded, size: 17), label: Text(tr('Start'))),
+              if (canExecute && status == 'IN_PROGRESS')
+                FilledButton.icon(onPressed: onComplete, icon: const Icon(Icons.check_circle_outline_rounded, size: 17), label: Text(tr('Complete'))),
+              OutlinedButton.icon(onPressed: onView, icon: const Icon(Icons.visibility_outlined, size: 17), label: Text(tr('View'))),
+              if (canManage)
+                PopupMenuButton<String>(
+                  tooltip: U.ize('More actions'),
+                  onSelected: (value) {
+                    if (value == 'edit') onEdit();
+                    if (value == 'delete') onDelete();
+                  },
+                  itemBuilder: (_) => [
+                    PopupMenuItem(value: 'edit', child: Text(U.ize('Edit batch'))),
+                    PopupMenuItem(value: 'delete', child: Text(U.ize('Delete batch'))),
+                  ],
+                  child: const Padding(padding: EdgeInsets.all(10), child: Icon(Icons.more_horiz_rounded)),
+                ),
+            ]),
+          ),
+        ],
+      ]),
+    );
+  }
+
+  Widget _quantity(String label, String value, ColorScheme scheme) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label, style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 3),
+        Text(value, style: TextStyle(fontSize: 18, color: scheme.onSurface, fontWeight: FontWeight.w800)),
+      ]);
 }
 
 class BatchFormDialog extends StatefulWidget {
