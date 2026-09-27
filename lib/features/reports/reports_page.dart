@@ -17,6 +17,98 @@ class ReportsPage extends StatefulWidget {
   State<ReportsPage> createState() => _ReportsPageState();
 }
 
+class _ReportsOverview extends StatelessWidget {
+  final List<Map<String, dynamic>> reports;
+  const _ReportsOverview({required this.reports});
+
+  int _count(String terms) {
+    final wanted = terms.split('|');
+    return reports.where((r) {
+      final key = '${r['id'] ?? ''} ${r['title'] ?? ''}'.toLowerCase();
+      return wanted.any((term) => key.contains(term));
+    }).length;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final stock = _count('stock|inventory|batch|low');
+    final production = _count('production|packing|bom');
+    final dispatch = _count('dispatch|truck|shipment');
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Container(
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+        decoration: BoxDecoration(
+          gradient: AppBrand.gradient,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [BoxShadow(color: AppBrand.blue.withValues(alpha: .18), blurRadius: 14, offset: const Offset(0, 7))],
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const Expanded(child: Text('Reports Overview', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800))),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(color: Colors.white.withValues(alpha: .18), borderRadius: BorderRadius.circular(20)),
+              child: Text('${reports.length} available', style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600)),
+            ),
+          ]),
+          const SizedBox(height: 8),
+          Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Text('${reports.length}', style: const TextStyle(color: Colors.white, fontSize: 38, fontWeight: FontWeight.w800, height: 1)),
+            const SizedBox(width: 8),
+            const Padding(padding: EdgeInsets.only(bottom: 3), child: Text('reports', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600))),
+          ]),
+          const SizedBox(height: 8),
+          const Text('PDF and Excel exports available', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+        ]),
+      ),
+      const SizedBox(height: 12),
+      LayoutBuilder(builder: (context, constraints) {
+        return GridView.count(
+          crossAxisCount: 3,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          childAspectRatio: constraints.maxWidth >= 700 ? 1.7 : 1.35,
+          children: [
+            _ReportMetric(label: 'Stock', value: '$stock', icon: Icons.inventory_2_outlined, tint: AppColors.blue),
+            _ReportMetric(label: 'Production', value: '$production', icon: Icons.factory_outlined, tint: AppColors.teal),
+            _ReportMetric(label: 'Dispatch', value: '$dispatch', icon: Icons.local_shipping_outlined, tint: AppColors.orange),
+          ],
+        );
+      }),
+    ]);
+  }
+}
+
+class _ReportMetric extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color tint;
+  const _ReportMetric({required this.label, required this.value, required this.icon, required this.tint});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 10, 10),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant),
+        boxShadow: [BoxShadow(color: scheme.shadow.withValues(alpha: .06), blurRadius: 7, offset: const Offset(0, 3))],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [Icon(icon, size: 18, color: tint), const Spacer(), Container(width: 7, height: 7, decoration: BoxDecoration(shape: BoxShape.circle, color: tint))]),
+        const Spacer(),
+        Text(value, style: TextStyle(color: scheme.onSurface, fontSize: 21, fontWeight: FontWeight.w800)),
+        Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11, fontWeight: FontWeight.w700)),
+      ]),
+    );
+  }
+}
+
 class _ReportsPageState extends State<ReportsPage> {
   late Future<List<Map<String, dynamic>>> _future;
   Map<String, dynamic>? _selected;
@@ -130,8 +222,16 @@ class _ReportsPageState extends State<ReportsPage> {
         return LayoutBuilder(builder: (context, c) {
           final wide = c.maxWidth >= 900;
           return ListView(padding: const EdgeInsets.all(18), children: [
+            _ReportsOverview(reports: reports),
+            const SizedBox(height: 16),
             if (!wide) ...[
-              Wrap(spacing: 7, runSpacing: 7, children: [for (final r in reports) _reportChip(r)]),
+              SizedBox(
+                height: 42,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: [for (final r in reports) Padding(padding: const EdgeInsets.only(right: 8), child: _reportChip(r))],
+                ),
+              ),
               const SizedBox(height: 14),
               _reportBody(),
             ] else
