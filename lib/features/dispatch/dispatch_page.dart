@@ -184,9 +184,10 @@ class _LinesEditor extends StatelessWidget {
                 icon: Icon(Icons.remove_circle_outline_rounded, color: lines.length <= 1 ? scheme.outline : scheme.error),
               ),
             ]),
-            // Batch selector gets its own full-width row directly under the
-            // product. Keep a real vertical gap so its floating label never
-            // sits on the product field border on narrow phones.
+            // Keep a real vertical gap between stacked fields on phones. The
+            // calculator has no batch selector, so its quantity field needs
+            // the same separation that the entry tab gives the batch field.
+            if (!showBatch) const SizedBox(height: 12),
             if (showBatch) ...[
               const SizedBox(height: 12),
               Padding(
