@@ -288,6 +288,7 @@ class _MobileBottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (_at('/reports')) return const _ReportsBottomBar();
     final scheme = Theme.of(context).colorScheme;
     return Container(
       decoration: BoxDecoration(
@@ -351,6 +352,64 @@ class _MobileBottomBar extends StatelessWidget {
             ),
           ]),
         ),
+      ),
+    );
+  }
+}
+
+/// Reports reference navigation: keep the shared drawer for all other modules,
+/// while giving the Reports screen the five shortcuts shown in its mobile UI.
+class _ReportsBottomBar extends StatelessWidget {
+  const _ReportsBottomBar();
+
+  @override
+  Widget build(BuildContext context) {
+    final path = GoRouterState.of(context).uri.path;
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(top: BorderSide(color: Theme.of(context).colorScheme.outlineVariant)),
+        boxShadow: [BoxShadow(color: Theme.of(context).shadowColor.withValues(alpha: .28), blurRadius: 14, offset: const Offset(0, -4))],
+      ),
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 72,
+          child: Row(children: [
+            _ReportsNavItem(icon: Icons.home_rounded, label: 'Home', active: path == '/dashboard', route: '/dashboard'),
+            _ReportsNavItem(icon: Icons.bar_chart_rounded, label: 'Reports', active: path == '/reports', route: '/reports'),
+            _ReportsNavItem(icon: Icons.format_list_bulleted_rounded, label: 'Batches', active: path.startsWith('/production'), route: '/production'),
+            _ReportsNavItem(icon: Icons.local_shipping_rounded, label: 'Dispatch', active: path.startsWith('/dispatch'), route: '/dispatch'),
+            _ReportsNavItem(icon: Icons.account_circle_outlined, label: 'Account', active: path.startsWith('/settings'), route: '/settings'),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _ReportsNavItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool active;
+  final String route;
+  const _ReportsNavItem({required this.icon, required this.label, required this.active, required this.route});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = active ? const Color(0xFF0B8F82) : Theme.of(context).colorScheme.onSurface;
+    return Expanded(
+      child: InkWell(
+        onTap: () => context.go(route),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(color: active ? const Color(0xFFDDF7F1) : Colors.transparent, borderRadius: BorderRadius.circular(18)),
+            child: Icon(icon, size: 22, color: color),
+          ),
+          const SizedBox(height: 2),
+          Text(label, style: TextStyle(fontSize: 11, fontWeight: active ? FontWeight.w700 : FontWeight.w500, color: color)),
+        ]),
       ),
     );
   }

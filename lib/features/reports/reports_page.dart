@@ -160,6 +160,17 @@ class _ReportsPageState extends State<ReportsPage> {
     return '${report['title'] ?? ''}';
   }
 
+  String _chipTitle(Map<String, dynamic> report) {
+    final key = '${report['id'] ?? ''} ${report['title'] ?? ''}'.toLowerCase();
+    if (key.contains('inventory') && key.contains('stock')) return 'Stock on Hand';
+    if (key.contains('batch')) return 'Batch Register';
+    if (key.contains('production')) return 'Production History';
+    if (key.contains('summary')) return 'Inventory Summary';
+    if (key.contains('low')) return 'Low Stock';
+    if (key.contains('warehouse') || key.contains('ledger') || key.contains('audit')) return 'Warehouse Logs';
+    return _displayTitle(report);
+  }
+
   /// Empty-state text that tells a NEW company what feeds each report.
   String _emptyHint(String id) {
     if (id.contains('raw')) return 'No data yet — add raw materials (Raw Material → New Material) and receive stock; consumption appears here.';
@@ -264,7 +275,7 @@ class _ReportsPageState extends State<ReportsPage> {
           borderRadius: BorderRadius.circular(5),
           border: Border.all(color: sel ? AppColors.blue : const Color(0xFFC3CEDA)),
         ),
-        child: Text(U.ize(tr(_displayTitle(r))),
+        child: Text(U.ize(tr(_chipTitle(r))),
             style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: sel ? Theme.of(context).colorScheme.onPrimaryContainer : Theme.of(context).colorScheme.onSurface)),
       ),
     );
