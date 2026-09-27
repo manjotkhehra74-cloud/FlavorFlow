@@ -395,8 +395,9 @@ class _SummaryCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 3),
               child: Row(children: [
-                Expanded(child: Text(l['productName'] as String, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
-                Text(lineText(l), style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
+                Expanded(child: Text(l['productName'] as String, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
+                const SizedBox(width: 8),
+                Flexible(child: Text(lineText(l), textAlign: TextAlign.right, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant))),
               ]),
             ),
           const Divider(height: 18),
@@ -901,60 +902,64 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
         ),
       LayoutBuilder(builder: (context, c) {
         final wide = c.maxWidth > 900;
-        final form = SectionCard(title: 'Dispatch Entry', child: Column(children: [
-          Row(children: [
-            Expanded(
-              child: _destTrucks.isEmpty
-                  // no trucks registered for this destination → free typing
-                  ? TextField(controller: truck, textCapitalization: TextCapitalization.characters, decoration: InputDecoration(labelText: tr('Truck / Vehicle No. *'), hintText: 'PB-08-AB-1234'), onChanged: (_) => setState(() {}))
-                  : DropdownButtonFormField<String>(
-                      key: ValueKey('truckdd-$_destination'),
-                      initialValue: _destTrucks.contains(truck.text) ? truck.text : null,
-                      isExpanded: true,
-                      decoration: InputDecoration(labelText: tr('Truck / Vehicle No. *')),
-                      items: [
-                        for (final n in _destTrucks) DropdownMenuItem(value: n, child: Text(n)),
-                        DropdownMenuItem(value: '__other__', child: Text(tr('Other / new truck…'))),
-                      ],
-                      onChanged: (v) async {
-                        if (v == '__other__') {
-                          truck.clear();
-                          final typed = await showDialog<String>(
-                            context: context,
-                            builder: (ctx) {
-                              final c = TextEditingController();
-                              return AlertDialog(
-                                title: Text(tr('Truck / Vehicle No. *')),
-                                content: TextField(controller: c, autofocus: true, textCapitalization: TextCapitalization.characters, decoration: const InputDecoration(hintText: 'PB-08-AB-1234')),
-                                actions: [
-                                  TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('Cancel'))),
-                                  FilledButton(onPressed: () => Navigator.pop(ctx, c.text.trim().toUpperCase()), child: Text(tr('OK'))),
-                                ],
-                              );
-                            },
-                          );
-                          if (typed != null && typed.isNotEmpty) setState(() => truck.text = typed);
-                        } else if (v != null) {
-                          setState(() => truck.text = v);
-                        }
+        final compact = c.maxWidth < 600;
+        final truckField = _destTrucks.isEmpty
+            ? TextField(controller: truck, textCapitalization: TextCapitalization.characters, decoration: InputDecoration(labelText: tr('Truck / Vehicle No. *'), hintText: 'PB-08-AB-1234'), onChanged: (_) => setState(() {}))
+            : DropdownButtonFormField<String>(
+                key: ValueKey('truckdd-$_destination'),
+                initialValue: _destTrucks.contains(truck.text) ? truck.text : null,
+                isExpanded: true,
+                decoration: InputDecoration(labelText: tr('Truck / Vehicle No. *')),
+                items: [
+                  for (final n in _destTrucks) DropdownMenuItem(value: n, child: Text(n)),
+                  DropdownMenuItem(value: '__other__', child: Text(tr('Other / new truck…'))),
+                ],
+                onChanged: (v) async {
+                  if (v == '__other__') {
+                    truck.clear();
+                    final typed = await showDialog<String>(
+                      context: context,
+                      builder: (ctx) {
+                        final c = TextEditingController();
+                        return AlertDialog(
+                          title: Text(tr('Truck / Vehicle No. *')),
+                          content: TextField(controller: c, autofocus: true, textCapitalization: TextCapitalization.characters, decoration: const InputDecoration(hintText: 'PB-08-AB-1234')),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('Cancel'))),
+                            FilledButton(onPressed: () => Navigator.pop(ctx, c.text.trim().toUpperCase()), child: Text(tr('OK'))),
+                          ],
+                        );
                       },
-                    ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(child: _DateField(date: date, onPick: (d) => setState(() => date = d))),
-          ]),
+                    );
+                    if (typed != null && typed.isNotEmpty) setState(() => truck.text = typed);
+                  } else if (v != null) {
+                    setState(() => truck.text = v);
+                  }
+                },
+              );
+        final dateField = _DateField(date: date, onPick: (d) => setState(() => date = d));
+        final destinationField = _DestinationField(
+          options: _destOptions,
+          value: destination,
+          otherCtl: otherDest,
+          onChanged: (v) => setState(() => destination = v),
+          onTyped: (_) => setState(() {}),
+        );
+        final remarksField = TextField(controller: remarks, decoration: InputDecoration(labelText: tr('Remarks')));
+        final form = SectionCard(title: 'Dispatch Entry', child: Column(children: [
+          if (compact) ...[
+            truckField,
+            const SizedBox(height: 12),
+            dateField,
+          ] else
+            Row(children: [Expanded(child: truckField), const SizedBox(width: 12), Expanded(child: dateField)]),
           const SizedBox(height: 12),
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Expanded(child: _DestinationField(
-              options: _destOptions,
-              value: destination,
-              otherCtl: otherDest,
-              onChanged: (v) => setState(() => destination = v),
-              onTyped: (_) => setState(() {}),
-            )),
-            const SizedBox(width: 12),
-            Expanded(child: TextField(controller: remarks, decoration: InputDecoration(labelText: tr('Remarks')))),
-          ]),
+          if (compact) ...[
+            destinationField,
+            const SizedBox(height: 12),
+            remarksField,
+          ] else
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: destinationField), const SizedBox(width: 12), Expanded(child: remarksField)]),
           const SizedBox(height: 20),
           Align(alignment: Alignment.centerLeft, child: Text(CompanyProfile.usesTrays ? '${tr('Loading lines')} (${U.carton.toLowerCase()} & ${U.trayLc})' : '${tr('Loading lines')} (${U.carton.toLowerCase()})', style: TextStyle(fontWeight: FontWeight.w700, color: scheme.onSurface))),
           const SizedBox(height: 10),
@@ -1053,12 +1058,16 @@ class _CalculatorTabState extends State<_CalculatorTab> with _CalcMixin {
     return ListView(padding: const EdgeInsets.all(20), children: [
       LayoutBuilder(builder: (context, c) {
         final wide = c.maxWidth > 900;
+        final compact = c.maxWidth < 600;
+        final truckField = TextField(controller: truck, textCapitalization: TextCapitalization.characters, decoration: InputDecoration(labelText: tr('Truck number'), hintText: 'PB-08-AB-1234'));
+        final dateField = _DateField(date: date, onPick: (d) => setState(() => date = d));
         final form = SectionCard(title: 'Truck Loading Calculator', child: Column(children: [
-          Row(children: [
-            Expanded(child: TextField(controller: truck, textCapitalization: TextCapitalization.characters, decoration: InputDecoration(labelText: tr('Truck number'), hintText: 'PB-08-AB-1234'))),
-            const SizedBox(width: 12),
-            Expanded(child: _DateField(date: date, onPick: (d) => setState(() => date = d))),
-          ]),
+          if (compact) ...[
+            truckField,
+            const SizedBox(height: 12),
+            dateField,
+          ] else
+            Row(children: [Expanded(child: truckField), const SizedBox(width: 12), Expanded(child: dateField)]),
           const SizedBox(height: 12),
           _DestinationField(
             options: _savedDests,
