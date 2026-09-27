@@ -325,7 +325,7 @@ class _ProductionMetrics extends StatelessWidget {
         physics: const NeverScrollableScrollPhysics(),
         mainAxisSpacing: 10,
         crossAxisSpacing: 10,
-        childAspectRatio: columns == 2 ? 2.65 : 2.15,
+        childAspectRatio: columns == 2 ? 2.1 : 2.15,
         children: [
           _ProductionMetric(label: 'Planned ${U.cb}', value: qtyInt(planned), icon: Icons.event_note_outlined, tint: AppColors.blue),
           _ProductionMetric(label: 'Produced ${U.cb}', value: qtyInt(produced), icon: Icons.factory_outlined, tint: AppColors.teal),

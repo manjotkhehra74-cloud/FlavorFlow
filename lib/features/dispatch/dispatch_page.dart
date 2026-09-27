@@ -185,9 +185,10 @@ class _LinesEditor extends StatelessWidget {
               ),
             ]),
             // Batch selector gets its own full-width row directly under the
-            // product. This keeps the production date/code/available stock
-            // readable on phones instead of squeezing it beside quantities.
+            // product. Keep a real vertical gap so its floating label never
+            // sits on the product field border on narrow phones.
             if (showBatch) ...[
+              const SizedBox(height: 12),
               Padding(
                 padding: const EdgeInsets.only(right: 6),
                 child: _BatchField(
