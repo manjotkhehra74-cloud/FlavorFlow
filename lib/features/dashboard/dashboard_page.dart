@@ -42,7 +42,6 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    final session = context.watch<AuthController>().session!;
     return FutureBuilder<Map<String, dynamic>>(
       future: _future,
       builder: (context, snap) {
@@ -74,7 +73,7 @@ class _DashboardPageState extends State<DashboardPage> {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: EdgeInsets.all(MediaQuery.sizeOf(context).width < 600 ? 14 : 24),
             children: [
-              _DashboardHero(greeting: data['greeting'] as String, name: data['name'] as String, session: session, kpis: kpis),
+              _DashboardHero(kpis: kpis),
               const SizedBox(height: 18),
               const SubscriptionBanner(),
               // HRMate head-count (read-only bridge) — renders nothing when
@@ -108,11 +107,11 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Widget _buildWidget(Map<String, dynamic> w) {
     switch (w['type']) {
-      case 'kpi': return _KpiGrid(items: (w['items'] as List).cast<Map<String, dynamic>>());
+      case 'kpi': return _DashboardKpiGrid(items: (w['items'] as List).cast<Map<String, dynamic>>());
       case 'line': return SectionCard(title: U.ize(w['title'] as String), child: _Line(w));
       case 'bar': return SectionCard(title: U.ize(w['title'] as String), child: _Bar(w));
       case 'pie': return SectionCard(title: U.ize(w['title'] as String), child: _Pie(w));
-      case 'alerts': return SectionCard(title: U.ize(w['title'] as String), child: _Alerts(w));
+      case 'alerts': return SectionCard(title: U.ize('Stock Alerts'), child: _Alerts(w));
       case 'table':
         final route = w['route'] as String?;
         return SectionCard(
@@ -133,11 +132,8 @@ class _DashboardPageState extends State<DashboardPage> {
 }
 
 class _DashboardHero extends StatelessWidget {
-  final String greeting;
-  final String name;
-  final UserSession session;
   final List<Map<String, dynamic>> kpis;
-  const _DashboardHero({required this.greeting, required this.name, required this.session, required this.kpis});
+  const _DashboardHero({required this.kpis});
 
   String _value(List<String> terms) {
     for (final term in terms) {
@@ -151,55 +147,39 @@ class _DashboardHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final firstName = name.split(' ').first;
     final stock = _value(['stock on hand', 'stock']);
     final production = _value(['production today', 'production']);
     final dispatch = _value(['dispatch today', 'dispatch']);
     return Container(
-      padding: const EdgeInsets.fromLTRB(18, 18, 18, 17),
+      padding: const EdgeInsets.fromLTRB(18, 20, 18, 19),
       decoration: BoxDecoration(
         gradient: AppBrand.gradient,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [BoxShadow(color: AppBrand.blue.withValues(alpha: .18), blurRadius: 14, offset: const Offset(0, 7))],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Center(child: Text('Dashboard Overview', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800))),
+        const SizedBox(height: 15),
+        const Text('Stock on Hand CB value', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 3),
+        Text(stock, style: const TextStyle(color: Colors.white, fontSize: 43, fontWeight: FontWeight.w800, height: .95)),
+        const SizedBox(height: 17),
         Row(children: [
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Dashboard Overview', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 4),
-            Text('$greeting, $firstName', style: TextStyle(color: Colors.white.withValues(alpha: .82), fontSize: 12.5, fontWeight: FontWeight.w500)),
-          ])),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(color: Colors.white.withValues(alpha: .18), borderRadius: BorderRadius.circular(20)),
-            child: Text(fmtDateWithDay(todayYmd()), style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600)),
-          ),
-        ]),
-        const SizedBox(height: 14),
-        Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Text(stock, style: const TextStyle(color: Colors.white, fontSize: 37, fontWeight: FontWeight.w800, height: .95)),
-          const SizedBox(width: 8),
-          const Padding(padding: EdgeInsets.only(bottom: 3), child: Text('Stock on hand', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600))),
-        ]),
-        const SizedBox(height: 14),
-        Row(children: [
-          Expanded(child: _summary('Production today', production)),
+          Expanded(child: _summary('Production Today', production)),
           const SizedBox(width: 10),
-          Expanded(child: _summary('Dispatch today', dispatch)),
+          Expanded(child: _summary('Dispatch Today', dispatch)),
         ]),
-        const SizedBox(height: 12),
-        Text('${session.roleLabel} workspace', style: TextStyle(color: Colors.white.withValues(alpha: .78), fontSize: 11.5)),
       ]),
     );
   }
 
   Widget _summary(String label, String value) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
-        decoration: BoxDecoration(color: Colors.white.withValues(alpha: .14), borderRadius: BorderRadius.circular(11)),
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
+        decoration: BoxDecoration(color: Colors.white.withValues(alpha: .14), borderRadius: BorderRadius.circular(12)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 2),
-          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white.withValues(alpha: .82), fontSize: 10.5, fontWeight: FontWeight.w600)),
+          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white.withValues(alpha: .86), fontSize: 11.5, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 3),
+          Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w800)),
         ]),
       );
 }
@@ -207,6 +187,68 @@ class _DashboardHero extends StatelessWidget {
 /// Replace default-industry unit words in server-sent labels with the active
 /// industry's unit names (e.g. "Stock on Hand (CB)" → "... (Bag)").
 String _unitize(String label) => U.ize(label);
+
+class _DashboardKpiGrid extends StatelessWidget {
+  final List<Map<String, dynamic>> items;
+  const _DashboardKpiGrid({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, c) {
+      final cols = c.maxWidth < 340 ? 1 : 2;
+      return GridView.count(
+        crossAxisCount: cols,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childAspectRatio: cols == 1 ? 3.1 : 1.85,
+        children: [
+          for (final item in items)
+            _DashboardKpiTile(
+              label: _unitize(item['label'] as String),
+              value: item['money'] == true ? inr(item['value']) : qtyInt(item['value']),
+              icon: iconFor(item['icon'] as String?),
+              tint: hexColor(item['tint'] as String?),
+            ),
+        ],
+      );
+    });
+  }
+}
+
+class _DashboardKpiTile extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color tint;
+  const _DashboardKpiTile({required this.label, required this.value, required this.icon, required this.tint});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 12, 11),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant),
+        boxShadow: [BoxShadow(color: scheme.shadow.withValues(alpha: .06), blurRadius: 7, offset: const Offset(0, 3))],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(width: 30, height: 30, decoration: BoxDecoration(color: tint.withValues(alpha: .12), shape: BoxShape.circle), child: Icon(icon, size: 17, color: tint)),
+          const Spacer(),
+          Container(width: 7, height: 7, decoration: BoxDecoration(shape: BoxShape.circle, color: tint)),
+        ]),
+        const Spacer(),
+        Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 3),
+        Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 23, fontWeight: FontWeight.w800)),
+      ]),
+    );
+  }
+}
 
 class _KpiGrid extends StatelessWidget {
   final List<Map<String, dynamic>> items;
