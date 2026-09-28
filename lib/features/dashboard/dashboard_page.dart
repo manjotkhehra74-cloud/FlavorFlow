@@ -336,19 +336,9 @@ class _DashboardQuickActions extends StatelessWidget {
     add('Dispatch', '/dispatch', Icons.local_shipping_outlined, AppBrand.green, auth.can('dispatch.manage'));
     add('Reports', '/reports', Icons.bar_chart_rounded, AppColors.slate, auth.can('reports.view'));
 
-    // Keep every server-defined shortcut too (for example Manage Users and
-    // Audit Log). The reference actions are first, while role permissions and
-    // the complete module drawer remain unchanged.
-    for (final action in (widget['items'] as List).cast<Map<String, dynamic>>()) {
-      final route = action['route'] as String?;
-      if (route == null || items.any((item) => item['route'] == route)) continue;
-      items.add({
-        'label': U.ize(action['label'] as String),
-        'route': route,
-        'icon': iconFor(action['icon'] as String?),
-        'color': AppColors.slate,
-      });
-    }
+    // Keep this block limited to the four operational shortcuts. Admin
+    // destinations such as Users and Audit Log stay in the Modules drawer;
+    // they should not displace the live dashboard details below.
 
     final scheme = Theme.of(context).colorScheme;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
