@@ -108,8 +108,12 @@ class _DashboardPageState extends State<DashboardPage> {
           final type = w['type'];
           return type != 'kpi' && type != 'actions' && type != 'alerts';
         });
+        final scheme = Theme.of(context).colorScheme;
         return Container(
-          color: const Color(0xFFF1FAFC),
+          // Keep the new dashboard composition readable in both the light and
+          // dark app themes. The previous fixed pale background made section
+          // headings disappear when the user's selected theme was dark.
+          color: scheme.surfaceContainerLow,
           child: RefreshIndicator(
             onRefresh: () async => _reload(),
             child: ListView(
@@ -208,7 +212,7 @@ class _DashboardHero extends StatelessWidget {
     final production = _value(['production today', 'production']);
     final dispatch = _value(['dispatch today', 'dispatch']);
     return Container(
-      padding: const EdgeInsets.fromLTRB(18, 20, 18, 19),
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
       decoration: BoxDecoration(
         gradient: AppBrand.gradient,
         borderRadius: BorderRadius.circular(20),
@@ -216,11 +220,11 @@ class _DashboardHero extends StatelessWidget {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Text('Dashboard Overview', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 15),
-        Text('Stock on Hand ${U.cb} value', style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
-        const SizedBox(height: 3),
-        Text(stock, style: const TextStyle(color: Colors.white, fontSize: 43, fontWeight: FontWeight.w800, height: .95)),
-        const SizedBox(height: 17),
+        const SizedBox(height: 9),
+        Text('Stock on Hand ${U.cb} value', style: const TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 2),
+        Text(stock, style: const TextStyle(color: Colors.white, fontSize: 38, fontWeight: FontWeight.w800, height: .95)),
+        const SizedBox(height: 10),
         Row(children: [
           Expanded(child: _summary('Production Today', production)),
           const SizedBox(width: 10),
@@ -231,12 +235,12 @@ class _DashboardHero extends StatelessWidget {
   }
 
   Widget _summary(String label, String value) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         decoration: BoxDecoration(color: Colors.white.withValues(alpha: .14), borderRadius: BorderRadius.circular(12)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white.withValues(alpha: .86), fontSize: 11.5, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 3),
-          Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w800)),
+          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white.withValues(alpha: .86), fontSize: 10.8, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 2),
+          Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800)),
         ]),
       );
 }
@@ -334,9 +338,10 @@ class _DashboardQuickActions extends StatelessWidget {
       }
     }
 
+    final scheme = Theme.of(context).colorScheme;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text('Quick Actions', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-      const SizedBox(height: 10),
+      Text('Quick Actions', style: TextStyle(color: scheme.onSurface, fontSize: 17, fontWeight: FontWeight.w800)),
+      const SizedBox(height: 8),
       Wrap(spacing: 9, runSpacing: 9, children: [
         for (final item in items)
           _DashboardActionChip(
