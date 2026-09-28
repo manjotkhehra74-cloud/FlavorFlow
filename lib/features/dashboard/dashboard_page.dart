@@ -177,7 +177,9 @@ class _DashboardPageState extends State<DashboardPage> {
       case 'line': return SectionCard(title: U.ize(w['title'] as String), child: _Line(w));
       case 'bar': return SectionCard(title: U.ize(w['title'] as String), child: _Bar(w));
       case 'pie': return SectionCard(title: U.ize(w['title'] as String), child: _Pie(w));
-      case 'alerts': return SectionCard(title: U.ize('Stock Alerts'), child: _Alerts(w));
+      case 'alerts':
+        final alertTitle = (w['title'] as String?)?.trim();
+        return SectionCard(title: U.ize(alertTitle == null || alertTitle.isEmpty ? 'System Alerts' : alertTitle), child: _Alerts(w));
       case 'table':
         final route = w['route'] as String?;
         return SectionCard(
@@ -336,9 +338,19 @@ class _DashboardQuickActions extends StatelessWidget {
     add('Dispatch', '/dispatch', Icons.local_shipping_outlined, AppBrand.green, auth.can('dispatch.manage'));
     add('Reports', '/reports', Icons.bar_chart_rounded, AppColors.slate, auth.can('reports.view'));
 
-    // Keep this block limited to the four operational shortcuts. Admin
-    // destinations such as Users and Audit Log stay in the Modules drawer;
-    // they should not displace the live dashboard details below.
+    // Keep the server-defined shortcuts too: the old dashboard exposed
+    // Manage Users and Audit Log here for permitted roles. They remain live,
+    // role-gated actions; the complete module drawer is still unchanged.
+    for (final action in (widget['items'] as List).cast<Map<String, dynamic>>()) {
+      final route = action['route'] as String?;
+      if (route == null || items.any((item) => item['route'] == route)) continue;
+      items.add({
+        'label': U.ize(action['label'] as String),
+        'route': route,
+        'icon': iconFor(action['icon'] as String?),
+        'color': AppColors.slate,
+      });
+    }
 
     final scheme = Theme.of(context).colorScheme;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
