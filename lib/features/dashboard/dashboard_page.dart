@@ -104,6 +104,7 @@ class _DashboardPageState extends State<DashboardPage> {
         final alerts = _firstWidget(widgets, 'alerts');
         final actions = _firstWidget(widgets, 'actions');
         final coreKpis = _referenceKpis(kpis, alerts);
+        final additionalKpis = _additionalKpis(kpis);
         final secondaryWidgets = widgets.where((w) {
           final type = w['type'];
           return type != 'kpi' && type != 'actions' && type != 'alerts';
@@ -135,6 +136,10 @@ class _DashboardPageState extends State<DashboardPage> {
                 const SizedBox(height: 18),
                 if (alerts != null) _buildWidget(alerts),
                 if (alerts != null) const SizedBox(height: 18),
+                if (additionalKpis.isNotEmpty) ...[
+                  SectionCard(title: tr('Workspace snapshot'), child: _DashboardKpiGrid(items: additionalKpis)),
+                  const SizedBox(height: 18),
+                ],
                 for (final w in secondaryWidgets) ...[
                   _buildWidget(w),
                   const SizedBox(height: 16),
@@ -272,6 +277,14 @@ String _liveKpiValue(List<Map<String, dynamic>> items, List<String> terms) {
   return item['money'] == true ? inr(item['value']) : qtyInt(item['value']);
 }
 
+List<Map<String, dynamic>> _additionalKpis(List<Map<String, dynamic>> items) {
+  const coreTerms = ['stock on hand', 'stock', 'production today', 'production', 'dispatch today', 'dispatch', 'low stock', 'low'];
+  return [
+    for (final item in items)
+      if (!coreTerms.any((term) => '${item['label'] ?? ''}'.toLowerCase().contains(term))) item,
+  ];
+}
+
 List<Map<String, dynamic>> _referenceKpis(List<Map<String, dynamic>> items, Map<String, dynamic>? alerts) {
   Map<String, dynamic> metric(String label, List<String> terms, IconData icon, Color tint, {String? display}) {
     final source = _findKpi(items, terms);
@@ -323,19 +336,18 @@ class _DashboardQuickActions extends StatelessWidget {
     add('Dispatch', '/dispatch', Icons.local_shipping_outlined, AppBrand.green, auth.can('dispatch.manage'));
     add('Reports', '/reports', Icons.bar_chart_rounded, AppColors.slate, auth.can('reports.view'));
 
-    // Legacy/server-defined actions remain available for roles that do not
-    // have the operational shortcuts above.
-    if (items.isEmpty) {
-      for (final action in (widget['items'] as List).cast<Map<String, dynamic>>()) {
-        final route = action['route'] as String?;
-        if (route == null) continue;
-        items.add({
-          'label': U.ize(action['label'] as String),
-          'route': route,
-          'icon': iconFor(action['icon'] as String?),
-          'color': AppBrand.blue,
-        });
-      }
+    // Keep every server-defined shortcut too (for example Manage Users and
+    // Audit Log). The reference actions are first, while role permissions and
+    // the complete module drawer remain unchanged.
+    for (final action in (widget['items'] as List).cast<Map<String, dynamic>>()) {
+      final route = action['route'] as String?;
+      if (route == null || items.any((item) => item['route'] == route)) continue;
+      items.add({
+        'label': U.ize(action['label'] as String),
+        'route': route,
+        'icon': iconFor(action['icon'] as String?),
+        'color': AppColors.slate,
+      });
     }
 
     final scheme = Theme.of(context).colorScheme;
