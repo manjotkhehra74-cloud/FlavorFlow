@@ -21,6 +21,19 @@ class DashboardPage extends StatefulWidget {
   State<DashboardPage> createState() => _DashboardPageState();
 }
 
+num? _todayTotal(dynamic raw, String listKey, String dateKey, String valueKey, {String? fallbackKey}) {
+  if (raw is! Map || raw[listKey] is! List) return null;
+  final today = todayYmd();
+  num total = 0;
+  for (final row in (raw[listKey] as List)) {
+    if (row is! Map || !'${row[dateKey] ?? ''}'.startsWith(today)) continue;
+    final value = row[valueKey] ?? (fallbackKey == null ? null : row[fallbackKey]);
+    if (value is num) total += value;
+    else total += num.tryParse('${value ?? 0}') ?? 0;
+  }
+  return total;
+}
+
 class _DashboardPageState extends State<DashboardPage> {
   late Future<Map<String, dynamic>> _future;
 
@@ -31,8 +44,36 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Future<Map<String, dynamic>> _load() async {
-    final json = await context.read<AuthController>().api.get('/dashboard');
-    return (json as Map).cast<String, dynamic>();
+    final api = context.read<AuthController>().api;
+    final dashboard = (await api.get('/dashboard') as Map).cast<String, dynamic>();
+
+    // The dashboard endpoint is intentionally role/server driven. On older
+    // servers it does not yet include today's production/dispatch roll-ups,
+    // so enrich the same live response from the existing read-only endpoints.
+    // A missing permission or legacy route is harmless — the UI keeps the
+    // server KPI or an em dash instead of inventing a count.
+    Future<dynamic> safeGet(String path) async {
+      try {
+        return await api.get(path);
+      } catch (_) {
+        return null;
+      }
+    }
+    final extra = await Future.wait<dynamic>([
+      safeGet('/production/batches'),
+      safeGet('/dispatch'),
+      safeGet('/inventory'),
+    ]);
+    final liveKpis = <Map<String, dynamic>>[];
+    final production = _todayTotal(extra[0], 'batches', 'planned_date', 'produced_cb', fallbackKey: 'planned_cb');
+    final dispatch = _todayTotal(extra[1], 'dispatches', 'dispatch_date', 'total_cartons');
+    final inventory = extra[2] is Map ? (extra[2] as Map)['summary'] : null;
+    if (production != null) liveKpis.add({'label': 'Production Today', 'value': production});
+    if (dispatch != null) liveKpis.add({'label': 'Dispatch Today', 'value': dispatch});
+    if (inventory is Map && inventory['low_count'] != null) {
+      liveKpis.add({'label': 'Low Stock', 'value': inventory['low_count']});
+    }
+    return {...dashboard, '_liveKpis': liveKpis};
   }
 
   void _reload() {
@@ -55,35 +96,51 @@ class _DashboardPageState extends State<DashboardPage> {
           for (final w in (data['widgets'] as List).cast<Map<String, dynamic>>())
             if (CompanyProfile.sectionVisible((w['route'] as String?) ?? '/')) _gateWidget(w),
         ];
-        // Keep the live server widgets and permissions, but place the KPI and
-        // quick-action blocks first so the mobile dashboard matches the new
-        // overview hierarchy.
-        final orderedWidgets = [
-          ...widgets.where((w) => w['type'] == 'kpi'),
-          ...widgets.where((w) => w['type'] == 'actions'),
-          ...widgets.where((w) => w['type'] != 'kpi' && w['type'] != 'actions'),
-        ];
-        final kpis = [
+        final kpis = <Map<String, dynamic>>[
           for (final w in widgets.where((w) => w['type'] == 'kpi'))
             ...(w['items'] as List).cast<Map<String, dynamic>>(),
+          ...((data['_liveKpis'] as List?) ?? const []).cast<Map<String, dynamic>>(),
         ];
-        return RefreshIndicator(
-          onRefresh: () async => _reload(),
-          child: ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: EdgeInsets.all(MediaQuery.sizeOf(context).width < 600 ? 14 : 24),
-            children: [
-              _DashboardHero(kpis: kpis),
-              const SizedBox(height: 18),
-              const SubscriptionBanner(),
-              // HRMate head-count (read-only bridge) — renders nothing when
-              // HRMate is not connected on this device or is unreachable.
-              const HrPresenceStrip(),
-              for (final w in orderedWidgets) ...[
-                _buildWidget(w),
-                const SizedBox(height: 16),
+        final alerts = _firstWidget(widgets, 'alerts');
+        final actions = _firstWidget(widgets, 'actions');
+        final coreKpis = _referenceKpis(kpis, alerts);
+        final secondaryWidgets = widgets.where((w) {
+          final type = w['type'];
+          return type != 'kpi' && type != 'actions' && type != 'alerts';
+        });
+        return Container(
+          color: const Color(0xFFF1FAFC),
+          child: RefreshIndicator(
+            onRefresh: () async => _reload(),
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: EdgeInsets.fromLTRB(
+                MediaQuery.sizeOf(context).width < 600 ? 14 : 24,
+                14,
+                MediaQuery.sizeOf(context).width < 600 ? 14 : 24,
+                28,
+              ),
+              children: [
+                _DashboardHero(kpis: kpis),
+                const SizedBox(height: 14),
+                _DashboardKpiGrid(items: coreKpis),
+                const SizedBox(height: 18),
+                if (actions != null) _DashboardQuickActions(widget: actions),
+                if (actions != null) const SizedBox(height: 18),
+                _DashboardActivity(kpis: kpis),
+                const SizedBox(height: 18),
+                if (alerts != null) _buildWidget(alerts),
+                if (alerts != null) const SizedBox(height: 18),
+                for (final w in secondaryWidgets) ...[
+                  _buildWidget(w),
+                  const SizedBox(height: 16),
+                ],
+                const SubscriptionBanner(),
+                // HRMate head-count (read-only bridge) — renders nothing when
+                // HRMate is not connected on this device or is unreachable.
+                const HrPresenceStrip(),
               ],
-            ],
+            ),
           ),
         );
       },
@@ -158,9 +215,9 @@ class _DashboardHero extends StatelessWidget {
         boxShadow: [BoxShadow(color: AppBrand.blue.withValues(alpha: .18), blurRadius: 14, offset: const Offset(0, 7))],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Center(child: Text('Dashboard Overview', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800))),
+        const Text('Dashboard Overview', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
         const SizedBox(height: 15),
-        const Text('Stock on Hand CB value', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
+        Text('Stock on Hand ${U.cb} value', style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
         const SizedBox(height: 3),
         Text(stock, style: const TextStyle(color: Colors.white, fontSize: 43, fontWeight: FontWeight.w800, height: .95)),
         const SizedBox(height: 17),
@@ -188,6 +245,193 @@ class _DashboardHero extends StatelessWidget {
 /// industry's unit names (e.g. "Stock on Hand (CB)" → "... (Bag)").
 String _unitize(String label) => U.ize(label);
 
+Map<String, dynamic>? _firstWidget(List<Map<String, dynamic>> widgets, String type) {
+  for (final widget in widgets) {
+    if (widget['type'] == type) return widget;
+  }
+  return null;
+}
+
+Map<String, dynamic>? _findKpi(List<Map<String, dynamic>> items, List<String> terms) {
+  for (final term in terms) {
+    for (final item in items) {
+      final label = '${item['label'] ?? ''}'.toLowerCase();
+      if (label == term || label.contains(term)) return item;
+    }
+  }
+  return null;
+}
+
+String _liveKpiValue(List<Map<String, dynamic>> items, List<String> terms) {
+  final item = _findKpi(items, terms);
+  if (item == null) return '—';
+  return item['money'] == true ? inr(item['value']) : qtyInt(item['value']);
+}
+
+List<Map<String, dynamic>> _referenceKpis(List<Map<String, dynamic>> items, Map<String, dynamic>? alerts) {
+  Map<String, dynamic> metric(String label, List<String> terms, IconData icon, Color tint, {String? display}) {
+    final source = _findKpi(items, terms);
+    return {
+      'label': label,
+      'display': display ?? (source == null ? '—' : (source['money'] == true ? inr(source['value']) : qtyInt(source['value']))),
+      'iconData': icon,
+      'tintColor': tint,
+    };
+  }
+
+  String? lowDisplay;
+  if (alerts != null) {
+    final alertItems = (alerts['items'] as List?) ?? const [];
+    final low = alertItems.where((item) {
+      if (item is! Map) return false;
+      final severity = '${item['severity'] ?? ''}'.toLowerCase();
+      return severity == 'high' || severity == 'medium';
+    }).length;
+    lowDisplay = qtyInt(low);
+  }
+  return [
+    metric(_unitize('Stock on Hand'), ['stock on hand', 'stock'], Icons.inventory_2_outlined, AppBrand.blue),
+    metric(_unitize('Production Today'), ['production today', 'production'], Icons.factory_outlined, AppColors.cyan),
+    metric(_unitize('Dispatch Today'), ['dispatch today', 'dispatch'], Icons.local_shipping_outlined, AppBrand.green),
+    metric(_unitize('Low Stock'), ['low stock', 'low'], Icons.trending_down_rounded, AppColors.red, display: lowDisplay),
+  ];
+}
+
+class _DashboardQuickActions extends StatelessWidget {
+  final Map<String, dynamic> widget;
+  const _DashboardQuickActions({required this.widget});
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.read<AuthController>();
+    final items = <Map<String, dynamic>>[];
+    void add(String label, String route, IconData icon, Color color, bool allowed) {
+      if (allowed && !items.any((item) => item['route'] == route)) {
+        items.add({'label': label, 'route': route, 'icon': icon, 'color': color});
+      }
+    }
+
+    // These are the four operational shortcuts from the mobile reference. The
+    // permission checks keep the shortcuts role-safe; values remain server/API
+    // driven and the modules drawer remains the complete navigation surface.
+    add('Receive Stock', '/inventory', Icons.inventory_2_outlined, AppBrand.blue, auth.can('inventory.manage'));
+    add('New Batch', '/production', Icons.factory_outlined, AppColors.cyan, auth.can('production.manage'));
+    add('Dispatch', '/dispatch', Icons.local_shipping_outlined, AppBrand.green, auth.can('dispatch.manage'));
+    add('Reports', '/reports', Icons.bar_chart_rounded, AppColors.slate, auth.can('reports.view'));
+
+    // Legacy/server-defined actions remain available for roles that do not
+    // have the operational shortcuts above.
+    if (items.isEmpty) {
+      for (final action in (widget['items'] as List).cast<Map<String, dynamic>>()) {
+        final route = action['route'] as String?;
+        if (route == null) continue;
+        items.add({
+          'label': U.ize(action['label'] as String),
+          'route': route,
+          'icon': iconFor(action['icon'] as String?),
+          'color': AppBrand.blue,
+        });
+      }
+    }
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Text('Quick Actions', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+      const SizedBox(height: 10),
+      Wrap(spacing: 9, runSpacing: 9, children: [
+        for (final item in items)
+          _DashboardActionChip(
+            label: item['label'] as String,
+            icon: item['icon'] as IconData,
+            route: item['route'] as String,
+            color: item['color'] as Color,
+            filled: items.first == item,
+          ),
+      ]),
+    ]);
+  }
+}
+
+class _DashboardActionChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final String route;
+  final Color color;
+  final bool filled;
+  const _DashboardActionChip({required this.label, required this.icon, required this.route, required this.color, required this.filled});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: filled ? color : Colors.transparent,
+      borderRadius: BorderRadius.circular(22),
+      child: InkWell(
+        onTap: () => context.go(route),
+        borderRadius: BorderRadius.circular(22),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: color.withValues(alpha: filled ? 0 : .70), width: 1.4),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 16, color: filled ? Colors.white : color),
+            const SizedBox(width: 6),
+            Text(label, style: TextStyle(color: filled ? Colors.white : color, fontSize: 12.5, fontWeight: FontWeight.w700)),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _DashboardActivity extends StatelessWidget {
+  final List<Map<String, dynamic>> kpis;
+  const _DashboardActivity({required this.kpis});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final rows = [
+      ('Production batches', _liveKpiValue(kpis, ['production today', 'production'])),
+      ('Dispatches', _liveKpiValue(kpis, ['dispatch today', 'dispatch'])),
+      ('Stock updates', _liveKpiValue(kpis, ['stock updates', 'updates'])),
+    ];
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 15, 16, 14),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: scheme.outlineVariant),
+        boxShadow: [BoxShadow(color: scheme.shadow.withValues(alpha: .06), blurRadius: 8, offset: const Offset(0, 3))],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text("Today's Activity", style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 11),
+        Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Container(width: 6, decoration: BoxDecoration(color: AppColors.cyan, borderRadius: BorderRadius.circular(8))),
+          const SizedBox(width: 11),
+          Expanded(child: Column(children: [
+            for (var i = 0; i < rows.length; i++)
+              Padding(
+                padding: EdgeInsets.only(bottom: i == rows.length - 1 ? 0 : 9),
+                child: Column(children: [
+                  Row(children: [
+                    Expanded(child: Text(rows[i].$1, style: TextStyle(color: scheme.onSurface, fontSize: 13.5, fontWeight: FontWeight.w500))),
+                    Text(rows[i].$2, style: TextStyle(color: scheme.onSurface, fontSize: 13.5, fontWeight: FontWeight.w700)),
+                  ]),
+                  if (i != rows.length - 1) ...[
+                    const SizedBox(height: 8),
+                    Divider(height: 1, color: scheme.outlineVariant),
+                  ],
+                ]),
+              ),
+          ])),
+        ]),
+      ]),
+    );
+  }
+}
+
 class _DashboardKpiGrid extends StatelessWidget {
   final List<Map<String, dynamic>> items;
   const _DashboardKpiGrid({required this.items});
@@ -202,14 +446,14 @@ class _DashboardKpiGrid extends StatelessWidget {
         physics: const NeverScrollableScrollPhysics(),
         mainAxisSpacing: 12,
         crossAxisSpacing: 12,
-        childAspectRatio: cols == 1 ? 3.1 : 1.85,
+        childAspectRatio: cols == 1 ? 3.1 : 2.1,
         children: [
           for (final item in items)
             _DashboardKpiTile(
-              label: _unitize(item['label'] as String),
-              value: item['money'] == true ? inr(item['value']) : qtyInt(item['value']),
-              icon: iconFor(item['icon'] as String?),
-              tint: hexColor(item['tint'] as String?),
+              label: item['label'] as String,
+              value: item['display'] as String? ?? (item['money'] == true ? inr(item['value']) : qtyInt(item['value'])),
+              icon: item['iconData'] as IconData? ?? iconFor(item['icon'] as String?),
+              tint: item['tintColor'] as Color? ?? hexColor(item['tint'] as String?),
             ),
         ],
       );
@@ -238,12 +482,10 @@ class _DashboardKpiTile extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Container(width: 30, height: 30, decoration: BoxDecoration(color: tint.withValues(alpha: .12), shape: BoxShape.circle), child: Icon(icon, size: 17, color: tint)),
-          const Spacer(),
-          Container(width: 7, height: 7, decoration: BoxDecoration(shape: BoxShape.circle, color: tint)),
+          const SizedBox(width: 9),
+          Expanded(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 13.5, fontWeight: FontWeight.w600))),
         ]),
         const Spacer(),
-        Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5, fontWeight: FontWeight.w700)),
-        const SizedBox(height: 3),
         Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 23, fontWeight: FontWeight.w800)),
       ]),
     );

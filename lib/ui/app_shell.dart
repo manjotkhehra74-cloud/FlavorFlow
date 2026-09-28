@@ -259,7 +259,9 @@ class _AppShellState extends State<AppShell> {
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
         title: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text(title)),
-        centerTitle: title == tr('Reports'),
+        // Keep the Dashboard title centered like the mobile reference while
+        // preserving the shared shell and bottom navigation on every route.
+        centerTitle: title == tr('Dashboard') || title == tr('Reports'),
         titleSpacing: 0,
         actions: [topBar.actionsPadding(child: topBar.bellAction(context)), topBar.userAction(context, compact: true)],
       ),
