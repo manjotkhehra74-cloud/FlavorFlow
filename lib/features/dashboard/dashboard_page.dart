@@ -108,7 +108,15 @@ class _DashboardPageState extends State<DashboardPage> {
         final secondaryWidgets = widgets.where((w) {
           final type = w['type'];
           return type != 'kpi' && type != 'actions' && type != 'alerts';
-        });
+        }).toList();
+        // Keep the old dashboard's complete detail flow together in the new
+        // shell: role table first, then production/dispatch charts, followed
+        // by any other server-provided detail widgets.
+        final detailWidgets = [
+          ...secondaryWidgets.where((w) => w['type'] == 'table'),
+          ...secondaryWidgets.where((w) => const {'line', 'bar', 'pie'}.contains(w['type'])),
+          ...secondaryWidgets.where((w) => !const {'table', 'line', 'bar', 'pie'}.contains(w['type'])),
+        ];
         final scheme = Theme.of(context).colorScheme;
         return Container(
           // Keep the new dashboard composition readable in both the light and
@@ -140,9 +148,13 @@ class _DashboardPageState extends State<DashboardPage> {
                   SectionCard(title: tr('Workspace snapshot'), child: _DashboardKpiGrid(items: additionalKpis)),
                   const SizedBox(height: 18),
                 ],
-                for (final w in secondaryWidgets) ...[
-                  _buildWidget(w),
-                  const SizedBox(height: 16),
+                if (detailWidgets.isNotEmpty) ...[
+                  Text('Dashboard details', style: TextStyle(color: scheme.onSurface, fontSize: 18, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 10),
+                  for (final w in detailWidgets) ...[
+                    _buildWidget(w),
+                    const SizedBox(height: 16),
+                  ],
                 ],
                 const SubscriptionBanner(),
                 // HRMate head-count (read-only bridge) — renders nothing when
