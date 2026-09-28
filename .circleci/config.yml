@@ -102,16 +102,14 @@ jobs:
               return 1
             }
 
-            # Install every package seen in the Gradle logs BEFORE a Gradle JVM
-            # exists. This prevents sdkmanager + a 1.4GB daemon overlapping.
-            install_sdk_package "platforms;android-34"
+            # The app is pinned to Android 35 below, so do not download the
+            # corrupted android-34 archive from the runner's repository. Keep
+            # the toolchain deterministic and install only what Gradle needs.
             install_sdk_package "platforms;android-35"
-            install_sdk_package "build-tools;34.0.0"
             install_sdk_package "build-tools;35.0.0"
             install_sdk_package "cmake;$CMAKE_VERSION"
             install_sdk_package "ndk;$NDK_VERSION"
 
-            package_ready "platforms;android-34"
             package_ready "platforms;android-35"
             package_ready "build-tools;35.0.0"
             package_ready "cmake;$CMAKE_VERSION"
