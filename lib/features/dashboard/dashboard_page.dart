@@ -117,6 +117,7 @@ class _DashboardPageState extends State<DashboardPage> {
           ...secondaryWidgets.where((w) => const {'line', 'bar', 'pie'}.contains(w['type'])),
           ...secondaryWidgets.where((w) => !const {'table', 'line', 'bar', 'pie'}.contains(w['type'])),
         ];
+        final session = context.read<AuthController>().session;
         final scheme = Theme.of(context).colorScheme;
         return Container(
           // Keep the new dashboard composition readable in both the light and
@@ -134,9 +135,20 @@ class _DashboardPageState extends State<DashboardPage> {
                 28,
               ),
               children: [
-                _DashboardHero(kpis: kpis),
+                _DashboardHero(
+                  kpis: kpis,
+                  greeting: (data['greeting'] as String?) ?? 'Good day',
+                  name: (data['name'] as String?) ?? session?.name ?? 'there',
+                  role: session?.roleLabel ?? 'Team',
+                ),
                 const SizedBox(height: 14),
                 _DashboardKpiGrid(items: coreKpis),
+                if (additionalKpis.isNotEmpty) ...[
+                  const SizedBox(height: 18),
+                  Text('Workspace snapshot', style: TextStyle(color: scheme.onSurface, fontSize: 18, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 9),
+                  _DashboardKpiGrid(items: additionalKpis),
+                ],
                 const SizedBox(height: 18),
                 if (actions != null) _DashboardQuickActions(widget: actions),
                 if (actions != null) const SizedBox(height: 18),
@@ -144,10 +156,6 @@ class _DashboardPageState extends State<DashboardPage> {
                 const SizedBox(height: 18),
                 if (alerts != null) _buildWidget(alerts),
                 if (alerts != null) const SizedBox(height: 18),
-                if (additionalKpis.isNotEmpty) ...[
-                  SectionCard(title: tr('Workspace snapshot'), child: _DashboardKpiGrid(items: additionalKpis)),
-                  const SizedBox(height: 18),
-                ],
                 if (detailWidgets.isNotEmpty) ...[
                   Text('Dashboard details', style: TextStyle(color: scheme.onSurface, fontSize: 18, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 10),
@@ -213,7 +221,10 @@ class _DashboardPageState extends State<DashboardPage> {
 
 class _DashboardHero extends StatelessWidget {
   final List<Map<String, dynamic>> kpis;
-  const _DashboardHero({required this.kpis});
+  final String greeting;
+  final String name;
+  final String role;
+  const _DashboardHero({required this.kpis, required this.greeting, required this.name, required this.role});
 
   String _value(List<String> terms) {
     for (final term in terms) {
@@ -230,14 +241,19 @@ class _DashboardHero extends StatelessWidget {
     final stock = _value(['stock on hand', 'stock']);
     final production = _value(['production today', 'production']);
     final dispatch = _value(['dispatch today', 'dispatch']);
+    final firstName = name.trim().split(RegExp(r'\s+')).first;
     return Container(
-      padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
       decoration: BoxDecoration(
         gradient: AppBrand.gradient,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [BoxShadow(color: AppBrand.blue.withValues(alpha: .18), blurRadius: 14, offset: const Offset(0, 7))],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('$greeting, $firstName', style: const TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w800, letterSpacing: -.35)),
+        const SizedBox(height: 3),
+        Text('$role workspace  ·  ${fmtDateWithDay(todayYmd())}', style: TextStyle(color: Colors.white.withValues(alpha: .82), fontSize: 12.5, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 14),
         const Text('Dashboard Overview', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
         const SizedBox(height: 9),
         Text('Stock on Hand ${U.cb} value', style: const TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w500)),
