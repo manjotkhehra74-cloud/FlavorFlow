@@ -56,19 +56,31 @@ class _DashboardPageState extends State<DashboardPage> {
           for (final w in (data['widgets'] as List).cast<Map<String, dynamic>>())
             if (CompanyProfile.sectionVisible((w['route'] as String?) ?? '/')) _gateWidget(w),
         ];
+        // Keep the live server widgets and permissions, but place the KPI and
+        // quick-action blocks first so the mobile dashboard matches the new
+        // overview hierarchy.
+        final orderedWidgets = [
+          ...widgets.where((w) => w['type'] == 'kpi'),
+          ...widgets.where((w) => w['type'] == 'actions'),
+          ...widgets.where((w) => w['type'] != 'kpi' && w['type'] != 'actions'),
+        ];
+        final kpis = [
+          for (final w in widgets.where((w) => w['type'] == 'kpi'))
+            ...(w['items'] as List).cast<Map<String, dynamic>>(),
+        ];
         return RefreshIndicator(
           onRefresh: () async => _reload(),
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: EdgeInsets.all(MediaQuery.sizeOf(context).width < 600 ? 14 : 24),
             children: [
-              _Header(greeting: data['greeting'] as String, name: data['name'] as String, session: session),
+              _DashboardHero(greeting: data['greeting'] as String, name: data['name'] as String, session: session, kpis: kpis),
               const SizedBox(height: 18),
               const SubscriptionBanner(),
               // HRMate head-count (read-only bridge) — renders nothing when
               // HRMate is not connected on this device or is unreachable.
               const HrPresenceStrip(),
-              for (final w in widgets) ...[
+              for (final w in orderedWidgets) ...[
                 _buildWidget(w),
                 const SizedBox(height: 16),
               ],
@@ -120,60 +132,76 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 }
 
-class _Header extends StatelessWidget {
-  final String greeting, name;
+class _DashboardHero extends StatelessWidget {
+  final String greeting;
+  final String name;
   final UserSession session;
-  const _Header({required this.greeting, required this.name, required this.session});
+  final List<Map<String, dynamic>> kpis;
+  const _DashboardHero({required this.greeting, required this.name, required this.session, required this.kpis});
+
+  String _value(List<String> terms) {
+    for (final term in terms) {
+      for (final item in kpis) {
+        final label = '${item['label'] ?? ''}'.toLowerCase();
+        if (label.contains(term)) return item['money'] == true ? inr(item['value']) : qtyInt(item['value']);
+      }
+    }
+    return '—';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final firstName = name.split(' ').first;
+    final stock = _value(['stock on hand', 'stock']);
+    final production = _value(['production today', 'production']);
+    final dispatch = _value(['dispatch today', 'dispatch']);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 17),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1459D9), Color(0xFF247FE7), Color(0xFF13A879)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          stops: [0, 0.62, 1],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: AppBrand.blue.withValues(alpha: 0.22), blurRadius: 18, offset: const Offset(0, 7))],
+        gradient: AppBrand.gradient,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: AppBrand.blue.withValues(alpha: .18), blurRadius: 14, offset: const Offset(0, 7))],
       ),
-      child: Row(children: [
-        Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(13)),
-          child: const Icon(Icons.insights_rounded, color: Colors.white, size: 23),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('$greeting, ${name.split(' ').first}',
-                style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -0.45, color: Colors.white)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Dashboard Overview', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
             const SizedBox(height: 4),
-            Wrap(spacing: 6, runSpacing: 2, children: [
-              Text('${session.roleLabel} workspace', style: TextStyle(color: Colors.white.withValues(alpha: 0.78), fontSize: 12.5)),
-              Text('·  ${fmtDateWithDay(todayYmd())}', softWrap: false, style: TextStyle(color: Colors.white.withValues(alpha: 0.78), fontSize: 12.5)),
-            ]),
-          ]),
-        ),
-        if (MediaQuery.sizeOf(context).width >= 520) ...[
-          const SizedBox(width: 8),
+            Text('$greeting, $firstName', style: TextStyle(color: Colors.white.withValues(alpha: .82), fontSize: 12.5, fontWeight: FontWeight.w500)),
+          ])),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.26)),
-            ),
-            child: Text(session.roleLabel.toUpperCase(),
-                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 10.5, letterSpacing: 0.8, color: Colors.white)),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(color: Colors.white.withValues(alpha: .18), borderRadius: BorderRadius.circular(20)),
+            child: Text(fmtDateWithDay(todayYmd()), style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600)),
           ),
-        ],
+        ]),
+        const SizedBox(height: 14),
+        Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Text(stock, style: const TextStyle(color: Colors.white, fontSize: 37, fontWeight: FontWeight.w800, height: .95)),
+          const SizedBox(width: 8),
+          const Padding(padding: EdgeInsets.only(bottom: 3), child: Text('Stock on hand', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600))),
+        ]),
+        const SizedBox(height: 14),
+        Row(children: [
+          Expanded(child: _summary('Production today', production)),
+          const SizedBox(width: 10),
+          Expanded(child: _summary('Dispatch today', dispatch)),
+        ]),
+        const SizedBox(height: 12),
+        Text('${session.roleLabel} workspace', style: TextStyle(color: Colors.white.withValues(alpha: .78), fontSize: 11.5)),
       ]),
     );
   }
+
+  Widget _summary(String label, String value) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+        decoration: BoxDecoration(color: Colors.white.withValues(alpha: .14), borderRadius: BorderRadius.circular(11)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 2),
+          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white.withValues(alpha: .82), fontSize: 10.5, fontWeight: FontWeight.w600)),
+        ]),
+      );
 }
 
 /// Replace default-industry unit words in server-sent labels with the active
