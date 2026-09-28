@@ -102,18 +102,49 @@ jobs:
               return 1
             }
 
-            # The app is pinned to Android 35 below, so do not download the
-            # corrupted android-34 archive from the runner's repository. Keep
-            # the toolchain deterministic and install only what Gradle needs.
-            install_sdk_package "platforms;android-35"
-            install_sdk_package "build-tools;35.0.0"
-            install_sdk_package "cmake;$CMAKE_VERSION"
-            install_sdk_package "ndk;$NDK_VERSION"
+            # Prefer a complete platform already bundled in the Flutter image.
+            # The runner's Google archive for android-35 is currently returning
+            # corrupt zips, so downloading a platform is only the last resort.
+            PLATFORM_JAR=$(find "$SDK_ROOT/platforms" -mindepth 2 -maxdepth 2 -type f -name android.jar -print 2>/dev/null | sort -V | tail -1 || true)
+            if [ -n "$PLATFORM_JAR" ]; then
+              PLATFORM_API=$(basename "$(dirname "$PLATFORM_JAR")" | sed 's/^android-//')
+              if [ "$PLATFORM_API" -ge 35 ]; then
+                echo "Using bundled Android Platform $PLATFORM_API"
+                printf 'flavorflow.compileSdk=%s\n' "$PLATFORM_API" >> android/gradle.properties
+              else
+                PLATFORM_JAR=''
+              fi
+            fi
+            if [ -z "$PLATFORM_JAR" ]; then
+              install_sdk_package "platforms;android-35"
+              package_ready "platforms;android-35"
+              printf '%s\n' 'flavorflow.compileSdk=35' >> android/gradle.properties
+            fi
 
-            package_ready "platforms;android-35"
-            package_ready "build-tools;35.0.0"
-            package_ready "cmake;$CMAKE_VERSION"
-            package_ready "ndk;$NDK_VERSION"
+            BUILD_TOOLS_DIR=$(find "$SDK_ROOT/build-tools" -mindepth 2 -maxdepth 2 -type f -name aapt2 -print 2>/dev/null | sort -V | tail -1 || true)
+            if [ -z "$BUILD_TOOLS_DIR" ]; then
+              install_sdk_package "build-tools;35.0.0"
+              package_ready "build-tools;35.0.0"
+            else
+              echo "Using bundled Android build tools: $(basename "$(dirname "$BUILD_TOOLS_DIR")")"
+            fi
+
+            CMAKE_BIN=$(find "$SDK_ROOT/cmake" -mindepth 2 -maxdepth 3 -type f -path '*/bin/cmake' -print 2>/dev/null | sort -V | tail -1 || true)
+            if [ -z "$CMAKE_BIN" ]; then
+              install_sdk_package "cmake;$CMAKE_VERSION"
+              package_ready "cmake;$CMAKE_VERSION"
+            fi
+
+            NDK_DIR=$(find "$SDK_ROOT/ndk" -mindepth 1 -maxdepth 1 -type d -print 2>/dev/null | sort -V | tail -1 || true)
+            if [ -n "$NDK_DIR" ] && [ -f "$NDK_DIR/source.properties" ]; then
+              NDK_INSTALLED=$(basename "$NDK_DIR")
+              echo "Using bundled Android NDK $NDK_INSTALLED"
+              printf 'flavorflow.ndkVersion=%s\n' "$NDK_INSTALLED" >> android/gradle.properties
+            else
+              install_sdk_package "ndk;$NDK_VERSION"
+              package_ready "ndk;$NDK_VERSION"
+              printf '%s\n' "flavorflow.ndkVersion=$NDK_VERSION" >> android/gradle.properties
+            fi
 
             sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx2048M -XX:MaxMetaspaceSize=512M -Dfile.encoding=UTF-8/' android/gradle.properties
             printf '%s\n' \

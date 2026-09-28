@@ -15,10 +15,10 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "in.flavorflow.sauce_erp"
-    // CI provisions Android Platform 35; keeping this explicit avoids Gradle
-    // selecting the unavailable/corrupt Platform 34 package on the runner.
-    compileSdk = 35
-    ndkVersion = flutter.ndkVersion
+    // CI can use the highest valid platform already bundled in the runner
+    // (for example API 36) instead of downloading a flaky platform archive.
+    compileSdk = providers.gradleProperty("flavorflow.compileSdk").orNull?.toIntOrNull() ?: 35
+    ndkVersion = providers.gradleProperty("flavorflow.ndkVersion").orNull ?: flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
