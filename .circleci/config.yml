@@ -91,8 +91,13 @@ jobs:
                 if [ "$attempt" -gt 1 ]; then
                   rm -rf "$SDK_ROOT/$dir" "$SDK_ROOT/.temp" "$SDK_ROOT/temp" "$HOME/.android/cache"
                 fi
-                if yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" "$package"; then
-                  package_ready "$package" && return 0
+                # sdkmanager sometimes returns non-zero after extracting the
+                # usable SDK files because an optional template archive is bad.
+                # Validate the actual file Gradle needs before discarding it.
+                yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" "$package" || true
+                if package_ready "$package"; then
+                  echo "SDK package usable after sdkmanager warning: $package"
+                  return 0
                 fi
                 # sdkmanager can leave an apparently partial directory after a
                 # failed unzip; force the next attempt to download a clean zip.
