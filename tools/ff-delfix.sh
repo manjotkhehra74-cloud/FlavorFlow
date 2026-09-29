@@ -45,8 +45,9 @@ const PACK_BODY = `{
 // route prefix/middleware stays untouched, so the existing permission guard is
 // preserved.
 function replacePackingHandler(src) {
-  const route = /router\.delete\s*\(\s*['"](?:\/materials)?\/:id['"]/g.exec(src);
+  const route = /(?:router|app)\.delete\s*\(\s*['"](?:\/materials)?\/:([A-Za-z_$][\w$]*)[^'"]*['"]/g.exec(src);
   if (!route) return null;
+  const param = route[1] || 'id';
   const from = route.index;
   const tail = src.slice(from);
   const cb = /(?:async\s+)?(?:function\s+[A-Za-z_$][\w$]*\s*\([^()]*\)|function\s*\([^()]*\)|\([^()]*\)|[A-Za-z_$][\w$]*)\s*(?:=>\s*\{|\{)/.exec(tail);
@@ -62,7 +63,10 @@ function replacePackingHandler(src) {
     if (c === '/' && n === '*') { block = true; i++; continue; }
     if (c === '\'' || c === '"' || c === '`') { quote = c; continue; }
     if (c === '{') depth++;
-    else if (c === '}' && --depth === 0) return src.slice(0, open) + PACK_BODY + src.slice(i + 1);
+    else if (c === '}' && --depth === 0) {
+      const body = PACK_BODY.replace(/\breq\.params\.id\b/g, 'req.params.' + param);
+      return src.slice(0, open) + body + src.slice(i + 1);
+    }
   }
   return null;
 }
