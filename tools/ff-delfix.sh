@@ -26,6 +26,47 @@ function checkOrRestore(file, bak) {
 
 const INV_LINE = "  db.prepare('DELETE FROM inventory WHERE product_id = ?').run(id); // clear stock row too";
 
+const PACK_BODY = `{
+  const id = Number(req.params.id);
+  const mat = db.prepare('SELECT id, name FROM packing_materials WHERE id = ?').get(id);
+  // DELETE is intentionally idempotent: a cached Packing screen can submit
+  // an ID after another cleanup already removed the material.
+  if (!mat) { res.json({ ok: true, alreadyDeleted: true }); return; }
+  try { db.prepare('DELETE FROM bom_lines WHERE material_id = ?').run(id); } catch (_) {}
+  try { db.prepare('DELETE FROM bom WHERE material_id = ?').run(id); } catch (_) {}
+  try { db.prepare('DELETE FROM packing_materials WHERE id = ?').run(id); }
+  catch (e) { res.status(409).json({ error: 'Cannot delete: material is referenced by other records.' }); return; }
+  try { require('../helpers').audit(db, req.user, 'DELETE', 'packing', id, 'Packing material "' + mat.name + '" deleted'); } catch (_) {}
+  res.json({ ok: true });
+}`;
+
+// Find and replace the callback body without depending on its formatting or
+// on the exact error implementation (res.status, throw bad(...), etc.). The
+// route prefix/middleware stays untouched, so the existing permission guard is
+// preserved.
+function replacePackingHandler(src) {
+  const route = /router\.delete\s*\(\s*['"]\/materials\/:id['"]/g.exec(src);
+  if (!route) return null;
+  const from = route.index;
+  const tail = src.slice(from);
+  const cb = /(?:async\s+)?(?:function\s*)?(?:\([^()]*\)|[A-Za-z_$][\w$]*)\s*(?:=>\s*\{|\{)/.exec(tail);
+  if (!cb) return null;
+  const open = from + cb.index + cb[0].lastIndexOf('{');
+  let depth = 0, quote = '', line = false, block = false, esc = false;
+  for (let i = open; i < src.length; i++) {
+    const c = src[i], n = src[i + 1];
+    if (line) { if (c === '\n') line = false; continue; }
+    if (block) { if (c === '*' && n === '/') { block = false; i++; } continue; }
+    if (quote) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === quote) quote = ''; continue; }
+    if (c === '/' && n === '/') { line = true; i++; continue; }
+    if (c === '/' && n === '*') { block = true; i++; continue; }
+    if (c === '\'' || c === '"' || c === '`') { quote = c; continue; }
+    if (c === '{') depth++;
+    else if (c === '}' && --depth === 0) return src.slice(0, open) + PACK_BODY + src.slice(i + 1);
+  }
+  return null;
+}
+
 const prodCode = `/** Soft-delete a product (ff-delfix v2). Inventory row is removed; history (dispatches, batches, reports) stays. */
 router.delete('/:id', requirePerm('products.manage'), (req, res) => {
   const id = Number(req.params.id);
@@ -100,8 +141,19 @@ let changed = false, failed = false;
       // quotes, optional punctuation, return-before-res, or a multi-line if).
       // Replace the response itself rather than depending on one exact layout.
       const notFound = /res\.status\(404\)\.json\(\{\s*error\s*:\s*['"]Material not found\.?['"]\s*\}\)\s*;?/;
-      if (!notFound.test(src)) { console.log('PACKING: Material-not-found response anchor missing'); failed = true; }
-      else {
+      if (!notFound.test(src)) {
+        // Some live builds use throw/bad() or a helper for the 404 response.
+        // Replace only that existing /materials/:id callback as a fallback;
+        // do not append a duplicate route behind the still-broken one.
+        const upgraded = replacePackingHandler(src);
+        if (!upgraded) { console.log('PACKING: existing /materials/:id handler not found'); failed = true; }
+        else {
+          const bak = backup(f);
+          src = upgraded;
+          fs.writeFileSync(f, src);
+          if (checkOrRestore(f, bak)) { console.log('PACKING: existing handler replaced with idempotent delete'); changed = true; } else failed = true;
+        }
+      } else {
         const bak = backup(f);
         src = src.replace(notFound, 'res.json({ ok: true, alreadyDeleted: true });');
         fs.writeFileSync(f, src);
