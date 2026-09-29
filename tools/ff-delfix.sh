@@ -95,13 +95,15 @@ let changed = false, failed = false;
     let src = fs.readFileSync(f, 'utf8');
     if (src.includes('alreadyDeleted: true')) {
       console.log('PACKING: idempotent delete already patched — skip');
-    } else if (src.includes("'Material not found.'")) {
-      const old = "if (!mat) { res.status(404).json({ error: 'Material not found.' }); return; }";
-      const next = "if (!mat) { res.json({ ok: true, alreadyDeleted: true }); return; }";
-      if (!src.includes(old)) { console.log('PACKING: old not-found anchor missing'); failed = true; }
+    } else if (/Material not found\b/i.test(src)) {
+      // Older deployments format the response differently (single/double
+      // quotes, optional punctuation, return-before-res, or a multi-line if).
+      // Replace the response itself rather than depending on one exact layout.
+      const notFound = /res\.status\(404\)\.json\(\{\s*error\s*:\s*['"]Material not found\.?['"]\s*\}\)\s*;?/;
+      if (!notFound.test(src)) { console.log('PACKING: Material-not-found response anchor missing'); failed = true; }
       else {
         const bak = backup(f);
-        src = src.replace(old, next);
+        src = src.replace(notFound, 'res.json({ ok: true, alreadyDeleted: true });');
         fs.writeFileSync(f, src);
         if (checkOrRestore(f, bak)) { console.log('PACKING: old route upgraded to idempotent delete'); changed = true; } else failed = true;
       }
