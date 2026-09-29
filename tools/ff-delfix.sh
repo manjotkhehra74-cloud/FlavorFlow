@@ -76,11 +76,14 @@ function replacePackingHandler(src) {
 // Material-not-found failure statement; this keeps the route and permissions
 // intact while making stale DELETEs idempotent.
 function replaceNotFoundFailure(src) {
+  // The semicolon is required here so `return bad("Material not found", 404)`
+  // is replaced as one complete statement; do not leave the helper's trailing
+  // status argument behind in the route source.
   const patterns = [
-    /throw\s+[\s\S]{0,300}?Material not found\.?[\s\S]{0,120}?;?/i,
-    /return\s+[\s\S]{0,300}?Material not found\.?[\s\S]{0,120}?;?/i,
-    /res\.status\s*\(\s*404\s*\)[\s\S]{0,300}?Material not found\.?[\s\S]{0,120}?;?/i,
-    /next\s*\([\s\S]{0,300}?Material not found\.?[\s\S]{0,120}?;?/i,
+    /throw\s+[\s\S]{0,300}?Material not found\.?[\s\S]{0,120}?;/i,
+    /return\s+[\s\S]{0,300}?Material not found\.?[\s\S]{0,120}?;/i,
+    /res\.status\s*\(\s*404\s*\)[\s\S]{0,300}?Material not found\.?[\s\S]{0,120}?;/i,
+    /next\s*\([\s\S]{0,300}?Material not found\.?[\s\S]{0,120}?;/i,
   ];
   for (const re of patterns) {
     if (re.test(src)) return src.replace(re, 'res.json({ ok: true, alreadyDeleted: true }); return;');
