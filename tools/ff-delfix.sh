@@ -45,7 +45,7 @@ const PACK_BODY = `{
 // route prefix/middleware stays untouched, so the existing permission guard is
 // preserved.
 function replacePackingHandler(src) {
-  const route = /(?:router|app)\.delete\s*\(\s*['"](?:\/materials)?\/:([A-Za-z_$][\w$]*)[^'"]*['"]/g.exec(src);
+  const route = /(?:router|app)\.delete\s*\(\s*['"](?:\/packing)?(?:\/materials)?\/:([A-Za-z_$][\w$]*)[^'"]*['"]/g.exec(src);
   if (!route) return null;
   const param = route[1] || 'id';
   const from = route.index;
@@ -122,10 +122,11 @@ router.delete('/materials/:id', requirePerm('packing.manage'), (req, res) => {
 function addCompatibilityDeleteRoutes(src) {
   // Some factory builds export the router but register DELETE in a wrapper,
   // so neither an inline callback nor the old 404 line is present here. Add
-  // both valid mount shapes before old routes: /api/packing/materials/:id
-  // and a router mounted directly at /api/packing/materials.
+  // all valid mount shapes before old routes: router mounted at /api/packing,
+  // router mounted at /api/packing/materials, or router mounted at /api.
   const shortCode = packCode.replace("router.delete('/materials/:id'", "router.delete('/:id'");
-  const routes = packCode + '\n\n' + shortCode + '\n\n/* ffPackingDeleteCompat */\n';
+  const fullCode = packCode.replace("router.delete('/materials/:id'", "router.delete('/packing/materials/:id'");
+  const routes = packCode + '\n\n' + shortCode + '\n\n' + fullCode + '\n\n/* ffPackingDeleteCompatV2 */\n';
   const decl = /(?:const|let|var)\s+router\s*=\s*[^;]+;\s*/.exec(src);
   if (!decl) return null;
   return src.slice(0, decl.index + decl[0].length) + routes + src.slice(decl.index + decl[0].length);
@@ -170,8 +171,19 @@ let changed = false, failed = false;
   if (!fs.existsSync(f)) { console.log('MISSING: ' + f); failed = true; }
   else {
     let src = fs.readFileSync(f, 'utf8');
-    if (src.includes('alreadyDeleted: true')) {
-      console.log('PACKING: idempotent delete already patched — skip');
+    if (src.includes('alreadyDeleted: true') && src.includes('ffPackingDeleteCompatV2')) {
+      console.log('PACKING: compatibility delete routes already patched — skip');
+    } else if (src.includes('alreadyDeleted: true')) {
+      // An earlier delfix added only one mount shape. Upgrade it to all three
+      // shapes so the app's actual /api prefix cannot still return global 404.
+      const compat = addCompatibilityDeleteRoutes(src);
+      if (!compat) { console.log('PACKING: router export not found for compatibility upgrade'); failed = true; }
+      else {
+        const bak = backup(f);
+        src = compat;
+        fs.writeFileSync(f, src);
+        if (checkOrRestore(f, bak)) { console.log('PACKING: compatibility delete routes upgraded ✓'); changed = true; } else failed = true;
+      }
     } else if (/Material not found\b/i.test(src)) {
       // Older deployments format the response differently (single/double
       // quotes, optional punctuation, return-before-res, or a multi-line if).
