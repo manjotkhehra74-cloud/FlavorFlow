@@ -333,8 +333,26 @@ class _BatchStockSectionState extends State<_BatchStockSection> {
   }
 
   Future<Map<String, dynamic>> _load() async {
-    final json = await context.read<AuthController>().api.get('/reports/batch-stock');
-    return (json as Map).cast<String, dynamic>();
+    final api = context.read<AuthController>().api;
+    final report = (await api.get('/reports/batch-stock') as Map).cast<String, dynamic>();
+    // Keep the register correct for legacy/backdated completion rows while
+    // the server reconciler is being rolled out. The production endpoint is
+    // read-only here; it lets us restore a missing batch row instead of
+    // presenting its produced stock as "Unassigned".
+    List<Map<String, dynamic>> completedBatches = const [];
+    try {
+      final production = await api.get('/production/batches');
+      final raw = production is Map ? production['batches'] : null;
+      if (raw is List) {
+        completedBatches = [
+          for (final row in raw)
+            if (row is Map && '${row['status'] ?? ''}'.toUpperCase() == 'COMPLETED') row.cast<String, dynamic>(),
+        ];
+      }
+    } catch (_) {
+      // The batch report remains usable when the user lacks production.view.
+    }
+    return {...report, '_completedProductionBatches': completedBatches};
   }
 
   Future<void> _export(Map<String, dynamic> data, {required bool pdf}) async {
@@ -394,6 +412,42 @@ class _BatchStockSectionState extends State<_BatchStockSection> {
           trays: row.length > 3 ? row[3] : null,
         ));
       }
+    }
+    // A backdated production completion can already be present in
+    // /production/batches while an older batch-stock report still places its
+    // quantity in the product's Unassigned row. Reconcile that display-only
+    // gap using the authoritative completed batch list. Opening stock stays
+    // Unassigned unless a matching completed batch is missing from the report.
+    final completed = (data['_completedProductionBatches'] as List?)?.whereType<Map<String, dynamic>>() ?? const <Map<String, dynamic>>[];
+    num number(dynamic value) => value is num ? value : num.tryParse('${value ?? 0}') ?? 0;
+    String normal(String value) => value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '');
+    for (final batch in completed) {
+      final remainingCb = number(batch['produced_cb']) - number(batch['used_cb']);
+      final remainingTrays = number(batch['produced_trays']) - number(batch['used_trays']);
+      if (remainingCb <= 0 && remainingTrays <= 0) continue;
+      final productName = normal('${batch['product_name'] ?? batch['product'] ?? ''}');
+      _BatchRegisterGroup? group;
+      for (final candidate in groups) {
+        if (normal(candidate.name) == productName) {
+          group = candidate;
+          break;
+        }
+      }
+      if (group == null) continue;
+      final code = '${batch['code'] ?? '—'}'.trim();
+      final date = _shortRegisterDate('${batch['planned_date'] ?? batch['plannedDate'] ?? ''}');
+      if (group.entries.any((entry) => entry.code == code && entry.date == date)) continue;
+      // Only consume an Unassigned row when its amount matches this missing
+      // completed batch. This avoids hiding legitimate opening adjustments.
+      final unassignedIndex = group.entries.indexWhere((entry) =>
+          entry.code.toLowerCase().contains('unassigned') && number(entry.cb) >= remainingCb && number(entry.trays) >= remainingTrays);
+      if (unassignedIndex != -1) group.entries.removeAt(unassignedIndex);
+      group.entries.add(_BatchRegisterEntry(
+        date: date,
+        code: code,
+        cb: remainingCb,
+        trays: remainingTrays,
+      ));
     }
     return groups;
   }
