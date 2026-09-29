@@ -155,6 +155,73 @@ function reconcile(db, opts) {
   if (apply) runTx(db, work); else work();
   return { changed, unallocated, groups: demand.size };
 }
+/**
+ * Backdated production repair.
+ *
+ * A completed production batch must remain visible in batch-wise stock. Older
+ * completion paths could leave its produced quantity in inventory while a
+ * stale used_cb counter made the batch look fully consumed; the report then
+ * put the quantity in Unassigned. Restore only the unexplained used quantity:
+ * dispatch/invoice demand for the product+code is never undone, and the
+ * newest planned-date row is repaired first (the usual backdated-entry case).
+ * Opening stock remains Unassigned when no completed batch has unexplained
+ * consumption to repair.
+ */
+function repairCompletionDrift(db, opts) {
+  const apply = !!(opts && opts.apply);
+  const B = cols(db, 'batches'), I = cols(db, 'inventory');
+  if (!B.includes('used_cb') || !B.includes('produced_cb') || !B.includes('product_id') || !I.includes('product_id') || !I.includes('qty_cb')) return [];
+  const hasTrays = B.includes('used_trays') && B.includes('produced_trays') && I.includes('qty_trays');
+  const invRows = db.prepare('SELECT product_id pid, COALESCE(qty_cb, 0) stock_cb' + (hasTrays ? ', COALESCE(qty_trays, 0) stock_tr' : ', 0 stock_tr') + ' FROM inventory').all();
+  const completed = db.prepare(
+    "SELECT id, product_id pid, COALESCE(code, '') code, COALESCE(produced_cb, 0) pcb, COALESCE(used_cb, 0) ucb, " +
+    (hasTrays ? 'COALESCE(produced_trays, 0) ptr, COALESCE(used_trays, 0) utr, ' : '0 ptr, 0 utr, ') +
+    (B.includes('planned_date') ? "COALESCE(planned_date, '') pd " : "'' pd ") +
+    "FROM batches WHERE UPPER(COALESCE(status, '')) = 'COMPLETED' ORDER BY product_id, COALESCE(planned_date, '') DESC, id DESC"
+  ).all();
+  const demand = demandMap(db);
+  const groups = new Map();
+  for (const b of completed) {
+    const key = n(b.pid) + '|' + String(b.code || '').trim().toUpperCase();
+    const g = groups.get(key) || { pid: n(b.pid), rows: [], demandCb: 0, demandTr: 0 };
+    g.rows.push(b);
+    const d = demand.get(key);
+    g.demandCb = d ? n(d.cb) : 0;
+    g.demandTr = d ? n(d.tr) : 0;
+    groups.set(key, g);
+  }
+  const gapByProduct = new Map();
+  for (const r of invRows) {
+    const productRows = completed.filter((b) => n(b.pid) === n(r.pid));
+    const batchCb = productRows.reduce((s, b) => s + Math.max(0, n(b.pcb) - n(b.ucb)), 0);
+    const batchTr = productRows.reduce((s, b) => s + Math.max(0, n(b.ptr) - n(b.utr)), 0);
+    gapByProduct.set(n(r.pid), { cb: Math.max(0, n(r.stock_cb) - batchCb), tr: Math.max(0, n(r.stock_tr) - batchTr) });
+  }
+  const changes = [];
+  for (const g of groups.values()) {
+    let excessCb = Math.max(0, g.rows.reduce((s, b) => s + n(b.ucb), 0) - g.demandCb);
+    let excessTr = Math.max(0, g.rows.reduce((s, b) => s + n(b.utr), 0) - g.demandTr);
+    const gap = gapByProduct.get(g.pid);
+    if (!gap || (gap.cb <= 0 && gap.tr <= 0) || (excessCb <= 0 && excessTr <= 0)) continue;
+    // rows are already newest planned date first; restore the backdated row
+    // before older rows when a code is reused on multiple production dates.
+    for (const b of g.rows) {
+      if (gap.cb <= 0 && gap.tr <= 0) break;
+      const restoreCb = Math.min(gap.cb, excessCb, n(b.ucb));
+      const restoreTr = Math.min(gap.tr, excessTr, n(b.utr));
+      if (!restoreCb && !restoreTr) continue;
+      const nextCb = n(b.ucb) - restoreCb, nextTr = n(b.utr) - restoreTr;
+      if (apply) {
+        db.prepare('UPDATE batches SET used_cb = ?' + (hasTrays ? ', used_trays = ?' : '') + ' WHERE id = ?')
+          .run(...(hasTrays ? [nextCb, nextTr, b.id] : [nextCb, b.id]));
+      }
+      changes.push({ id: b.id, pid: b.pid, code: b.code, plannedDate: b.pd, restoredCb: restoreCb, restoredTrays: restoreTr });
+      gap.cb -= restoreCb; gap.tr -= restoreTr; excessCb -= restoreCb; excessTr -= restoreTr;
+    }
+  }
+  return changes;
+}
+
 function productList(db) {
   const p = cols(db, 'products'), inv = cols(db, 'inventory');
   if (!p.length) return [];
@@ -183,6 +250,10 @@ function batchesLeft(db) {
 const UNASSIGNED = 'Unassigned (opening stock / adjustments)';
 /** Batch-wise Stock report rows — every product TOTAL equals Stock on Hand (products with batches). */
 function batchStockRows(db) {
+  // Keep the report self-healing for legacy/backdated completion rows. The
+  // repair is conservative and only restores unexplained used_cb/used_trays;
+  // dispatch/invoice demand and legitimate opening stock are untouched.
+  try { repairCompletionDrift(db, { apply: true }); } catch (_) {}
   const rows = [], by = batchesLeft(db);
   let totCb = 0, totTr = 0;
   for (const p of productList(db)) {
@@ -213,7 +284,7 @@ function stockDiff(db) {
   }
   return out;
 }
-module.exports = { reconcile, demandMap, batchStockRows, stockDiff, deleteBlock, editBlock, runTx, UNASSIGNED };
+module.exports = { reconcile, repairCompletionDrift, demandMap, batchStockRows, stockDiff, deleteBlock, editBlock, runTx, UNASSIGNED };
 JSFILE
 if ! node --check "$NEWMOD"; then echo "FATAL: module syntax fail — kuch nahi badleya"; rm -f "$NEWMOD"; exit 1; fi
 MOD_CHANGED=0
