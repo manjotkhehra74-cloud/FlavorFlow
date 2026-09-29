@@ -4,7 +4,8 @@
 #   DELETE /api/packing/materials/:id (removes material + its BOM lines; ledger stays)
 # Idempotent + upgrade-aware:
 #   - fresh server            → adds both routes
-#   - old delfix already run  → upgrades product route to also clear inventory
+#   - old delfix already run  → upgrades product/inventory routes
+#   - stale mobile row        → material delete is idempotent (already gone = success)
 #   - fully patched           → skips
 set -u
 cd /opt/flavorflow/server || { echo "FATAL: /opt/flavorflow/server nahi mili"; exit 1; }
@@ -40,7 +41,11 @@ const packCode = `/** Delete a packing material (ff-delfix). BOM lines removed; 
 router.delete('/materials/:id', requirePerm('packing.manage'), (req, res) => {
   const id = Number(req.params.id);
   const mat = db.prepare('SELECT id, name FROM packing_materials WHERE id = ?').get(id);
-  if (!mat) { res.status(404).json({ error: 'Material not found.' }); return; }
+  // DELETE is intentionally idempotent: a cached Packing screen can submit
+  // an ID after another cleanup already removed the material. Treat that as
+  // success so the stale row disappears on the following GET instead of
+  // showing a misleading "Material not found" error.
+  if (!mat) { res.json({ ok: true, alreadyDeleted: true }); return; }
   try { db.prepare('DELETE FROM bom_lines WHERE material_id = ?').run(id); } catch (_) {}
   try { db.prepare('DELETE FROM bom WHERE material_id = ?').run(id); } catch (_) {}
   try { db.prepare('DELETE FROM packing_materials WHERE id = ?').run(id); }
@@ -88,8 +93,18 @@ let changed = false, failed = false;
   if (!fs.existsSync(f)) { console.log('MISSING: ' + f); failed = true; }
   else {
     let src = fs.readFileSync(f, 'utf8');
-    if (src.includes("'Material not found.'")) {
-      console.log('PACKING: already patched — skip');
+    if (src.includes('alreadyDeleted: true')) {
+      console.log('PACKING: idempotent delete already patched — skip');
+    } else if (src.includes("'Material not found.'")) {
+      const old = "if (!mat) { res.status(404).json({ error: 'Material not found.' }); return; }";
+      const next = "if (!mat) { res.json({ ok: true, alreadyDeleted: true }); return; }";
+      if (!src.includes(old)) { console.log('PACKING: old not-found anchor missing'); failed = true; }
+      else {
+        const bak = backup(f);
+        src = src.replace(old, next);
+        fs.writeFileSync(f, src);
+        if (checkOrRestore(f, bak)) { console.log('PACKING: old route upgraded to idempotent delete'); changed = true; } else failed = true;
+      }
     } else {
       const anchor = 'module.exports = router;';
       if (!src.includes(anchor)) { console.log('PACKING: anchor not found'); failed = true; }

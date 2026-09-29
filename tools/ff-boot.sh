@@ -10,7 +10,7 @@
 #   → 2-3 min baad result browser vich:  https://flavorflow.co.in/download/boot-status.txt
 #   (poora log: VM → "Serial port 1 (console)" ya /var/log/ff-boot.log)
 #
-# Steps (arg naal chuno, default sab):  fixssh industry billing stockledger codes lossrestore hrmate dispatchfix batchrecon saasbilling demo web apk
+# Steps (arg naal chuno, default sab):  fixssh industry billing stockledger codes lossrestore hrmate dispatchfix delfix productfix batchrecon saasbilling demo web apk
 #   fixssh   — memory/OOM/swap snapshot, swap ensure, google-guest-agent + sshd restart
 #              (SSH-in-browser "Connection failed… retrying" aksar guest-agent/RAM karke)
 #   industry — tools/ff-saasindustry.sh (idempotent) + tenant /api/settings/company verify
@@ -34,11 +34,11 @@
 set -u
 main() {
   local RAW WEB LOG STATUS STEPS OUT RC code
-  RAW="https://raw.githubusercontent.com/manjotkhehra74-cloud/FlavorFlow/${FF_BRANCH:-arena/01a0858b-flavorflow}/tools"
+  RAW="https://raw.githubusercontent.com/manjotkhehra74-cloud/FlavorFlow/${FF_BRANCH:-arena/01a0dc70-flavorflow}/tools"
   WEB="${FF_WEB:-/opt/flavorflow-saas/web}"
   LOG=/var/log/ff-boot.log
   STATUS="$WEB/download/boot-status.txt"
-  STEPS="${*:-fixssh industry billing stockledger codes lossrestore hrmate dispatchfix batchrecon saasbilling demo web apk}"
+  STEPS="${*:-fixssh industry billing stockledger codes lossrestore hrmate dispatchfix delfix productfix batchrecon saasbilling demo web apk}"
   mkdir -p "$WEB/download"
   exec > >(tee -a "$LOG") 2>&1
   : > "$STATUS"; chmod 644 "$STATUS"
@@ -172,6 +172,32 @@ main() {
       fi
       st "[dispatchfix] rc=$RC"
     else st "[dispatchfix] koi routes/dispatch.js nahi — skip"; fi
+  fi
+
+  # ---------- delfix (idempotent product/material deletes on factory VPS) ----------
+  if [[ " $STEPS " == *" delfix "* ]]; then
+    if [ -f /opt/flavorflow/server/routes/packing.js ]; then
+      OUT=""; RC=1
+      if fetch "$RAW/ff-delfix.sh" /tmp/ff-delfix.sh; then OUT=$(bash /tmp/ff-delfix.sh </dev/null 2>&1); RC=$?; fi
+      if [ -z "$OUT" ]; then st "[delfix] script download FAIL (GitHub reach nahi hoya?)"; else
+        echo "$OUT"
+        echo "$OUT" | grep -E '^(PRODUCTS|PACKING|SERVICE|SYNTAX|DELFIX|FATAL|MISSING)' | cut -c1-220 | sed 's/^/[delfix] /' | tee -a "$STATUS"
+      fi
+      st "[delfix] rc=$RC"
+    else st "[delfix] koi packing route nahi — skip"; fi
+  fi
+
+  # ---------- productfix (archive empty deleted products; filter stale rows) ----------
+  if [[ " $STEPS " == *" productfix "* ]]; then
+    if [ -f /opt/flavorflow-saas/core/routes/products.js ] || [ -f /opt/flavorflow/server/routes/products.js ]; then
+      OUT=""; RC=1
+      if fetch "$RAW/ff-productfix.sh" /tmp/ff-productfix.sh; then OUT=$(bash /tmp/ff-productfix.sh </dev/null 2>&1); RC=$?; fi
+      if [ -z "$OUT" ]; then st "[productfix] script download FAIL (GitHub reach nahi hoya?)"; else
+        echo "$OUT"
+        echo "$OUT" | grep -E '^(PRODUCTS|INVENTORY|CLEANUP|SERVICE|SYNTAX|PRODUCTFIX|FATAL|MISSING)' | cut -c1-220 | sed 's/^/[productfix] /' | tee -a "$STATUS"
+      fi
+      st "[productfix] rc=$RC"
+    else st "[productfix] koi products route nahi — skip"; fi
   fi
 
   # ---------- batchrecon (batch register = stock on hand; every tenant + factory) ----------
