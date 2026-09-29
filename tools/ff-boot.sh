@@ -5,7 +5,7 @@
 #   console.cloud.google.com → Compute Engine → VM instances → VM te tap → EDIT
 #   → thalle "Automation" → "Startup script" box vich eh 2 line paste:
 #       #!/bin/bash
-#       curl -fsSL https://raw.githubusercontent.com/manjotkhehra74-cloud/FlavorFlow/arena/01a0858b-flavorflow/tools/ff-boot.sh | bash
+#       curl -fsSL https://raw.githubusercontent.com/manjotkhehra74-cloud/FlavorFlow/arena/01a0dc70-flavorflow/tools/ff-boot.sh | bash
 #   → SAVE → VM page te ⋮ → RESET (STOP/START nahi — ephemeral IP badal sakdi hai)
 #   → 2-3 min baad result browser vich:  https://flavorflow.co.in/download/boot-status.txt
 #   (poora log: VM → "Serial port 1 (console)" ya /var/log/ff-boot.log)
