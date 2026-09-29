@@ -174,7 +174,7 @@ main() {
     else st "[dispatchfix] koi routes/dispatch.js nahi — skip"; fi
   fi
 
-  # ---------- batchfix2 (same product + code allowed on different dates) ----------
+  # ---------- batchfix2 (repeated product/code/date entries allowed) ----------
   if [[ " $STEPS " == *" batchfix2 "* ]]; then
     if [ -f /opt/flavorflow/server/routes/production.js ]; then
       OUT=""; RC=1
