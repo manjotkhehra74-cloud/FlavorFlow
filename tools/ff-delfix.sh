@@ -49,7 +49,7 @@ function replacePackingHandler(src) {
   if (!route) return null;
   const from = route.index;
   const tail = src.slice(from);
-  const cb = /(?:async\s+)?(?:function\s*)?(?:\([^()]*\)|[A-Za-z_$][\w$]*)\s*(?:=>\s*\{|\{)/.exec(tail);
+  const cb = /(?:async\s+)?(?:function\s+[A-Za-z_$][\w$]*\s*\([^()]*\)|function\s*\([^()]*\)|\([^()]*\)|[A-Za-z_$][\w$]*)\s*(?:=>\s*\{|\{)/.exec(tail);
   if (!cb) return null;
   const open = from + cb.index + cb[0].lastIndexOf('{');
   let depth = 0, quote = '', line = false, block = false, esc = false;

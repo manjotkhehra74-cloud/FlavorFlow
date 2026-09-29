@@ -63,9 +63,24 @@ try {
       console.log('DB: table rebuilt (inline UNIQUE removed)');
     }
     db.exec("DROP INDEX IF EXISTS idx_batches_code_date;");
-    db.exec("CREATE UNIQUE INDEX idx_batches_code_prod_date ON batches(code, product_id, planned_date);");
+    // A damaged/legacy DB can already contain exact same-product/code/date
+    // duplicates (often where planned_date was NULL). Never delete or merge
+    // those rows: batches, dispatch references, and audit history are sacred.
+    // In that case keep a non-unique lookup index and let the route guard block
+    // any new duplicate. A clean DB gets the stronger UNIQUE index.
+    const dupes = db.prepare("SELECT code, product_id, COALESCE(planned_date, '') planned_date, COUNT(*) n FROM batches GROUP BY code, product_id, COALESCE(planned_date, '') HAVING COUNT(*) > 1").all();
+    if (dupes.length) {
+      db.exec("DROP INDEX IF EXISTS idx_batches_code_prod_date;");
+      db.exec("CREATE INDEX idx_batches_code_prod_date ON batches(code, product_id, planned_date);");
+      console.log('DB: ' + dupes.length + ' existing duplicate group(s) preserved — non-unique lookup index used; route guard will block new duplicates');
+      for (const d of dupes.slice(0, 12)) console.log('DB DUPLICATE PRESERVED: code=' + d.code + ' product=' + d.product_id + ' date=' + (d.planned_date || '(blank)') + ' rows=' + d.n);
+    } else {
+      db.exec("DROP INDEX IF EXISTS idx_batches_code_prod_date;");
+      db.exec("CREATE UNIQUE INDEX idx_batches_code_prod_date ON batches(code, product_id, planned_date);");
+      console.log('DB: UNIQUE is now (code, product, date) ✓');
+    }
     const n = db.prepare('SELECT COUNT(*) c FROM batches').get().c;
-    console.log('DB: UNIQUE is now (code, product, date) ✓ — ' + n + ' batches preserved');
+    console.log('DB: ' + n + ' batches preserved');
   }
 } catch (e) { console.log('DB MIGRATION FAIL: ' + e.message); failed = true; }
 
