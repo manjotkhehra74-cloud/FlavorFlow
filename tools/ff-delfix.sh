@@ -80,10 +80,10 @@ function replaceNotFoundFailure(src) {
   // is replaced as one complete statement; do not leave the helper's trailing
   // status argument behind in the route source.
   const patterns = [
-    /throw\s+[\s\S]{0,300}?Material not found\.?[\s\S]{0,120}?;/i,
-    /return\s+[\s\S]{0,300}?Material not found\.?[\s\S]{0,120}?;/i,
-    /res\.status\s*\(\s*404\s*\)[\s\S]{0,300}?Material not found\.?[\s\S]{0,120}?;/i,
-    /next\s*\([\s\S]{0,300}?Material not found\.?[\s\S]{0,120}?;/i,
+    /throw\s+[^\n;]{0,300}?Material not found\.?[^\n;]{0,120}?;/i,
+    /return\s+[^\n;]{0,300}?Material not found\.?[^\n;]{0,120}?;/i,
+    /res\.status\s*\(\s*404\s*\)[^\n;]{0,300}?Material not found\.?[^\n;]{0,120}?;/i,
+    /next\s*\([^\n;]{0,300}?Material not found\.?[^\n;]{0,120}?;/i,
   ];
   for (const re of patterns) {
     if (re.test(src)) return src.replace(re, 'res.json({ ok: true, alreadyDeleted: true }); return;');
@@ -118,6 +118,18 @@ router.delete('/materials/:id', requirePerm('packing.manage'), (req, res) => {
   try { require('../helpers').audit(db, req.user, 'DELETE', 'packing', id, 'Packing material "' + mat.name + '" deleted'); } catch (_) {}
   res.json({ ok: true });
 });`;
+
+function addCompatibilityDeleteRoutes(src) {
+  // Some factory builds export the router but register DELETE in a wrapper,
+  // so neither an inline callback nor the old 404 line is present here. Add
+  // both valid mount shapes before old routes: /api/packing/materials/:id
+  // and a router mounted directly at /api/packing/materials.
+  const shortCode = packCode.replace("router.delete('/materials/:id'", "router.delete('/:id'");
+  const routes = packCode + '\n\n' + shortCode + '\n\n/* ffPackingDeleteCompat */\n';
+  const decl = /(?:const|let|var)\s+router\s*=\s*[^;]+;\s*/.exec(src);
+  if (!decl) return null;
+  return src.slice(0, decl.index + decl[0].length) + routes + src.slice(decl.index + decl[0].length);
+}
 
 let changed = false, failed = false;
 
@@ -170,14 +182,16 @@ let changed = false, failed = false;
         // Replace only that existing /materials/:id callback as a fallback;
         // do not append a duplicate route behind the still-broken one.
         const routeUpgrade = replacePackingHandler(src);
-        const upgraded = routeUpgrade || replaceNotFoundFailure(src);
-        if (!upgraded) { console.log('PACKING: no compatible delete/error handler found'); failed = true; }
+        const errorUpgrade = routeUpgrade ? null : replaceNotFoundFailure(src);
+        const compatUpgrade = routeUpgrade || errorUpgrade ? null : addCompatibilityDeleteRoutes(src);
+        const upgraded = routeUpgrade || errorUpgrade || compatUpgrade;
+        if (!upgraded) { console.log('PACKING: no compatible delete/error handler or router export found'); failed = true; }
         else {
           const bak = backup(f);
           src = upgraded;
           fs.writeFileSync(f, src);
           if (checkOrRestore(f, bak)) {
-            console.log(routeUpgrade ? 'PACKING: existing handler replaced with idempotent delete' : 'PACKING: Material-not-found failure neutralized in existing handler');
+            console.log(routeUpgrade ? 'PACKING: existing handler replaced with idempotent delete' : errorUpgrade ? 'PACKING: Material-not-found failure neutralized in existing handler' : 'PACKING: compatibility delete routes added before old routes');
             changed = true;
           } else failed = true;
         }
