@@ -119,11 +119,13 @@ class _DashboardPageState extends State<DashboardPage> {
         ];
         final session = context.read<AuthController>().session;
         final scheme = Theme.of(context).colorScheme;
+        final dashboardBackground = Theme.of(context).brightness == Brightness.light
+            ? const Color(0xFFF3F8FC)
+            : scheme.surfaceContainerLow;
         return Container(
-          // Keep the new dashboard composition readable in both the light and
-          // dark app themes. The previous fixed pale background made section
-          // headings disappear when the user's selected theme was dark.
-          color: scheme.surfaceContainerLow,
+          // Match the approved mobile preview: a soft blue-gray canvas in light
+          // mode, while retaining the user's dark theme without white flashes.
+          color: dashboardBackground,
           child: RefreshIndicator(
             onRefresh: () async => _reload(),
             child: ListView(
