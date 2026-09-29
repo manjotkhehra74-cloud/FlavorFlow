@@ -71,6 +71,23 @@ function replacePackingHandler(src) {
   return null;
 }
 
+// Last-resort upgrade for deployments that pass a named handler/helper to
+// router.delete instead of defining the callback inline. Replace only the
+// Material-not-found failure statement; this keeps the route and permissions
+// intact while making stale DELETEs idempotent.
+function replaceNotFoundFailure(src) {
+  const patterns = [
+    /throw\s+[\s\S]{0,300}?Material not found\.?[\s\S]{0,120}?;?/i,
+    /return\s+[\s\S]{0,300}?Material not found\.?[\s\S]{0,120}?;?/i,
+    /res\.status\s*\(\s*404\s*\)[\s\S]{0,300}?Material not found\.?[\s\S]{0,120}?;?/i,
+    /next\s*\([\s\S]{0,300}?Material not found\.?[\s\S]{0,120}?;?/i,
+  ];
+  for (const re of patterns) {
+    if (re.test(src)) return src.replace(re, 'res.json({ ok: true, alreadyDeleted: true }); return;');
+  }
+  return null;
+}
+
 const prodCode = `/** Soft-delete a product (ff-delfix v2). Inventory row is removed; history (dispatches, batches, reports) stays. */
 router.delete('/:id', requirePerm('products.manage'), (req, res) => {
   const id = Number(req.params.id);
@@ -149,13 +166,17 @@ let changed = false, failed = false;
         // Some live builds use throw/bad() or a helper for the 404 response.
         // Replace only that existing /materials/:id callback as a fallback;
         // do not append a duplicate route behind the still-broken one.
-        const upgraded = replacePackingHandler(src);
-        if (!upgraded) { console.log('PACKING: existing /materials/:id handler not found'); failed = true; }
+        const routeUpgrade = replacePackingHandler(src);
+        const upgraded = routeUpgrade || replaceNotFoundFailure(src);
+        if (!upgraded) { console.log('PACKING: no compatible delete/error handler found'); failed = true; }
         else {
           const bak = backup(f);
           src = upgraded;
           fs.writeFileSync(f, src);
-          if (checkOrRestore(f, bak)) { console.log('PACKING: existing handler replaced with idempotent delete'); changed = true; } else failed = true;
+          if (checkOrRestore(f, bak)) {
+            console.log(routeUpgrade ? 'PACKING: existing handler replaced with idempotent delete' : 'PACKING: Material-not-found failure neutralized in existing handler');
+            changed = true;
+          } else failed = true;
         }
       } else {
         const bak = backup(f);
