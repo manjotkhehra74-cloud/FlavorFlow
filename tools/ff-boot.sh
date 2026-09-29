@@ -10,7 +10,7 @@
 #   → 2-3 min baad result browser vich:  https://flavorflow.co.in/download/boot-status.txt
 #   (poora log: VM → "Serial port 1 (console)" ya /var/log/ff-boot.log)
 #
-# Steps (arg naal chuno, default sab):  fixssh industry billing stockledger codes lossrestore hrmate dispatchfix delfix productfix batchrecon saasbilling demo web apk
+# Steps (arg naal chuno, default sab):  fixssh industry billing stockledger codes lossrestore hrmate dispatchfix batchfix2 delfix productfix batchrecon saasbilling demo web apk
 #   fixssh   — memory/OOM/swap snapshot, swap ensure, google-guest-agent + sshd restart
 #              (SSH-in-browser "Connection failed… retrying" aksar guest-agent/RAM karke)
 #   industry — tools/ff-saasindustry.sh (idempotent) + tenant /api/settings/company verify
@@ -38,7 +38,7 @@ main() {
   WEB="${FF_WEB:-/opt/flavorflow-saas/web}"
   LOG=/var/log/ff-boot.log
   STATUS="$WEB/download/boot-status.txt"
-  STEPS="${*:-fixssh industry billing stockledger codes lossrestore hrmate dispatchfix delfix productfix batchrecon saasbilling demo web apk}"
+  STEPS="${*:-fixssh industry billing stockledger codes lossrestore hrmate dispatchfix batchfix2 delfix productfix batchrecon saasbilling demo web apk}"
   mkdir -p "$WEB/download"
   exec > >(tee -a "$LOG") 2>&1
   : > "$STATUS"; chmod 644 "$STATUS"
@@ -172,6 +172,19 @@ main() {
       fi
       st "[dispatchfix] rc=$RC"
     else st "[dispatchfix] koi routes/dispatch.js nahi — skip"; fi
+  fi
+
+  # ---------- batchfix2 (same product + code allowed on different dates) ----------
+  if [[ " $STEPS " == *" batchfix2 "* ]]; then
+    if [ -f /opt/flavorflow/server/routes/production.js ]; then
+      OUT=""; RC=1
+      if fetch "$RAW/ff-batchfix2.sh" /tmp/ff-batchfix2.sh; then OUT=$(bash /tmp/ff-batchfix2.sh </dev/null 2>&1); RC=$?; fi
+      if [ -z "$OUT" ]; then st "[batchfix2] script download FAIL (GitHub reach nahi hoya?)"; else
+        echo "$OUT"
+        echo "$OUT" | grep -E '^(DB|PRODUCTION|CREATE|EDIT|PATCH|BATCHFIX2|FATAL|SYNTAX|HEALTH)' | cut -c1-220 | sed 's/^/[batchfix2] /' | tee -a "$STATUS"
+      fi
+      st "[batchfix2] rc=$RC"
+    else st "[batchfix2] koi factory routes/production.js nahi — skip"; fi
   fi
 
   # ---------- delfix (idempotent product/material deletes on factory VPS) ----------

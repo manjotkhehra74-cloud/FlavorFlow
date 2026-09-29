@@ -45,7 +45,7 @@ const PACK_BODY = `{
 // route prefix/middleware stays untouched, so the existing permission guard is
 // preserved.
 function replacePackingHandler(src) {
-  const route = /router\.delete\s*\(\s*['"]\/materials\/:id['"]/g.exec(src);
+  const route = /router\.delete\s*\(\s*['"](?:\/materials)?\/:id['"]/g.exec(src);
   if (!route) return null;
   const from = route.index;
   const tail = src.slice(from);
@@ -180,4 +180,9 @@ setTimeout(() => {
   console.log('DELFIX v2 VERIFIED ✓');
 }, 2000);
 JS
+RC=$?
+if [ $RC -ne 0 ]; then
+  echo "DELFIX v2 INCOMPLETE — restart skip; upar wali PATCH INCOMPLETE line dekho"
+  exit $RC
+fi
 echo "DELFIX v2 DONE — product delete hun inventory vicho vi stock row hata dinda"

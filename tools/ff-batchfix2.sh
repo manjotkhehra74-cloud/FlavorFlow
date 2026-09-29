@@ -136,4 +136,5 @@ if [ $RC -eq 0 ]; then
   echo "BATCHFIX2 VERIFIED ✓ — same code hun vakhre products te same/vakhri date, sab allowed; sirf same product + same code + same date block hai"
 else
   echo "BATCHFIX2 INCOMPLETE — output upar dekho; DB backup: /opt/flavorflow/backups/"
+  exit $RC
 fi
