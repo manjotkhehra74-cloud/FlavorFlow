@@ -182,9 +182,12 @@ let changed = false, failed = false;
         // Replace only that existing /materials/:id callback as a fallback;
         // do not append a duplicate route behind the still-broken one.
         const routeUpgrade = replacePackingHandler(src);
-        const errorUpgrade = routeUpgrade ? null : replaceNotFoundFailure(src);
-        const compatUpgrade = routeUpgrade || errorUpgrade ? null : addCompatibilityDeleteRoutes(src);
-        const upgraded = routeUpgrade || errorUpgrade || compatUpgrade;
+        // Prefer adding a real route when the DELETE callback cannot be found.
+        // A global 404 says "Not found" even though GET /materials works;
+        // merely changing the old error string would not fix that endpoint.
+        const compatUpgrade = routeUpgrade ? null : addCompatibilityDeleteRoutes(src);
+        const errorUpgrade = routeUpgrade || compatUpgrade ? null : replaceNotFoundFailure(src);
+        const upgraded = routeUpgrade || compatUpgrade || errorUpgrade;
         if (!upgraded) { console.log('PACKING: no compatible delete/error handler or router export found'); failed = true; }
         else {
           const bak = backup(f);
