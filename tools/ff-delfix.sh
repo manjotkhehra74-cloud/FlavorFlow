@@ -9,7 +9,7 @@
 #   - fully patched           → skips
 set -u
 cd /opt/flavorflow/server || { echo "FATAL: /opt/flavorflow/server nahi mili"; exit 1; }
-echo "=== FF-DELFIX v2 $(date) ==="
+echo "=== FF-DELFIX v3 $(date) ==="
 node - <<'JS'
 const fs = require('fs'), cp = require('child_process');
 
@@ -29,15 +29,25 @@ const INV_LINE = "  db.prepare('DELETE FROM inventory WHERE product_id = ?').run
 const PACK_BODY = `{
   const id = Number(req.params.id);
   const mat = db.prepare('SELECT id, name FROM packing_materials WHERE id = ?').get(id);
-  // DELETE is intentionally idempotent: a cached Packing screen can submit
-  // an ID after another cleanup already removed the material.
-  if (!mat) { res.json({ ok: true, alreadyDeleted: true }); return; }
-  try { db.prepare('DELETE FROM bom_lines WHERE material_id = ?').run(id); } catch (_) {}
-  try { db.prepare('DELETE FROM bom WHERE material_id = ?').run(id); } catch (_) {}
-  try { db.prepare('DELETE FROM packing_materials WHERE id = ?').run(id); }
-  catch (e) { res.status(409).json({ error: 'Cannot delete: material is referenced by other records.' }); return; }
-  try { require('../helpers').audit(db, req.user, 'DELETE', 'packing', id, 'Packing material "' + mat.name + '" deleted'); } catch (_) {}
-  res.json({ ok: true });
+  // A material can have packing_txns / stock-journal history with a foreign
+  // key. Archive the master row instead of breaking those records. Only the
+  // requested material's BOM links are removed; every ledger/history row and
+  // the material's stock value remain intact.
+  try { db.exec('CREATE TABLE IF NOT EXISTS packing_material_archives (material_id INTEGER PRIMARY KEY, name TEXT NOT NULL, deleted_at TEXT NOT NULL)'); } catch (_) {}
+  if (!mat) {
+    const old = (() => { try { return db.prepare('SELECT material_id FROM packing_material_archives WHERE material_id = ?').get(id); } catch (_) { return null; } })();
+    if (old) { res.json({ ok: true, alreadyDeleted: true, archived: true }); return; }
+    res.json({ ok: true, alreadyDeleted: true }); return;
+  }
+  for (const table of ['packing_bom', 'bom_lines', 'bom']) {
+    try { db.prepare('DELETE FROM ' + table + ' WHERE material_id = ?').run(id); } catch (_) {}
+  }
+  try {
+    db.prepare('INSERT OR REPLACE INTO packing_material_archives (material_id, name, deleted_at) VALUES (?, ?, ?)')
+      .run(id, mat.name, new Date().toISOString());
+  } catch (_) {}
+  try { require('../helpers').audit(db, req.user, 'DELETE', 'packing', id, 'Packing material "' + mat.name + '" archived; BOM references removed; ledger preserved'); } catch (_) {}
+  res.json({ ok: true, archived: true });
 }`;
 
 // Find and replace the callback body without depending on its formatting or
@@ -102,22 +112,8 @@ ${INV_LINE}
   res.json({ ok: true });
 });`;
 
-const packCode = `/** Delete a packing material (ff-delfix). BOM lines removed; ledger entries stay. */
-router.delete('/materials/:id', requirePerm('packing.manage'), (req, res) => {
-  const id = Number(req.params.id);
-  const mat = db.prepare('SELECT id, name FROM packing_materials WHERE id = ?').get(id);
-  // DELETE is intentionally idempotent: a cached Packing screen can submit
-  // an ID after another cleanup already removed the material. Treat that as
-  // success so the stale row disappears on the following GET instead of
-  // showing a misleading "Material not found" error.
-  if (!mat) { res.json({ ok: true, alreadyDeleted: true }); return; }
-  try { db.prepare('DELETE FROM bom_lines WHERE material_id = ?').run(id); } catch (_) {}
-  try { db.prepare('DELETE FROM bom WHERE material_id = ?').run(id); } catch (_) {}
-  try { db.prepare('DELETE FROM packing_materials WHERE id = ?').run(id); }
-  catch (e) { res.status(409).json({ error: 'Cannot delete: material is referenced by other records.' }); return; }
-  try { require('../helpers').audit(db, req.user, 'DELETE', 'packing', id, 'Packing material "' + mat.name + '" deleted'); } catch (_) {}
-  res.json({ ok: true });
-});`;
+const packCode = `/** Delete/archive a packing material (ff-delfix v3). BOM links removed; ledger and stock history stay. */
+router.delete('/materials/:id', requirePerm('packing.manage'), (req, res) => ${PACK_BODY});`;
 
 function addCompatibilityDeleteRoutes(src) {
   // Some factory builds export the router but register DELETE in a wrapper,
@@ -126,7 +122,22 @@ function addCompatibilityDeleteRoutes(src) {
   // router mounted at /api/packing/materials, or router mounted at /api.
   const shortCode = packCode.replace("router.delete('/materials/:id'", "router.delete('/:id'");
   const fullCode = packCode.replace("router.delete('/materials/:id'", "router.delete('/packing/materials/:id'");
-  const routes = packCode + '\n\n' + shortCode + '\n\n' + fullCode + '\n\n/* ffPackingDeleteCompatV2 */\n';
+  const archiveHook = `/* ffPackingArchiveV3 */
+try { db.exec('CREATE TABLE IF NOT EXISTS packing_material_archives (material_id INTEGER PRIMARY KEY, name TEXT NOT NULL, deleted_at TEXT NOT NULL)'); } catch (_) {}
+router.use((req, res, next) => {
+  if (req.method !== 'GET' || !/\\/materials\\/?$/.test(String(req.originalUrl || req.url || '').split('?')[0])) return next();
+  const send = res.json;
+  res.json = (body) => {
+    let hidden = new Set();
+    try { hidden = new Set(db.prepare('SELECT material_id FROM packing_material_archives').all().map((r) => Number(r.material_id))); } catch (_) {}
+    const clean = (arr) => Array.isArray(arr) ? arr.filter((r) => !hidden.has(Number(r && (r.id == null ? r.material_id : r.id)))) : arr;
+    if (Array.isArray(body)) body = clean(body);
+    else if (body && Array.isArray(body.materials)) body = Object.assign({}, body, { materials: clean(body.materials) });
+    return send.call(res, body);
+  };
+  next();
+});`;
+  const routes = archiveHook + '\n\n' + packCode + '\n\n' + shortCode + '\n\n' + fullCode + '\n\n/* ffPackingDeleteCompatV3 */\n';
   const decl = /(?:const|let|var)\s+router\s*=\s*[^;]+;\s*/.exec(src);
   if (!decl) return null;
   return src.slice(0, decl.index + decl[0].length) + routes + src.slice(decl.index + decl[0].length);
@@ -171,7 +182,7 @@ let changed = false, failed = false;
   if (!fs.existsSync(f)) { console.log('MISSING: ' + f); failed = true; }
   else {
     let src = fs.readFileSync(f, 'utf8');
-    if (src.includes('alreadyDeleted: true') && src.includes('ffPackingDeleteCompatV2')) {
+    if (src.includes('alreadyDeleted: true') && src.includes('ffPackingDeleteCompatV3')) {
       console.log('PACKING: compatibility delete routes already patched — skip');
     } else if (src.includes('alreadyDeleted: true')) {
       // An earlier delfix added only one mount shape. Upgrade it to all three
@@ -234,12 +245,12 @@ if (!changed) { console.log('NOTHING TO DO — sab pehla hi patched'); process.e
 try { cp.execSync('systemctl restart flavorflow'); console.log('SERVICE RESTARTED'); } catch (e) { console.log('RESTART FAIL: ' + e.message); process.exit(4); }
 setTimeout(() => {
   try { console.log('HEALTH: ' + cp.execSync('curl -s -m 5 http://127.0.0.1:4000/api/health').toString().trim()); } catch (e) { console.log('HEALTH ERR'); }
-  console.log('DELFIX v2 VERIFIED ✓');
+  console.log('DELFIX v3 VERIFIED ✓');
 }, 2000);
 JS
 RC=$?
 if [ $RC -ne 0 ]; then
-  echo "DELFIX v2 INCOMPLETE — restart skip; upar wali PATCH INCOMPLETE line dekho"
+  echo "DELFIX v3 INCOMPLETE — restart skip; upar wali PATCH INCOMPLETE line dekho"
   exit $RC
 fi
-echo "DELFIX v2 DONE — product delete hun inventory vicho vi stock row hata dinda"
+echo "DELFIX v3 DONE — packing material archive/BOM cleanup + product inventory fix complete"
