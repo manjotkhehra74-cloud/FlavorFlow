@@ -27,8 +27,9 @@ const path = process.env.DIR;
 const db = require(path + '/db');
 const TARGET_CODE = '6I0605K';
 const TARGET_DATE = '2026-09-07';
+const TARGET_DISPATCH_DATE = '2026-09-09';
 const RETURN_CB = 116;
-const RETURN_KEY = 'VINEGAR-WHITE-1L|' + TARGET_CODE + '|' + TARGET_DATE + '|CB|' + RETURN_CB;
+const RETURN_KEY = 'VINEGAR-WHITE-1L|' + TARGET_CODE + '|' + TARGET_DATE + '|DISPATCH|' + TARGET_DISPATCH_DATE + '|CB|' + RETURN_CB;
 const now = new Date().toISOString();
 const out = (s) => console.log(String(s));
 const cols = (t) => { try { return db.prepare('PRAGMA table_info(' + t + ')').all().map((r) => String(r.name)); } catch (_) { return []; } };
@@ -74,8 +75,6 @@ try {
         const otherDates = batches.filter((b) => batchDate(b) !== TARGET_DATE).map((b) => b.id + ':' + batchDate(b));
         if (targetBatches.length !== 1) {
           fail('target batch count for product ' + product.id + ' is ' + targetBatches.length + (otherDates.length ? '; same code other dates=' + otherDates.join(',') : ''));
-        } else if (otherDates.length) {
-          fail('same product/code exists on other production dates (' + otherDates.join(',') + '); refusing ambiguous dispatch return');
         } else {
           const batch = targetBatches[0];
           const bCols = cols('batches');
@@ -87,7 +86,7 @@ try {
               out('PARTIAL RETURN ALREADY APPLIED: ' + RETURN_KEY);
             } else {
               const statusSql = dc.includes('status') ? " AND UPPER(COALESCE(d.status, 'DISPATCHED')) <> 'VOID'" : '';
-              const rows = db.prepare('SELECT di.*, d.code dispatch_code, d.dispatch_date, d.status dispatch_status FROM dispatch_items di JOIN dispatches d ON d.id = di.dispatch_id WHERE di.product_id = ? AND UPPER(TRIM(COALESCE(di.batch_code, \'\'))) = UPPER(?)' + statusSql + ' ORDER BY COALESCE(d.dispatch_date, \'\'), d.id, di.id').all(product.id, TARGET_CODE);
+              const rows = db.prepare('SELECT di.*, d.code dispatch_code, d.dispatch_date, d.status dispatch_status FROM dispatch_items di JOIN dispatches d ON d.id = di.dispatch_id WHERE di.product_id = ? AND UPPER(TRIM(COALESCE(di.batch_code, \'\'))) = UPPER(?) AND d.dispatch_date = ?' + statusSql + ' ORDER BY COALESCE(d.dispatch_date, \'\'), d.id, di.id').all(product.id, TARGET_CODE, TARGET_DISPATCH_DATE);
               const live = rows.filter((r) => Number(r.cartons) > 0);
               const total = live.reduce((s, r) => s + Number(r.cartons || 0), 0);
               if (total < RETURN_CB) {
