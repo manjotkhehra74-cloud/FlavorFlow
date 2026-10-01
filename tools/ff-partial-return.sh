@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # FlavorFlow — exact partial dispatch return (factory VPS, no APK).
-# Target: Vinegar White 180 ml, batch 6I0605K, production date 07/09/2026,
+# Target: White Vinegar 1 Ltr, batch 6I0605K, production date 07/09/2026,
 #         return exactly 116 CB only. Other products/lines on the same date
 #         are never touched. The dispatch history is retained in
 #         ff_partial_dispatch_returns and the active dispatch quantity is
@@ -28,7 +28,7 @@ const db = require(path + '/db');
 const TARGET_CODE = '6I0605K';
 const TARGET_DATE = '2026-09-07';
 const RETURN_CB = 116;
-const RETURN_KEY = 'VINEGAR-WHITE-180|' + TARGET_CODE + '|' + TARGET_DATE + '|CB|' + RETURN_CB;
+const RETURN_KEY = 'VINEGAR-WHITE-1L|' + TARGET_CODE + '|' + TARGET_DATE + '|CB|' + RETURN_CB;
 const now = new Date().toISOString();
 const out = (s) => console.log(String(s));
 const cols = (t) => { try { return db.prepare('PRAGMA table_info(' + t + ')').all().map((r) => String(r.name)); } catch (_) { return []; } };
@@ -63,10 +63,10 @@ try {
     } else {
       const products = db.prepare('SELECT * FROM products').all().filter((p) => {
         const n = norm(p.name);
-        return n.includes('vinegar') && n.includes('white') && n.includes('180');
+        return n.includes('vinegar') && n.includes('white') && (n.includes('1ltr') || n.includes('1l'));
       });
       if (products.length !== 1) {
-        fail('Vinegar White 180 product match count is ' + products.length + (products.length ? ': ' + products.map((p) => p.id + ' ' + p.name).join(' | ') : ''));
+        fail('White Vinegar 1 Ltr product match count is ' + products.length + (products.length ? ': ' + products.map((p) => p.id + ' ' + p.name).join(' | ') : ''));
       } else {
         const product = products[0];
         const batches = db.prepare('SELECT * FROM batches WHERE product_id = ? AND UPPER(TRIM(code)) = UPPER(?)').all(product.id, TARGET_CODE);
@@ -126,7 +126,7 @@ try {
                     const ins = db.prepare('INSERT INTO ff_partial_dispatch_returns (return_key, dispatch_item_id, dispatch_id, product_id, batch_code, production_date, cartons, created_at, created_by, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
                     for (const x of picks) {
                       const r = x.row;
-                      ins.run(RETURN_KEY, Number(r.id), Number(r.dispatch_id), Number(product.id), TARGET_CODE, TARGET_DATE, x.q, now, 'vps-partial-return', 'Exact return: Vinegar White 180 ml, production 07/09/2026');
+                      ins.run(RETURN_KEY, Number(r.id), Number(r.dispatch_id), Number(product.id), TARGET_CODE, TARGET_DATE, x.q, now, 'vps-partial-return', 'Exact return: White Vinegar 1 Ltr, production 07/09/2026');
                       db.prepare('UPDATE dispatch_items SET cartons = COALESCE(cartons, 0) - ? WHERE id = ?').run(x.q, Number(r.id));
                     }
                     if (inv) {
@@ -141,7 +141,7 @@ try {
                       db.prepare('INSERT INTO inventory (' + names.join(', ') + ') VALUES (' + names.map(() => '?').join(', ') + ')').run(...vals);
                     }
                     db.prepare('UPDATE batches SET used_cb = COALESCE(used_cb, 0) - ? WHERE id = ?').run(RETURN_CB, Number(batch.id));
-                    try { require(path + '/helpers').audit(db, { name: 'vps-partial-return' }, 'RETURN', 'dispatch', Number(picks[0].row.dispatch_id), 'Returned exactly ' + RETURN_CB + ' CB of Vinegar White 180 ml, batch ' + TARGET_CODE + ', production ' + TARGET_DATE); } catch (_) {}
+                    try { require(path + '/helpers').audit(db, { name: 'vps-partial-return' }, 'RETURN', 'dispatch', Number(picks[0].row.dispatch_id), 'Returned exactly ' + RETURN_CB + ' CB of White Vinegar 1 Ltr, batch ' + TARGET_CODE + ', production ' + TARGET_DATE); } catch (_) {}
                   });
                   out('PARTIAL RETURN DONE');
                   out('PRODUCT: ' + product.name + ' (id ' + product.id + ')');
