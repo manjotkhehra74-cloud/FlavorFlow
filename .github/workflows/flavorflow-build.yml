@@ -1,1 +1,61 @@
+name: FlavorFlow build
 
+on:
+  push:
+    branches:
+      - arena/01a0dc70-flavorflow
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flavorflow-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build web and Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install packages
+        run: flutter pub get
+
+      - name: Build web
+        run: flutter build web --release --no-tree-shake-icons --dart-define=API_BASE=https://flavorflow.duckdns.org/api
+
+      - name: Upload web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: flavorflow-web
+          path: build/web
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Build Android APK
+        run: flutter build apk --release --dart-define=API_BASE=https://flavorflow.duckdns.org/api
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: flavorflow-android-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 7
