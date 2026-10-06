@@ -146,14 +146,14 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
     }
   }
 
-  String get _query {
+  String _query({bool includeBatchCode = true}) {
     final values = <String, String>{
       'from': _fromYmd,
       'to': _toYmd,
       if (_skuFilter != null && _skuFilter!.isNotEmpty) 'sku': _skuFilter!,
       if (_lineFilter.text.trim().isNotEmpty) 'line': _lineFilter.text.trim(),
       if (_shiftFilter != 'Combined') 'shift': _shiftFilter,
-      if (_batchFilter.text.trim().isNotEmpty) 'batchCode': _batchFilter.text.trim(),
+      if (includeBatchCode && _batchFilter.text.trim().isNotEmpty) 'batchCode': _batchFilter.text.trim(),
     };
     return Uri(queryParameters: values).query;
   }
@@ -234,7 +234,7 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
       productList = ((productsJson as Map)['products'] as List? ?? const []).cast<Map<String, dynamic>>();
     } catch (_) {}
     final products = <String, Map<String, dynamic>>{for (final p in productList) '${p['id']}': p};
-    final labour = await _loadLabourRows(api, _query);
+    final labour = await _loadLabourRows(api, _query(includeBatchCode: false));
 
     final seenIds = <String>{};
     final metrics = <String, Map<String, dynamic>>{};
@@ -245,7 +245,6 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
       final entryShift = '${entry['shift'] ?? ''}';
       if (_shiftFilter != 'Combined' && entryShift.toLowerCase() != _shiftFilter.toLowerCase()) continue;
       if (_lineFilter.text.trim().isNotEmpty && '${entry['line'] ?? ''}'.toLowerCase() != _lineFilter.text.trim().toLowerCase()) continue;
-      if (_batchFilter.text.trim().isNotEmpty && '${entry['batchCode'] ?? entry['batch_code'] ?? ''}'.toLowerCase() != _batchFilter.text.trim().toLowerCase()) continue;
       final pid = '${entry['productId'] ?? entry['product_id'] ?? entry['product'] ?? ''}';
       final source = '${entry['productName'] ?? entry['product_name'] ?? products[pid]?['name'] ?? pid}';
       final label = _productivityLabel(source);
@@ -270,7 +269,6 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
       final line = '${batch['line'] ?? batch['production_line'] ?? ''}';
       if (_lineFilter.text.trim().isNotEmpty && line.toLowerCase() != _lineFilter.text.trim().toLowerCase()) continue;
       final code = '${batch['code'] ?? batch['batch_code'] ?? ''}';
-      if (_batchFilter.text.trim().isNotEmpty && code.toLowerCase() != _batchFilter.text.trim().toLowerCase()) continue;
       final batchShift = '${batch['shift'] ?? ''}';
       if (_shiftFilter != 'Combined' && batchShift.isNotEmpty && batchShift.toLowerCase() != _shiftFilter.toLowerCase()) continue;
       final label = _productivityLabel(source);
@@ -304,13 +302,12 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
         'kgPerHead': totalManpower == 0 ? 0 : totalKg / totalManpower,
         'cbPerHead': totalManpower == 0 ? 0 : totalCb / totalManpower,
       },
-      'reconciliationWarning': 'Using completed production records from the Production register until the productivity API is available.',
     };
   }
 
   Future<Map<String, dynamic>> _loadProductivity() async {
     try {
-      final response = (await context.read<AuthController>().api.get('/reports/productivity?$_query') as Map).cast<String, dynamic>();
+      final response = (await context.read<AuthController>().api.get('/reports/productivity?${_query(includeBatchCode: false)}') as Map).cast<String, dynamic>();
       final normalised = _normaliseProductivity(response);
       if (((normalised['rows'] as List?) ?? const []).isNotEmpty) return normalised;
     } catch (_) {}
@@ -323,10 +320,9 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
 
   void _reload() {
     final api = context.read<AuthController>().api;
-    final q = '?$_query';
     final productivity = _loadProductivity();
-    final labour = _loadLabourRows(api, _query);
-    final analysis = api.get('/reports/productivity/analysis$q').then((v) => (v as Map).cast<String, dynamic>()).catchError((_) => <String, dynamic>{'rows': const []});
+    final labour = _loadLabourRows(api, _query(includeBatchCode: true));
+    final analysis = api.get('/reports/productivity/analysis?${_query(includeBatchCode: false)}').then((v) => (v as Map).cast<String, dynamic>()).catchError((_) => <String, dynamic>{'rows': const []});
     void assign() {
       _productivityFuture = productivity;
       _labourFuture = labour;
@@ -373,7 +369,7 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
     _reload();
   }
 
-  Widget _dateFilters(BuildContext context) {
+  Widget _dateFilters(BuildContext context, {bool includeBatchCode = true}) {
     final scheme = Theme.of(context).colorScheme;
     Widget dateButton(String label, DateTime value, VoidCallback tap) => OutlinedButton.icon(
           onPressed: tap,
@@ -416,8 +412,9 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
           ),
         ),
         SizedBox(width: 180, child: TextField(controller: _lineFilter, decoration: const InputDecoration(labelText: 'Production line', prefixIcon: Icon(Icons.precision_manufacturing_outlined, size: 18)), onSubmitted: (_) => _reload())),
-        SizedBox(width: 190, child: TextField(controller: _batchFilter, decoration: const InputDecoration(labelText: 'Batch code', prefixIcon: Icon(Icons.qr_code_2_outlined, size: 18)), onSubmitted: (_) => _reload())),
-        if (_lineFilter.text.isNotEmpty || _batchFilter.text.isNotEmpty || _skuFilter != null)
+        if (includeBatchCode)
+          SizedBox(width: 190, child: TextField(controller: _batchFilter, decoration: const InputDecoration(labelText: 'Batch code', prefixIcon: Icon(Icons.qr_code_2_outlined, size: 18)), onSubmitted: (_) => _reload())),
+        if (_lineFilter.text.isNotEmpty || (includeBatchCode && _batchFilter.text.isNotEmpty) || _skuFilter != null)
           TextButton.icon(onPressed: () { _lineFilter.clear(); _batchFilter.clear(); setState(() => _skuFilter = null); _reload(); }, icon: const Icon(Icons.clear, size: 17), label: const Text('Clear filters')),
       ]),
     ]);
@@ -515,7 +512,7 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
           _hero(context, data),
           _reconciliationBanner(context, data),
           const SizedBox(height: 14),
-          _dateFilters(context),
+          _dateFilters(context, includeBatchCode: false),
           const SizedBox(height: 8),
           Align(alignment: Alignment.centerRight, child: OutlinedButton.icon(onPressed: _exporting ? null : () => _export('productivity'), icon: const Icon(Icons.download_outlined, size: 18), label: const Text('Export Excel'))),
           const SizedBox(height: 8),
@@ -563,7 +560,7 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
         final totals = (data['periodTotals'] as Map?)?.cast<String, dynamic>() ?? (data['totals'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
         final sections = _analysisSections(data);
         return ListView(padding: const EdgeInsets.all(18), children: [
-          _dateFilters(context),
+          _dateFilters(context, includeBatchCode: false),
           const SizedBox(height: 12),
           Text('Labour Analysis keeps White Vinegar 610 and Brown Vinegar 610 separate. Only the Productivity summary groups them as Vinegar 610.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w600)),
           const SizedBox(height: 12),

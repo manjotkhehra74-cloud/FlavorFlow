@@ -42,7 +42,7 @@ Required values are `date`, `shift` (`Day` or `Night`), `line`, `productId`, `ba
 
 ## Productivity summary
 
-`GET /reports/productivity` accepts the same date and filters. It must aggregate only completed production records:
+`GET /reports/productivity` accepts date/month, SKU, line, and shift filters. It does not need a batch-code filter: completed production is read automatically from the Production register. It must aggregate only completed production records:
 
 - sum `produced_cb` from completed batches;
 - aggregate all rows for the same batch code without counting a source row twice;
