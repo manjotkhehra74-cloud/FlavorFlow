@@ -20,12 +20,13 @@ const List<Map<String, String>> kStandardNav = [
   {'path': '/dashboard', 'label': 'Dashboard', 'icon': 'dashboard', 'perm': 'dashboard.view', 'group': 'Overview'},
   {'path': '/products', 'label': 'Product Master', 'icon': 'inventory_2', 'perm': 'products.view', 'group': 'Operations'},
   {'path': '/inventory', 'label': 'Inventory', 'icon': 'warehouse', 'perm': 'inventory.view', 'group': 'Operations'},
-  {'path': '/packing', 'label': 'Packing Material', 'icon': 'widgets', 'perm': 'packing.view', 'group': 'Operations'},
+  {'path': '/packing', 'label': 'Packing', 'icon': 'widgets', 'perm': 'packing.view', 'group': 'Operations'},
   {'path': '/production', 'label': 'Production', 'icon': 'manufacturing', 'perm': 'production.view', 'group': 'Operations'},
   {'path': '/dispatch', 'label': 'Dispatch', 'icon': 'local_shipping', 'perm': 'dispatch.view', 'group': 'Operations'},
   {'path': '/adjustments', 'label': 'Stock Adjustments', 'icon': 'tune', 'perm': 'adjustments.view', 'group': 'Stock Control'},
   {'path': '/approvals', 'label': 'Approvals', 'icon': 'fact_check', 'perm': 'adjustments.approve', 'group': 'Stock Control'},
   {'path': '/reports', 'label': 'Reports', 'icon': 'bar_chart', 'perm': 'reports.view', 'group': 'Insights'},
+  {'path': '/productivity', 'label': 'Productivity & Labour', 'icon': 'analytics', 'perm': 'reports.view', 'group': 'Insights'},
   {'path': '/users', 'label': 'User Management', 'icon': 'group', 'perm': 'users.view', 'group': 'Administration'},
   {'path': '/audit', 'label': 'Audit Log', 'icon': 'history', 'perm': 'audit.view', 'group': 'Administration'},
 ];
@@ -69,65 +70,6 @@ class AppShell extends StatefulWidget {
   State<AppShell> createState() => _AppShellState();
 }
 
-/// Debounces keyboard viewInsets for the page body.
-///
-/// When the keyboard opens, Android animates the inset ~60x/second and
-/// Flutter re-lays-out the WHOLE page (incl. big data tables behind an open
-/// dialog) on every frame — that made the keyboard open visibly slowly on
-/// every device (Redmi Note 11 and S25 Ultra alike), only in dialogs sitting
-/// over heavy pages. This widget lets the page resize ONCE, ~90ms after the
-/// inset stops changing, instead of 20 times during the animation. Dialogs
-/// themselves read the root MediaQuery, so they still avoid the keyboard
-/// normally.
-class _StableInsets extends StatefulWidget {
-  final Widget child;
-  const _StableInsets({required this.child});
-  @override
-  State<_StableInsets> createState() => _StableInsetsState();
-}
-
-class _StableInsetsState extends State<_StableInsets> {
-  EdgeInsets _applied = EdgeInsets.zero;
-  Timer? _settle;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final target = MediaQuery.of(context).viewInsets;
-    if (target == _applied) return;
-    _settle?.cancel();
-    _settle = Timer(const Duration(milliseconds: 90), () {
-      if (!mounted) return;
-      setState(() => _applied = MediaQuery.of(context).viewInsets);
-    });
-  }
-
-  @override
-  void dispose() {
-    _settle?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // The host Scaffold has resizeToAvoidBottomInset:false, so we apply the
-    // (debounced) keyboard inset ourselves — one relayout instead of ~20.
-    //
-    // RepaintBoundary: when a dialog opens/closes, its barrier fades over the
-    // page and Flutter otherwise re-PAINTS the whole heavy page (big tables)
-    // on every animation frame — that made dialogs open, and especially
-    // close, with visible stutter. The boundary caches the page as its own
-    // layer, so the fade animation composites cheaply instead of repainting.
-    return MediaQuery(
-      data: MediaQuery.of(context).copyWith(viewInsets: _applied),
-      child: Padding(
-        padding: EdgeInsets.only(bottom: _applied.bottom),
-        child: RepaintBoundary(child: widget.child),
-      ),
-    );
-  }
-}
-
 class _AppShellState extends State<AppShell> {
   int _unread = 0;
   Timer? _timer;
@@ -158,20 +100,22 @@ class _AppShellState extends State<AppShell> {
     if (mounted) setState(() => _unread = NotificationBadge.count.value);
   }
 
+  bool _keyboardOpen() => WidgetsBinding.instance.platformDispatcher.views.any((v) => v.viewInsets.bottom > 0);
+
   Future<void> _loadUnread() async {
-    if (_polling) return; // previous poll still running
-    // Keyboard open = the user is typing — skip this cycle entirely so the
-    // download/parse never competes with text input (keyboard-lag fix).
-    final keyboardOpen = WidgetsBinding.instance.platformDispatcher.views.any((v) => v.viewInsets.bottom > 0);
-    if (keyboardOpen) return;
+    if (_polling || _keyboardOpen()) return; // never compete with the IME
     _polling = true;
     final syncRevision = NotificationBadge.beginSync();
     try {
       final auth = context.read<AuthController>();
       final json = await auth.api.get('/notifications');
+      // The request may have started before the keyboard opened. Do not parse,
+      // notify, or update inherited UI state during the IME animation.
+      if (_keyboardOpen()) return;
       final items = ((json as Map)['notifications'] as List).cast<Map<String, dynamic>>();
       final unread = items.where((n) => n['is_read'] == 0).length;
       NotificationBadge.syncFromServer(unread, syncRevision);
+      if (_keyboardOpen()) return;
       // New unread items → real phone notifications (sound + status bar).
       await PhoneNotifier.showNew(items);
     } catch (_) {/* transient */} finally {
@@ -296,14 +240,14 @@ class _AppShellState extends State<AppShell> {
 
     if (wide) {
       return Scaffold(
-        resizeToAvoidBottomInset: false, // _StableInsets applies the (debounced) inset
+        resizeToAvoidBottomInset: true,
         body: Row(children: [
           sidebar,
           Expanded(
             child: Column(children: [
               topBar,
               const Divider(height: 1),
-              Expanded(child: _StableInsets(child: page)),
+              Expanded(child: RepaintBoundary(child: page)),
             ]),
           ),
         ]),
@@ -313,16 +257,19 @@ class _AppShellState extends State<AppShell> {
     final path = GoRouterState.of(context).uri.path;
     return Scaffold(
       key: _scaffoldKey,
-      resizeToAvoidBottomInset: false, // _StableInsets applies the (debounced) inset
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         title: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text(title)),
+        // Keep the Dashboard title centered like the mobile reference while
+        // preserving the shared shell and bottom navigation on every route.
+        centerTitle: title == tr('Dashboard') || title == tr('Reports'),
         titleSpacing: 0,
         actions: [topBar.actionsPadding(child: topBar.bellAction(context)), topBar.userAction(context, compact: true)],
       ),
       drawer: phone
           ? _MobileModulesDrawer(nav: nav, selected: selected, session: session, onTap: goTo, onLogout: _logout)
           : Drawer(backgroundColor: Shell.bg, child: SafeArea(child: sidebar)),
-      body: _StableInsets(child: page),
+      body: RepaintBoundary(child: page),
       bottomNavigationBar: phone
           ? _MobileBottomBar(
               currentPath: path,
