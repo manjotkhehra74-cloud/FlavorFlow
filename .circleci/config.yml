@@ -1,9 +1,7 @@
 version: 2.1
 
-# FlavorFlow Android release builds on CircleCI.
-# The approval gate means pushes do not consume build credits by themselves.
-# In CircleCI, open the latest pipeline and approve "approve-release" only
-# when an AAB/APK is actually needed.
+# FlavorFlow Android/web builds on CircleCI.
+# Release and web jobs start automatically for the listed Arena branches.
 
 executors:
   flutter_android:
@@ -59,26 +57,103 @@ jobs:
             set -euo pipefail
             NDK_VERSION="28.2.13676358"
             CMAKE_VERSION="3.22.1"
+            SDK_PACKAGE_TIMEOUT="12m"
             SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/opt/android-sdk-linux}}"
             SDKMANAGER=$(find "$SDK_ROOT" -type f -name sdkmanager -print -quit)
             test -n "$SDKMANAGER"
-            yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+            yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null 2>&1 || true
 
-            # Install every package seen in the Gradle logs BEFORE a Gradle JVM
-            # exists. This prevents sdkmanager + a 1.4GB daemon overlapping.
-            "$SDKMANAGER" \
-              "platforms;android-34" \
-              "platforms;android-35" \
-              "build-tools;34.0.0" \
-              "build-tools;35.0.0" \
-              "cmake;$CMAKE_VERSION" \
-              "ndk;$NDK_VERSION"
+            # Install packages one at a time. A transient/corrupt SDK archive
+            # ("ZipFile unknown archive") must not poison the next package in
+            # the same sdkmanager invocation. Remove the incomplete package and
+            # SDK download cache, then retry the individual archive.
+            package_ready() {
+              local package="$1"
+              local dir="${package//;//}"
+              case "$package" in
+                platforms\;*) test -f "$SDK_ROOT/$dir/android.jar" ;;
+                build-tools\;*) test -x "$SDK_ROOT/$dir/aapt2" ;;
+                cmake\;*) test -x "$SDK_ROOT/$dir/bin/cmake" ;;
+                ndk\;*) test -f "$SDK_ROOT/$dir/source.properties" ;;
+                *) test -f "$SDK_ROOT/$dir/package.xml" ;;
+              esac
+            }
 
-            test -d "$SDK_ROOT/platforms/android-34"
-            test -d "$SDK_ROOT/platforms/android-35"
-            test -d "$SDK_ROOT/build-tools/35.0.0"
-            test -d "$SDK_ROOT/cmake/$CMAKE_VERSION"
-            test -d "$SDK_ROOT/ndk/$NDK_VERSION"
+            install_sdk_package() {
+              local package="$1"
+              local dir="${package//;//}"
+              local attempt
+              if package_ready "$package"; then
+                echo "SDK package already ready: $package"
+                return 0
+              fi
+              for attempt in 1 2 3; do
+                echo "Installing $package (attempt $attempt/3)"
+                if [ "$attempt" -gt 1 ]; then
+                  rm -rf "$SDK_ROOT/$dir" "$SDK_ROOT/.temp" "$SDK_ROOT/temp" "$HOME/.android/cache"
+                fi
+                # Bound each sdkmanager call. A corrupt archive can otherwise
+                # leave the CircleCI job running indefinitely while sdkmanager
+                # keeps retrying or waits on its download pipe.
+                yes | timeout --foreground "$SDK_PACKAGE_TIMEOUT" "$SDKMANAGER" --sdk_root="$SDK_ROOT" "$package" || true
+                # sdkmanager sometimes returns non-zero after extracting the
+                # usable SDK files because an optional template archive is bad.
+                # Validate the actual file Gradle needs before discarding it.
+                if package_ready "$package"; then
+                  echo "SDK package usable after sdkmanager warning: $package"
+                  return 0
+                fi
+                # sdkmanager can leave an apparently partial directory after a
+                # failed unzip; force the next attempt to download a clean zip.
+                rm -rf "$SDK_ROOT/$dir"
+              done
+              echo "FATAL: unable to install a valid SDK package: $package" >&2
+              return 1
+            }
+
+            # Prefer a complete platform already bundled in the Flutter image.
+            # The runner's Google archive for android-35 is currently returning
+            # corrupt zips, so downloading a platform is only the last resort.
+            PLATFORM_JAR=$(find "$SDK_ROOT/platforms" -mindepth 2 -maxdepth 2 -type f -name android.jar -print 2>/dev/null | sort -V | tail -1 || true)
+            if [ -n "$PLATFORM_JAR" ]; then
+              PLATFORM_API=$(basename "$(dirname "$PLATFORM_JAR")" | sed 's/^android-//')
+              if [ "$PLATFORM_API" -ge 35 ]; then
+                echo "Using bundled Android Platform $PLATFORM_API"
+                printf 'flavorflow.compileSdk=%s\n' "$PLATFORM_API" >> android/gradle.properties
+              else
+                PLATFORM_JAR=''
+              fi
+            fi
+            if [ -z "$PLATFORM_JAR" ]; then
+              install_sdk_package "platforms;android-35"
+              package_ready "platforms;android-35"
+              printf '%s\n' 'flavorflow.compileSdk=35' >> android/gradle.properties
+            fi
+
+            BUILD_TOOLS_DIR=$(find "$SDK_ROOT/build-tools" -mindepth 2 -maxdepth 2 -type f -name aapt2 -print 2>/dev/null | sort -V | tail -1 || true)
+            if [ -z "$BUILD_TOOLS_DIR" ]; then
+              install_sdk_package "build-tools;35.0.0"
+              package_ready "build-tools;35.0.0"
+            else
+              echo "Using bundled Android build tools: $(basename "$(dirname "$BUILD_TOOLS_DIR")")"
+            fi
+
+            CMAKE_BIN=$(find "$SDK_ROOT/cmake" -mindepth 2 -maxdepth 3 -type f -path '*/bin/cmake' -print 2>/dev/null | sort -V | tail -1 || true)
+            if [ -z "$CMAKE_BIN" ]; then
+              install_sdk_package "cmake;$CMAKE_VERSION"
+              package_ready "cmake;$CMAKE_VERSION"
+            fi
+
+            NDK_DIR=$(find "$SDK_ROOT/ndk" -mindepth 1 -maxdepth 1 -type d -print 2>/dev/null | sort -V | tail -1 || true)
+            if [ -n "$NDK_DIR" ] && [ -f "$NDK_DIR/source.properties" ]; then
+              NDK_INSTALLED=$(basename "$NDK_DIR")
+              echo "Using bundled Android NDK $NDK_INSTALLED"
+              printf 'flavorflow.ndkVersion=%s\n' "$NDK_INSTALLED" >> android/gradle.properties
+            else
+              install_sdk_package "ndk;$NDK_VERSION"
+              package_ready "ndk;$NDK_VERSION"
+              printf '%s\n' "flavorflow.ndkVersion=$NDK_VERSION" >> android/gradle.properties
+            fi
 
             sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx2048M -XX:MaxMetaspaceSize=512M -Dfile.encoding=UTF-8/' android/gradle.properties
             printf '%s\n' \
@@ -201,37 +276,19 @@ jobs:
 workflows:
   play-store-release:
     jobs:
-      - approve-release:
-          type: approval
-          filters:
-            branches:
-              only:
-                - arena/01a003d0-flavorflow
-                - arena/01a01af5-flavorflow
-                - arena/01a0858b-flavorflow
       - build-play-store-release:
-          requires:
-            - approve-release
           filters:
             branches:
               only:
                 - arena/01a003d0-flavorflow
                 - arena/01a01af5-flavorflow
                 - arena/01a0858b-flavorflow
-      - approve-web:
-          type: approval
-          filters:
-            branches:
-              only:
-                - arena/01a003d0-flavorflow
-                - arena/01a01af5-flavorflow
-                - arena/01a0858b-flavorflow
+                - arena/01a0dc70-flavorflow
       - build-web:
-          requires:
-            - approve-web
           filters:
             branches:
               only:
                 - arena/01a003d0-flavorflow
                 - arena/01a01af5-flavorflow
                 - arena/01a0858b-flavorflow
+                - arena/01a0dc70-flavorflow
