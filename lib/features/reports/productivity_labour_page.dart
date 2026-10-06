@@ -181,7 +181,7 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
   }
 
   Map<String, dynamic> _emptyProductivity() => {
-        'columns': const ['SKU', 'MANPOWER', 'PROD. IN KG', 'PROD. IN CB', 'PRODUCTIVITY IN KG/HEAD', 'PRODUCTIVITY IN CB/HEAD'],
+        'columns': const ['SKU', 'LINE', 'MANPOWER', 'PROD. IN KG', 'PROD. IN CB', 'PRODUCTIVITY IN KG/HEAD', 'PRODUCTIVITY IN CB/HEAD'],
         'rows': const [],
         'totals': const {},
       };
@@ -199,39 +199,69 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
     return source;
   }
 
+  int _columnIndex(List<String> columns, String name, int fallback) {
+    final index = columns.indexWhere((c) {
+      final normalized = c.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+      return normalized == name || (name == 'line' && normalized == 'productionline');
+    });
+    return index == -1 ? fallback : index;
+  }
+
+  bool _hasLineDimension(Map<String, dynamic> data) {
+    final columns = (data['columns'] as List? ?? const []).map((v) => '$v'.toLowerCase()).toList();
+    return columns.any((c) => c == 'line' || c.contains('production line'));
+  }
+
   Map<String, dynamic> _normaliseProductivity(Map<String, dynamic> source) {
     final raw = source['rows'];
     if (raw is! List || raw.isEmpty) return source;
+    final sourceColumns = (source['columns'] as List? ?? const []).map((v) => '$v').toList();
+    final skuIndex = _columnIndex(sourceColumns, 'sku', 0);
+    final lineIndex = _columnIndex(sourceColumns, 'line', -1);
+    final manpowerIndex = _columnIndex(sourceColumns, 'manpower', lineIndex >= 0 ? 2 : 1);
+    final kgIndex = _columnIndex(sourceColumns, 'prodinkg', lineIndex >= 0 ? 3 : 2);
+    final cbIndex = _columnIndex(sourceColumns, 'prodincb', lineIndex >= 0 ? 4 : 3);
     final grouped = <String, List<dynamic>>{};
     for (final item in raw) {
       if (item is! List || item.isEmpty) continue;
       final row = item.toList();
-      final label = _productivityLabel('${row.first}');
-      final current = grouped[label];
+      final label = _productivityLabel('${skuIndex < row.length ? row[skuIndex] : ''}');
+      final line = lineIndex >= 0 && lineIndex < row.length ? '${row[lineIndex]}' : '';
+      final key = '$label\u0000${line.toLowerCase()}';
+      final current = grouped[key];
       if (current == null) {
-        row[0] = label;
-        grouped[label] = row;
+        if (skuIndex < row.length) row[skuIndex] = label;
+        grouped[key] = row;
         continue;
       }
-      // Productivity-only merge: source products remain separate everywhere else.
-      for (final index in [1, 2, 3]) {
-        if (index < row.length && index < current.length) current[index] = _n(current[index]) + _n(row[index]);
+      // Productivity-only merge: keep each production line separate while
+      // grouping White/Brown Vinegar 610 only within the same line.
+      for (final index in [manpowerIndex, kgIndex, cbIndex]) {
+        if (index >= 0 && index < row.length && index < current.length) current[index] = _n(current[index]) + _n(row[index]);
       }
     }
     final rows = <List<dynamic>>[];
     var totalManpower = 0.0, totalKg = 0.0, totalCb = 0.0;
     for (final row in grouped.values) {
-      final manpower = _n(row.length > 1 ? row[1] : 0).toDouble();
-      final kg = _n(row.length > 2 ? row[2] : 0).toDouble();
-      final cb = _n(row.length > 3 ? row[3] : 0).toDouble();
-      while (row.length < 6) row.add(0);
-      row[4] = manpower == 0 ? 0 : kg / manpower;
-      row[5] = manpower == 0 ? 0 : cb / manpower;
+      final manpower = _n(manpowerIndex < row.length ? row[manpowerIndex] : 0).toDouble();
+      final kg = _n(kgIndex < row.length ? row[kgIndex] : 0).toDouble();
+      final cb = _n(cbIndex < row.length ? row[cbIndex] : 0).toDouble();
+      final requiredLength = sourceColumns.isEmpty ? (lineIndex >= 0 ? 7 : 6) : sourceColumns.length;
+      while (row.length < requiredLength) row.add(0);
+      if (manpowerIndex < row.length) row[manpowerIndex] = manpower;
+      if (kgIndex < row.length) row[kgIndex] = kg;
+      if (cbIndex < row.length) row[cbIndex] = cb;
+      final kgPerHeadIndex = _columnIndex(sourceColumns, 'productivityinkghead', lineIndex >= 0 ? 5 : 4);
+      final cbPerHeadIndex = _columnIndex(sourceColumns, 'productivityincbhead', lineIndex >= 0 ? 6 : 5);
+      while (row.length <= cbPerHeadIndex) row.add(0);
+      row[kgPerHeadIndex] = manpower == 0 ? 0 : kg / manpower;
+      row[cbPerHeadIndex] = manpower == 0 ? 0 : cb / manpower;
       totalManpower += manpower;
       totalKg += kg;
       totalCb += cb;
       rows.add(row);
     }
+    if (lineIndex >= 0) rows.sort((a, b) => '${a[skuIndex]}|${a[lineIndex]}'.compareTo('${b[skuIndex]}|${b[lineIndex]}'));
     final out = Map<String, dynamic>.from(source);
     out['rows'] = rows;
     out['totals'] = {
@@ -298,12 +328,14 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
       final line = '${batch['line'] ?? batch['production_line'] ?? ''}'.trim();
       if (!_skuAllowedForLine(line, source)) continue;
       if (_lineFilter.text.trim().isNotEmpty && line.toLowerCase() != _lineFilter.text.trim().toLowerCase()) continue;
+      final lineLabel = line.isEmpty ? 'Unassigned' : line;
       final batchShift = '${batch['shift'] ?? ''}';
       if (_shiftFilter != 'Combined' && batchShift.isNotEmpty && batchShift.toLowerCase() != _shiftFilter.toLowerCase()) continue;
       final label = _productivityLabel(source);
       final cb = _n(batch['produced_cb'] ?? batch['producedCb']).toDouble();
       final net = _n(product?['net_weight_per_cb'] ?? product?['weight_without_cb'] ?? product?['netWeightPerCb'] ?? batch['net_weight_per_cb'] ?? batch['weight_without_cb']).toDouble();
-      final row = metrics.putIfAbsent(label, () => {'cb': 0.0, 'kg': 0.0, 'labourCb': <String, double>{}});
+      final metricKey = '$label\u0000${lineLabel.toLowerCase()}';
+      final row = metrics.putIfAbsent(metricKey, () => {'sku': label, 'line': lineLabel, 'cb': 0.0, 'kg': 0.0, 'labourCb': <String, double>{}});
       row['cb'] = _n(row['cb']) + cb;
       row['kg'] = _n(row['kg']) + cb * net;
       final runShift = batchShift.isEmpty ? '' : batchShift;
@@ -335,13 +367,14 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
         final assignmentCb = assignmentProductionCb[assignment.key] ?? 0;
         if (assignmentCb > 0) manpower += (assignmentManpower[assignment.key] ?? 0) * assignment.value / assignmentCb;
       }
-      rows.add([entry.key, manpower, kg, cb, manpower == 0 ? 0 : kg / manpower, manpower == 0 ? 0 : cb / manpower]);
+      rows.add([entry.value['sku'], entry.value['line'], manpower, kg, cb, manpower == 0 ? 0 : kg / manpower, manpower == 0 ? 0 : cb / manpower]);
       totalCb += cb;
       totalKg += kg;
     }
+    rows.sort((a, b) => '${a[0]}|${a[1]}'.compareTo('${b[0]}|${b[1]}'));
     final totalManpower = assignmentManpower.values.fold<double>(0, (sum, value) => sum + value);
     return {
-      'columns': const ['SKU', 'MANPOWER', 'PROD. IN KG', 'PROD. IN CB', 'PRODUCTIVITY IN KG/HEAD', 'PRODUCTIVITY IN CB/HEAD'],
+      'columns': const ['SKU', 'LINE', 'MANPOWER', 'PROD. IN KG', 'PROD. IN CB', 'PRODUCTIVITY IN KG/HEAD', 'PRODUCTIVITY IN CB/HEAD'],
       'rows': rows,
       'totals': {
         'cb': totalCb,
@@ -359,6 +392,11 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
     try {
       final response = (await context.read<AuthController>().api.get('/reports/productivity?${_query()}') as Map).cast<String, dynamic>();
       final normalised = _normaliseProductivity(response);
+      // Older report endpoints return SKU-only rows. Rebuild from completed
+      // batches so the productivity table remains SKU + production-line wise.
+      if (((normalised['rows'] as List?) ?? const []).isNotEmpty && _hasLineDimension(normalised)) return normalised;
+      final fallback = await _legacyProductivity();
+      if (((fallback['rows'] as List?) ?? const []).isNotEmpty) return fallback;
       if (((normalised['rows'] as List?) ?? const []).isNotEmpty) return normalised;
     } catch (_) {}
     try {
@@ -555,7 +593,7 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
       builder: (context, snap) {
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
         final data = snap.data!;
-        final columns = (data['columns'] as List? ?? const ['SKU', 'MANPOWER', 'PROD. IN KG', 'PROD. IN CB', 'PRODUCTIVITY IN KG/HEAD', 'PRODUCTIVITY IN CB/HEAD']).map((v) => '$v').toList();
+        final columns = (data['columns'] as List? ?? const ['SKU', 'LINE', 'MANPOWER', 'PROD. IN KG', 'PROD. IN CB', 'PRODUCTIVITY IN KG/HEAD', 'PRODUCTIVITY IN CB/HEAD']).map((v) => '$v').toList();
         final rows = ((data['rows'] as List?) ?? const []).map((r) => (r as List).toList()).toList();
         return ListView(padding: const EdgeInsets.all(18), children: [
           _hero(context, data),

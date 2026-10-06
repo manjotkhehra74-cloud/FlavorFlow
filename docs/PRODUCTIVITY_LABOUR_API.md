@@ -56,12 +56,12 @@ Production/report aggregation must validate these mappings when a completed reco
 - calculate `cbPerHead = producedCb / aggregatedManpower`;
 - calculate `kgPerHead = netKg / aggregatedManpower`.
 
-The response is shaped for the existing table:
+The response is shaped for the existing table and remains grouped by SKU plus production line. The same SKU on different lines is represented by separate rows; White Vinegar 610 and Brown Vinegar 610 are grouped only within the same line in the Productivity summary:
 
 ```json
 {
-  "columns": ["SKU", "MANPOWER", "PROD. IN KG", "PROD. IN CB", "PRODUCTIVITY IN KG/HEAD", "PRODUCTIVITY IN CB/HEAD"],
-  "rows": [["Vinegar 180", 8, 43.2, 10, 5.4, 1.25]],
+  "columns": ["SKU", "LINE", "MANPOWER", "PROD. IN KG", "PROD. IN CB", "PRODUCTIVITY IN KG/HEAD", "PRODUCTIVITY IN CB/HEAD"],
+  "rows": [["Vinegar 180", "Line 1", 8, 43.2, 10, 5.4, 1.25]],
   "totals": {"cb": 10, "kg": 43.2, "manpower": 8, "kgPerHead": 5.4, "cbPerHead": 1.25}
 }
 ```
