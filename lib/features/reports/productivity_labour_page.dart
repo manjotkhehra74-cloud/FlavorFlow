@@ -13,6 +13,32 @@ import '../../ui/widgets.dart';
 
 const _localLabourKey = 'flavorflow_productivity_local_labour';
 
+const _lineSkuRules = <String, Set<String>>{
+  'line 2': {
+    'soya sauce 740',
+    'soya sauce 1.3',
+    'white vinegar 610',
+    'brown vinegar 610',
+    'vinegar 1.0',
+  },
+  'line 3': {
+    'dark soya 220',
+    'white vinegar 180',
+    'soya sauce 4.7',
+    'white vinegar 4.0',
+  },
+};
+
+String _skuRuleKey(String value) => value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+
+bool _skuAllowedForLine(String line, String sku) {
+  final allowed = _lineSkuRules[_skuRuleKey(line)];
+  return allowed == null || allowed.contains(_skuRuleKey(sku));
+}
+
+String _labourIdentity(Map<String, dynamic> row) =>
+    '${row['date'] ?? ''}|${_skuRuleKey('${row['line'] ?? ''}')}|${_skuRuleKey('${row['shift'] ?? ''}')}';
+
 Future<List<Map<String, dynamic>>> _readLocalLabour() async {
   try {
     final prefs = await SharedPreferences.getInstance();
@@ -27,7 +53,10 @@ Future<List<Map<String, dynamic>>> _readLocalLabour() async {
 Future<void> _writeLocalLabour(Map<String, dynamic> row) async {
   final prefs = await SharedPreferences.getInstance();
   final rows = await _readLocalLabour();
-  final id = '${row['id'] ?? 'local-${DateTime.now().microsecondsSinceEpoch}'}';
+  final identity = _labourIdentity(row);
+  final existingIndex = rows.indexWhere((r) => _labourIdentity(r) == identity);
+  final existingId = existingIndex == -1 ? null : rows[existingIndex]['id'];
+  final id = '${row['id'] ?? existingId ?? 'local-${DateTime.now().microsecondsSinceEpoch}'}';
   final value = {...row, 'id': id, 'localOnly': true};
   final index = rows.indexWhere((r) => '${r['id']}' == id);
   if (index == -1) {
@@ -50,16 +79,12 @@ Future<List<Map<String, dynamic>>> _loadLabourRows(ApiClient api, String query) 
   final params = Uri.splitQueryString(query);
   final local = (await _readLocalLabour()).where((r) {
     final date = '${r['date'] ?? ''}'.split(RegExp(r'[T ]')).first;
-    final sku = '${r['productId'] ?? r['product_id'] ?? r['product'] ?? ''}';
     final shift = '${r['shift'] ?? ''}';
     final line = '${r['line'] ?? ''}';
-    final batch = '${r['batchCode'] ?? r['batch_code'] ?? ''}';
     return (params['from'] == null || date.compareTo(params['from']!) >= 0) &&
         (params['to'] == null || date.compareTo(params['to']!) <= 0) &&
-        (params['sku'] == null || sku == params['sku']) &&
         (params['shift'] == null || shift.toLowerCase() == params['shift']!.toLowerCase()) &&
-        (params['line'] == null || line.toLowerCase() == params['line']!.toLowerCase()) &&
-        (params['batchCode'] == null || batch.toLowerCase() == params['batchCode']!.toLowerCase());
+        (params['line'] == null || line.toLowerCase() == params['line']!.toLowerCase());
   }).toList();
   final byId = <String, Map<String, dynamic>>{for (final r in server) if (r['id'] != null) '${r['id']}': r};
   for (final r in local) {
@@ -86,8 +111,8 @@ Future<List<Map<String, dynamic>>> _loadLabourRows(ApiClient api, String query) 
 /// Production productivity + daily labour register.
 ///
 /// Productivity is read from completed production batches. Labour is entered
-/// manually per date / shift / line / run; it is deliberately not a fixed
-/// value on the product master because line manpower changes every day.
+/// manually per date / shift / line; it is deliberately not a fixed value on
+/// the product master because line manpower changes every day.
 class ProductivityLabourPage extends StatefulWidget {
   const ProductivityLabourPage({super.key});
 
@@ -103,7 +128,6 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
   Future<List<Map<String, dynamic>>>? _labourFuture;
   Future<Map<String, dynamic>>? _analysisFuture;
   final _lineFilter = TextEditingController();
-  final _batchFilter = TextEditingController();
   List<Map<String, dynamic>> _products = [];
   String? _skuFilter;
   String _shiftFilter = 'Combined';
@@ -127,7 +151,6 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
   void dispose() {
     _tabs.dispose();
     _lineFilter.dispose();
-    _batchFilter.dispose();
     super.dispose();
   }
 
@@ -146,14 +169,13 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
     }
   }
 
-  String _query({bool includeBatchCode = true}) {
+  String _query({bool includeSku = true}) {
     final values = <String, String>{
       'from': _fromYmd,
       'to': _toYmd,
-      if (_skuFilter != null && _skuFilter!.isNotEmpty) 'sku': _skuFilter!,
+      if (includeSku && _skuFilter != null && _skuFilter!.isNotEmpty) 'sku': _skuFilter!,
       if (_lineFilter.text.trim().isNotEmpty) 'line': _lineFilter.text.trim(),
       if (_shiftFilter != 'Combined') 'shift': _shiftFilter,
-      if (includeBatchCode && _batchFilter.text.trim().isNotEmpty) 'batchCode': _batchFilter.text.trim(),
     };
     return Uri(queryParameters: values).query;
   }
@@ -234,25 +256,32 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
       productList = ((productsJson as Map)['products'] as List? ?? const []).cast<Map<String, dynamic>>();
     } catch (_) {}
     final products = <String, Map<String, dynamic>>{for (final p in productList) '${p['id']}': p};
-    final labour = await _loadLabourRows(api, _query(includeBatchCode: false));
+    final labour = await _loadLabourRows(api, _query(includeSku: false));
 
     final seenIds = <String>{};
     final metrics = <String, Map<String, dynamic>>{};
-    final labourByProduct = <String, double>{};
+    final labourByLine = <String, double>{};
+    final assignmentManpower = <String, double>{};
     for (final entry in labour) {
       final date = _dateOnly(entry['date']);
       if (date.isNotEmpty && (date.compareTo(_fromYmd) < 0 || date.compareTo(_toYmd) > 0)) continue;
       final entryShift = '${entry['shift'] ?? ''}';
       if (_shiftFilter != 'Combined' && entryShift.toLowerCase() != _shiftFilter.toLowerCase()) continue;
-      if (_lineFilter.text.trim().isNotEmpty && '${entry['line'] ?? ''}'.toLowerCase() != _lineFilter.text.trim().toLowerCase()) continue;
-      final pid = '${entry['productId'] ?? entry['product_id'] ?? entry['product'] ?? ''}';
-      final source = '${entry['productName'] ?? entry['product_name'] ?? products[pid]?['name'] ?? pid}';
-      final label = _productivityLabel(source);
+      final line = '${entry['line'] ?? ''}'.trim();
+      if (_lineFilter.text.trim().isNotEmpty && line.toLowerCase() != _lineFilter.text.trim().toLowerCase()) continue;
       final worker = _n(entry['manpower'] ?? entry['workerCount'] ?? entry['workers']);
       final hours = _n(entry['actualHours'] ?? entry['hours']);
       final standard = _n(entry['standardShiftHours']);
       final manpower = standard > 0 ? worker * hours / standard : worker;
-      labourByProduct[label] = (labourByProduct[label] ?? 0) + manpower.toDouble();
+      final key = '${date}|${line.toLowerCase()}|${entryShift.toLowerCase()}';
+      // One line-level labour row is reused when the product/batch changes.
+      labourByLine[key] = manpower.toDouble();
+    }
+
+    double lineManpower(String date, String line, String shift) {
+      final prefix = '${date}|${line.toLowerCase()}|';
+      if (shift.isNotEmpty) return labourByLine['$prefix${shift.toLowerCase()}'] ?? 0;
+      return labourByLine.entries.where((e) => e.key.startsWith(prefix)).fold<double>(0, (sum, e) => sum + e.value);
     }
 
     for (final batch in batchList) {
@@ -266,30 +295,51 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
       final product = products[sourcePid];
       final source = '${batch['product_name'] ?? batch['productName'] ?? product?['name'] ?? 'Unknown SKU'}';
       if (_skuFilter != null && _skuFilter!.isNotEmpty && sourcePid != _skuFilter) continue;
-      final line = '${batch['line'] ?? batch['production_line'] ?? ''}';
+      final line = '${batch['line'] ?? batch['production_line'] ?? ''}'.trim();
+      if (!_skuAllowedForLine(line, source)) continue;
       if (_lineFilter.text.trim().isNotEmpty && line.toLowerCase() != _lineFilter.text.trim().toLowerCase()) continue;
-      final code = '${batch['code'] ?? batch['batch_code'] ?? ''}';
       final batchShift = '${batch['shift'] ?? ''}';
       if (_shiftFilter != 'Combined' && batchShift.isNotEmpty && batchShift.toLowerCase() != _shiftFilter.toLowerCase()) continue;
       final label = _productivityLabel(source);
       final cb = _n(batch['produced_cb'] ?? batch['producedCb']).toDouble();
       final net = _n(product?['net_weight_per_cb'] ?? product?['weight_without_cb'] ?? product?['netWeightPerCb'] ?? batch['net_weight_per_cb'] ?? batch['weight_without_cb']).toDouble();
-      final row = metrics.putIfAbsent(label, () => {'cb': 0.0, 'kg': 0.0});
+      final row = metrics.putIfAbsent(label, () => {'cb': 0.0, 'kg': 0.0, 'labourCb': <String, double>{}});
       row['cb'] = _n(row['cb']) + cb;
       row['kg'] = _n(row['kg']) + cb * net;
+      final runShift = batchShift.isEmpty ? '' : batchShift;
+      final labourKey = '${date}|${line.toLowerCase()}|${runShift.toLowerCase()}';
+      assignmentManpower.putIfAbsent(labourKey, () => lineManpower(date, line, runShift));
+      final labourCb = row['labourCb'] as Map<String, double>;
+      labourCb[labourKey] = (labourCb[labourKey] ?? 0) + cb;
+    }
+
+    final assignmentProductionCb = <String, double>{};
+    for (final metric in metrics.values) {
+      final labourCb = metric['labourCb'] as Map<String, double>;
+      for (final assignment in labourCb.entries) {
+        assignmentProductionCb[assignment.key] = (assignmentProductionCb[assignment.key] ?? 0) + assignment.value;
+      }
     }
 
     final rows = <List<dynamic>>[];
-    var totalCb = 0.0, totalKg = 0.0, totalManpower = 0.0;
+    var totalCb = 0.0, totalKg = 0.0;
     for (final entry in metrics.entries) {
       final cb = _n(entry.value['cb']).toDouble();
       final kg = _n(entry.value['kg']).toDouble();
-      final manpower = labourByProduct[entry.key] ?? 0;
+      final labourCb = entry.value['labourCb'] as Map<String, double>;
+      // A line/date/shift assignment is counted once. When a line changes SKU
+      // within that shift, the fallback allocates that one assignment by CB so
+      // product rows cannot create a second labour assignment.
+      var manpower = 0.0;
+      for (final assignment in labourCb.entries) {
+        final assignmentCb = assignmentProductionCb[assignment.key] ?? 0;
+        if (assignmentCb > 0) manpower += (assignmentManpower[assignment.key] ?? 0) * assignment.value / assignmentCb;
+      }
       rows.add([entry.key, manpower, kg, cb, manpower == 0 ? 0 : kg / manpower, manpower == 0 ? 0 : cb / manpower]);
       totalCb += cb;
       totalKg += kg;
-      totalManpower += manpower;
     }
+    final totalManpower = assignmentManpower.values.fold<double>(0, (sum, value) => sum + value);
     return {
       'columns': const ['SKU', 'MANPOWER', 'PROD. IN KG', 'PROD. IN CB', 'PRODUCTIVITY IN KG/HEAD', 'PRODUCTIVITY IN CB/HEAD'],
       'rows': rows,
@@ -307,7 +357,7 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
 
   Future<Map<String, dynamic>> _loadProductivity() async {
     try {
-      final response = (await context.read<AuthController>().api.get('/reports/productivity?${_query(includeBatchCode: false)}') as Map).cast<String, dynamic>();
+      final response = (await context.read<AuthController>().api.get('/reports/productivity?${_query()}') as Map).cast<String, dynamic>();
       final normalised = _normaliseProductivity(response);
       if (((normalised['rows'] as List?) ?? const []).isNotEmpty) return normalised;
     } catch (_) {}
@@ -321,8 +371,8 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
   void _reload() {
     final api = context.read<AuthController>().api;
     final productivity = _loadProductivity();
-    final labour = _loadLabourRows(api, _query(includeBatchCode: true));
-    final analysis = api.get('/reports/productivity/analysis?${_query(includeBatchCode: false)}').then((v) => (v as Map).cast<String, dynamic>()).catchError((_) => <String, dynamic>{'rows': const []});
+    final labour = _loadLabourRows(api, _query(includeSku: false));
+    final analysis = api.get('/reports/productivity/analysis?${_query()}').then((v) => (v as Map).cast<String, dynamic>()).catchError((_) => <String, dynamic>{'rows': const []});
     void assign() {
       _productivityFuture = productivity;
       _labourFuture = labour;
@@ -369,7 +419,7 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
     _reload();
   }
 
-  Widget _dateFilters(BuildContext context, {bool includeBatchCode = true}) {
+  Widget _dateFilters(BuildContext context, {bool includeSku = true}) {
     final scheme = Theme.of(context).colorScheme;
     Widget dateButton(String label, DateTime value, VoidCallback tap) => OutlinedButton.icon(
           onPressed: tap,
@@ -398,24 +448,23 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
       ]),
       const SizedBox(height: 10),
       Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-        SizedBox(
-          width: 220,
-          child: DropdownButtonFormField<String>(
-            value: _skuFilter,
-            isExpanded: true,
-            hint: const Text('All SKUs'),
-            decoration: const InputDecoration(labelText: 'SKU / Product', prefixIcon: Icon(Icons.inventory_2_outlined, size: 18)),
-            items: [
-              for (final p in _products) DropdownMenuItem(value: '${p['id']}', child: Text('${p['name']}')),
-            ],
-            onChanged: (v) { setState(() => _skuFilter = v); _reload(); },
+        if (includeSku)
+          SizedBox(
+            width: 220,
+            child: DropdownButtonFormField<String>(
+              value: _skuFilter,
+              isExpanded: true,
+              hint: const Text('All SKUs'),
+              decoration: const InputDecoration(labelText: 'SKU / Product', prefixIcon: Icon(Icons.inventory_2_outlined, size: 18)),
+              items: [
+                for (final p in _products) DropdownMenuItem(value: '${p['id']}', child: Text('${p['name']}')),
+              ],
+              onChanged: (v) { setState(() => _skuFilter = v); _reload(); },
+            ),
           ),
-        ),
         SizedBox(width: 180, child: TextField(controller: _lineFilter, decoration: const InputDecoration(labelText: 'Production line', prefixIcon: Icon(Icons.precision_manufacturing_outlined, size: 18)), onSubmitted: (_) => _reload())),
-        if (includeBatchCode)
-          SizedBox(width: 190, child: TextField(controller: _batchFilter, decoration: const InputDecoration(labelText: 'Batch code', prefixIcon: Icon(Icons.qr_code_2_outlined, size: 18)), onSubmitted: (_) => _reload())),
-        if (_lineFilter.text.isNotEmpty || (includeBatchCode && _batchFilter.text.isNotEmpty) || _skuFilter != null)
-          TextButton.icon(onPressed: () { _lineFilter.clear(); _batchFilter.clear(); setState(() => _skuFilter = null); _reload(); }, icon: const Icon(Icons.clear, size: 17), label: const Text('Clear filters')),
+        if (_lineFilter.text.isNotEmpty || (includeSku && _skuFilter != null))
+          TextButton.icon(onPressed: () { _lineFilter.clear(); setState(() => _skuFilter = null); _reload(); }, icon: const Icon(Icons.clear, size: 17), label: const Text('Clear filters')),
       ]),
     ]);
   }
@@ -425,7 +474,7 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
     setState(() => _exporting = true);
     try {
       final path = kind == 'labour' ? '/labour/daily.xlsx' : '/reports/productivity.xlsx';
-      final bytes = await context.read<AuthController>().api.getBytes('$path?$_query');
+      final bytes = await context.read<AuthController>().api.getBytes('$path?${kind == 'labour' ? _query(includeSku: false) : _query()}');
       final date = DateTime.now().toIso8601String().substring(0, 10);
       downloadBytes('flavorflow-${kind == 'labour' ? 'daily-labour' : 'productivity'}-$date.xlsx', bytes,
           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -512,7 +561,7 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
           _hero(context, data),
           _reconciliationBanner(context, data),
           const SizedBox(height: 14),
-          _dateFilters(context, includeBatchCode: false),
+          _dateFilters(context),
           const SizedBox(height: 8),
           Align(alignment: Alignment.centerRight, child: OutlinedButton.icon(onPressed: _exporting ? null : () => _export('productivity'), icon: const Icon(Icons.download_outlined, size: 18), label: const Text('Export Excel'))),
           const SizedBox(height: 8),
@@ -560,7 +609,7 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
         final totals = (data['periodTotals'] as Map?)?.cast<String, dynamic>() ?? (data['totals'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
         final sections = _analysisSections(data);
         return ListView(padding: const EdgeInsets.all(18), children: [
-          _dateFilters(context, includeBatchCode: false),
+          _dateFilters(context),
           const SizedBox(height: 12),
           Text('Labour Analysis keeps White Vinegar 610 and Brown Vinegar 610 separate. Only the Productivity summary groups them as Vinegar 610.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w600)),
           const SizedBox(height: 12),
@@ -601,7 +650,7 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
       builder: (context, snap) {
         final rows = snap.data ?? const <Map<String, dynamic>>[];
         return ListView(padding: const EdgeInsets.all(18), children: [
-          _dateFilters(context),
+          _dateFilters(context, includeSku: false),
           const SizedBox(height: 8),
           Align(alignment: Alignment.centerRight, child: OutlinedButton.icon(onPressed: _exporting ? null : () => _export('labour'), icon: const Icon(Icons.download_outlined, size: 18), label: const Text('Export Labour Excel'))),
           const SizedBox(height: 8),
@@ -611,10 +660,10 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
             child: rows.isEmpty
                 ? const EmptyState('No daily labour entries yet. Start entering line-wise details tomorrow.')
                 : AppDataTable(
-                    columns: const ['DATE', 'SHIFT', 'LINE', 'SKU', 'BATCH CODE', 'WORKERS', 'HOURS', 'SUPERVISOR', 'REMARKS', ''],
+                    columns: const ['DATE', 'SHIFT', 'LINE', 'WORKERS', 'HOURS', 'SUPERVISOR', 'REMARKS', ''],
                     rows: [
                       for (final r in rows)
-                        [r['date'], r['shift'], r['line'], r['productName'] ?? r['product'], r['batchCode'] ?? r['batch_code'], r['workerCount'] ?? r['workers'], r['actualHours'] ?? r['hours'], r['supervisor'], r['remarks'], IconButton(tooltip: 'Edit entry', onPressed: () => _openLabourForm(entry: r), icon: const Icon(Icons.edit_outlined, size: 18))],
+                        [r['date'], r['shift'], r['line'], r['workerCount'] ?? r['workers'], r['actualHours'] ?? r['hours'], r['supervisor'], r['remarks'], IconButton(tooltip: 'Edit entry', onPressed: () => _openLabourForm(entry: r), icon: const Icon(Icons.edit_outlined, size: 18))],
                     ],
                   ),
           ),
@@ -650,15 +699,12 @@ class _DailyLabourDialog extends StatefulWidget {
 
 class _DailyLabourDialogState extends State<_DailyLabourDialog> {
   final line = TextEditingController();
-  final batch = TextEditingController();
   final workers = TextEditingController();
   final hours = TextEditingController();
   final supervisor = TextEditingController();
   final remarks = TextEditingController();
   DateTime date = DateTime.now();
   String shift = 'Day';
-  String? product;
-  List<Map<String, dynamic>> products = [];
   bool busy = false;
 
   @override
@@ -669,37 +715,25 @@ class _DailyLabourDialogState extends State<_DailyLabourDialog> {
       date = DateTime.tryParse('${e['date']}'.split(RegExp(r'[T ]')).first) ?? date;
       shift = '${e['shift'] ?? 'Day'}';
       line.text = '${e['line'] ?? ''}';
-      batch.text = '${e['batchCode'] ?? e['batch_code'] ?? ''}';
       workers.text = '${e['workerCount'] ?? e['workers'] ?? ''}';
       hours.text = '${e['actualHours'] ?? e['hours'] ?? ''}';
       supervisor.text = '${e['supervisor'] ?? ''}';
       remarks.text = '${e['remarks'] ?? ''}';
-      final rawProduct = e['productId'] ?? e['product_id'] ?? e['product'];
-      if (rawProduct != null) product = '$rawProduct';
     }
-    context.read<AuthController>().api.get('/products').then((j) {
-      if (!mounted) return;
-      setState(() {
-        products = ((j as Map)['products'] as List? ?? const []).cast<Map<String, dynamic>>().where((p) => (p['active'] as num? ?? 1) != 0).toList();
-        if (widget.entry != null && (int.tryParse(product ?? '') == null)) {
-          final match = products.where((p) => '${p['name']}' == product).toList();
-          if (match.isNotEmpty) product = '${match.first['id']}';
-        }
-      });
-    }).catchError((_) {});
+
   }
 
   @override
   void dispose() {
-    for (final c in [line, batch, workers, hours, supervisor, remarks]) c.dispose();
+    for (final c in [line, workers, hours, supervisor, remarks]) c.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
     final w = double.tryParse(workers.text.trim());
     final h = double.tryParse(hours.text.trim());
-    if (line.text.trim().isEmpty || batch.text.trim().isEmpty || product == null || w == null || h == null || w <= 0 || h <= 0) {
-      showErr(context, 'Product, batch code, line, workers and actual hours are required.');
+    if (line.text.trim().isEmpty || w == null || h == null || w <= 0 || h <= 0) {
+      showErr(context, 'Line, workers and actual hours are required.');
       return;
     }
     setState(() => busy = true);
@@ -708,9 +742,6 @@ class _DailyLabourDialogState extends State<_DailyLabourDialog> {
         'date': _ymd(date),
         'shift': shift,
         'line': line.text.trim(),
-        'productId': int.tryParse(product ?? ''),
-        'sku': product,
-        'batchCode': batch.text.trim(),
         'workerCount': w,
         'workers': w,
         'actualHours': h,
@@ -719,7 +750,7 @@ class _DailyLabourDialogState extends State<_DailyLabourDialog> {
         'remarks': remarks.text.trim(),
       };
       final id = widget.entry?['id'];
-      final localBody = {...body, 'productName': products.where((p) => '${p['id']}' == product).map((p) => '${p['name']}').firstOrNull};
+      final localBody = {...body};
       if (widget.entry?['localOnly'] == true) {
         await _writeLocalLabour({...localBody, 'id': id});
       } else {
@@ -758,10 +789,6 @@ class _DailyLabourDialogState extends State<_DailyLabourDialog> {
           ]),
           const SizedBox(height: 10),
           TextField(controller: line, decoration: const InputDecoration(labelText: 'Production line *', hintText: 'e.g. Line 1')),
-          const SizedBox(height: 10),
-          DropdownButtonFormField<String>(value: product, isExpanded: true, decoration: const InputDecoration(labelText: 'SKU / Product'), items: [for (final p in products) DropdownMenuItem(value: '${p['id']}', child: Text('${p['name']}'))], onChanged: (v) => setState(() => product = v)),
-          const SizedBox(height: 10),
-          TextField(controller: batch, decoration: const InputDecoration(labelText: 'Batch code *')),
           const SizedBox(height: 10),
           Row(children: [Expanded(child: TextField(controller: workers, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Workers *'))), const SizedBox(width: 10), Expanded(child: TextField(controller: hours, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Actual hours *')))]),
           const SizedBox(height: 10),

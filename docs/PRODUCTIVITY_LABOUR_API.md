@@ -20,15 +20,13 @@ When a completed batch is reported for a date, resolve the effective net weight 
 
 ## Daily labour
 
-`POST /labour/daily` stores one row for each date, production line, shift, product, and production run:
+`POST /labour/daily` stores one line-level row for each date, production line, and shift. Worker count does not change when the product or production batch on that line changes:
 
 ```json
 {
   "date": "2026-10-06",
   "shift": "Day",
-  "line": "Line 1",
-  "productId": 12,
-  "batchCode": "B-20261006-01",
+  "line": "Line 2",
   "workerCount": 8,
   "actualHours": 8,
   "supervisor": "Supervisor name",
@@ -36,9 +34,16 @@ When a completed batch is reported for a date, resolve the effective net weight 
 }
 ```
 
-Required values are `date`, `shift` (`Day` or `Night`), `line`, `productId`, `batchCode`, positive `workerCount`, and positive `actualHours`. There is deliberately no overtime column. The uniqueness key must allow different runs on the same line/date/shift by including the batch/run identifier; the API should reject an accidental duplicate of the same run rather than overwriting it.
+Required values are `date`, `shift` (`Day` or `Night`), `line`, positive `workerCount`, and positive `actualHours`. There is deliberately no overtime, product, or batch-code field in this line-level labour entry. The uniqueness key is `date + line + shift`; the API should reject an accidental duplicate instead of overwriting it. Product and batch production remain authoritative in the Production register.
 
-`PUT /labour/daily/:id` accepts the same body and updates a saved manual row; the UI exposes this as **Edit Entry**. `GET /labour/daily?from=YYYY-MM-DD&to=YYYY-MM-DD&sku=12&line=Line%201&shift=Day&batchCode=B-...` returns `{ "rows": [...] }`. Omit `shift` for combined reporting.
+`PUT /labour/daily/:id` accepts the same body and updates a saved manual row; the UI exposes this as **Edit Entry**. `GET /labour/daily?from=YYYY-MM-DD&to=YYYY-MM-DD&line=Line%201&shift=Day` returns `{ "rows": [...] }`. Omit `shift` for combined reporting.
+
+Line/SKU configuration used by Production and the reports:
+
+- **Line 2:** Soya Sauce 740, Soya Sauce 1.3, White Vinegar 610, Brown Vinegar 610, Vinegar 1.0.
+- **Line 3:** Dark Soya 220, White Vinegar 180, Soya Sauce 4.7, White Vinegar 4.0 for packing and labelling.
+
+Other lines can have their own configured SKU list. The line-level labour row is not duplicated when the product or batch code changes.
 
 ## Productivity summary
 
@@ -61,7 +66,7 @@ The response is shaped for the existing table:
 }
 ```
 
-Manpower is derived from the saved daily labour rows matching the selected date, line, product, shift, and batch filters. It must not be a product-master constant. If the API later normalizes hours, use `workerCount * actualHours / configuredStandardShiftHours`; do not add overtime.
+Manpower is derived from the saved daily labour rows matching the selected date, line, and shift. A product or batch change on a line does not create another labour assignment. It must not be a product-master constant. If the API normalizes hours, use `workerCount * actualHours / configuredStandardShiftHours`; do not add overtime. The client fallback counts each date + line + shift assignment once and allocates it across multiple SKU rows by completed CB so a product change cannot duplicate the line assignment.
 
 ## Analysis and exports
 
@@ -118,7 +123,7 @@ For each source SKU and selected shift:
 
 To use the manually entered hours in the same way as the decimal manpower values in the workbook, calculate normalized manpower as `workerCount × actualHours ÷ configuredStandardShiftHours`. No overtime column or overtime premium is introduced. If no standard shift-hours value is configured, the report must show the configuration warning instead of silently guessing.
 
-The app should keep the workbook-style horizontal matrix for each section, with date/month, line, source SKU, and shift filters. A line filter of `All lines` gives the period matrix; selecting a line recalculates the same three sections for that line. The detailed Daily Labour tab remains row-wise and keeps the original source product name.
+The app should keep the workbook-style horizontal matrix for each section, with date/month, line, source SKU, and shift filters. A line filter of `All lines` gives the period matrix; selecting a line recalculates the same three sections for that line. The detailed Daily Labour tab remains row-wise and contains only date, shift, line, workers, actual hours, supervisor, and remarks; product and batch code are intentionally absent.
 
 The analysis response can provide the three matrices as `sections.day`, `sections.night`, and `sections.combined`, each shaped as `{ "columns": ["METRIC", "740", "1.3", "White Vinegar 610", "Brown Vinegar 610", ...], "rows": [...] }`. The Flutter client renders each matrix separately and keeps a flat-response fallback for older servers.
 
