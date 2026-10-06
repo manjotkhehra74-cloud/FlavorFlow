@@ -54,7 +54,7 @@ class _PackingPageState extends State<PackingPage> with SingleTickerProviderStat
             tabAlignment: TabAlignment.start,
             tabs: [
               Tab(text: tr('Packing Stock')),
-              if (CompanyProfile.usesBom) Tab(text: tr('Packing per Product (BOM)')),
+              if (CompanyProfile.usesBom) Tab(text: tr('Packing per Product BOM')),
               Tab(text: tr('Ledger')),
             ],
           ),
@@ -263,9 +263,9 @@ class _StockTabState extends State<_StockTab> {
         all = widget.rawOnly
             ? all.where((m) => m['category'] == 'Raw Material').toList()
             : all.where((m) => m['category'] != 'Raw Material').toList();
-        final s = (snap.data!['summary'] as Map).cast<String, dynamic>();
         final lowCount = all.where((m) => (m['low'] as int? ?? 0) == 1).length;
         final categories = <String>{for (final m in all) m['category'] as String};
+        final categoryList = categories.toList()..sort();
         final hasCodes = ItemCode.anyIn(all);
         final rows = (_category.isEmpty ? all : all.where((m) => m['category'] == _category).toList()).where((m) => ItemCode.matches(m, _q.text)).toList();
         // Pair every "Tray (X)" with its "Tray Cap (X)" right below it —
@@ -279,128 +279,139 @@ class _StockTabState extends State<_StockTab> {
           return n.toUpperCase();
         }
         rows.sort((a, b) => pairKey(a).compareTo(pairKey(b)));
+        Widget chip(Widget child) => Padding(padding: const EdgeInsets.only(right: 8), child: child);
+        Widget action(Widget child) => Padding(padding: const EdgeInsets.only(right: 8), child: child);
         return ListView(padding: const EdgeInsets.all(20), children: [
-          LayoutBuilder(builder: (context, c) {
-            final cols = c.maxWidth > 1000 ? 3 : 1;
-            final ratio = ((c.maxWidth - (cols - 1) * 12) / cols / 84).clamp(1.6, 5.0);
-            return GridView.count(
-              crossAxisCount: cols, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 12, crossAxisSpacing: 12, childAspectRatio: ratio,
-              children: [
-                KpiCard(label: widget.rawOnly ? 'Raw Materials' : 'Packing Items', value: qtyInt(all.length), icon: widget.rawOnly ? Icons.science_rounded : Icons.widgets_rounded, tint: AppColors.blue),
-                KpiCard(label: 'Categories', value: qtyInt(categories.length), icon: Icons.category_rounded, tint: AppColors.teal),
-                KpiCard(label: 'Running Low', value: qtyInt(lowCount), icon: Icons.warning_amber_rounded, tint: AppColors.red),
-              ],
-            );
-          }),
-          const SizedBox(height: 16),
-          Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-            ChoiceChip(label: Text(tr('All')), selected: _category.isEmpty && !_lowOnly, onSelected: (_) => setState(() { _category = ''; _lowOnly = false; _future = _load(); })),
-            ChoiceChip(
-              label: Text(tr('Low stock')),
-              selected: _lowOnly,
-              avatar: const Icon(Icons.warning_amber_rounded, size: 16),
-              onSelected: (_) => setState(() { _lowOnly = true; _category = ''; _future = _load(); }),
-            ),
-            if (!widget.rawOnly)
-              for (final cat in categories)
-                ChoiceChip(label: Text(tr(cat)), selected: !_lowOnly && _category == cat, onSelected: (_) => setState(() { _category = cat; _lowOnly = false; _future = _load(); })),
-            if (canManage) ...[
-              Padding(
-                padding: const EdgeInsets.only(left: 8),
-                child: FilledButton.icon(
-                  onPressed: () async {
-                    final saved = await showFastDialog<bool>(context, (_) => _TxnDialog(kind: 'receive', rawOnly: widget.rawOnly));
-                    if (saved == true) _reload();
-                  },
-                  icon: const Icon(Icons.south_west_rounded, size: 18),
-                  label: Text(tr('Receive Stock')),
-                ),
-              ),
-              if (auth.canManageBilling)
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    await context.push('/billing/purchases/new');
-                    _reload();
-                  },
-                  icon: const Icon(Icons.receipt_long_outlined, size: 18),
-                  label: Text(tr('Enter Supplier Bill')),
-                ),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  final saved = await showFastDialog<bool>(context, (_) => _TxnDialog(kind: 'consume', rawOnly: widget.rawOnly));
-                  if (saved == true) _reload();
-                },
-                icon: const Icon(Icons.north_east_rounded, size: 18),
-                label: Text(tr('Extra Consumption')),
-              ),
-              if (widget.rawOnly && CompanyProfile.usesRecipes) ...[
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final saved = await showFastDialog<bool>(context, (_) => const _RecipeConsumeDialog());
-                    if (saved == true) _reload();
-                  },
-                  icon: const Icon(Icons.science_rounded, size: 18),
-                  label: Text(tr('Recipe Consumption')),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final saved = await showFastDialog<bool>(context, (_) => const _RecipeEditDialog());
-                    if (saved == true) _reload();
-                  },
-                  icon: const Icon(Icons.edit_note_rounded, size: 18),
-                  label: Text(tr('Edit Recipes')),
-                ),
-              ],
-              if (widget.rawOnly) ...[
-                OutlinedButton.icon(
-                  onPressed: _exporting ? null : () => _exportRaw(all, pdf: true),
-                  icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
-                  label: Text(tr('Export PDF')),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _exporting ? null : () => _exportRaw(all, pdf: false),
-                  icon: const Icon(Icons.table_view_outlined, size: 18),
-                  label: Text(tr('Export Excel')),
-                ),
-              ],
-              OutlinedButton.icon(
-                onPressed: () async {
-                  final saved = await showFastDialog<bool>(context, (_) => _MaterialFormDialog(rawOnly: widget.rawOnly));
-                  if (saved == true) _reload();
-                },
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: Text(tr('New Material')),
-              ),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  final saved = await showImportDialog(context, ImportKind.materials, rawOnly: widget.rawOnly);
-                  if (saved == true) _reload();
-                },
-                icon: const Icon(Icons.upload_file_rounded, size: 18),
-                label: Text(tr('Import')),
-              ),
-              if (hasCodes)
-                OutlinedButton.icon(
-                  onPressed: () => showLabelDialog(context, rows),
-                  icon: const Icon(Icons.qr_code_2_rounded, size: 18),
-                  label: Text(tr('Labels')),
-                ),
-              if (all.isEmpty)
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final added = await showFastDialog<bool>(context, (_) => _StarterListDialog(rawOnly: widget.rawOnly));
-                    if (added == true) _reload();
-                  },
-                  icon: const Icon(Icons.playlist_add_rounded, size: 18),
-                  label: Text(tr('Add industry starter list')),
-                ),
-            ],
-          ]),
+          _PackingHealthCard(
+            itemCount: all.length,
+            categoryCount: categories.length,
+            lowCount: lowCount,
+            rawOnly: widget.rawOnly,
+          ),
           const SizedBox(height: 12),
+          _PackingMetrics(
+            itemCount: all.length,
+            categoryCount: categories.length,
+            lowCount: lowCount,
+            rawOnly: widget.rawOnly,
+          ),
+          const SizedBox(height: 16),
           SizedBox(
-            width: 360,
-            child: TextField(
+            height: 42,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                chip(ChoiceChip(label: Text(tr('All')), selected: _category.isEmpty && !_lowOnly, onSelected: (_) => setState(() { _category = ''; _lowOnly = false; _future = _load(); }))),
+                chip(ChoiceChip(
+                  label: Text(tr('Low stock')),
+                  selected: _lowOnly,
+                  avatar: const Icon(Icons.warning_amber_rounded, size: 16),
+                  onSelected: (_) => setState(() { _lowOnly = true; _category = ''; _future = _load(); }),
+                )),
+                if (!widget.rawOnly)
+                  for (final cat in categoryList)
+                    chip(ChoiceChip(label: Text(tr(cat)), selected: !_lowOnly && _category == cat, onSelected: (_) => setState(() { _category = cat; _lowOnly = false; _future = _load(); }))),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (canManage)
+            SizedBox(
+              height: 48,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  action(FilledButton.icon(
+                    onPressed: () async {
+                      final saved = await showFastDialog<bool>(context, (_) => _TxnDialog(kind: 'receive', rawOnly: widget.rawOnly));
+                      if (saved == true) _reload();
+                    },
+                    icon: const Icon(Icons.south_west_rounded, size: 18),
+                    label: Text(tr('Receive Stock')),
+                  )),
+                  action(OutlinedButton.icon(
+                    onPressed: () async {
+                      final saved = await showFastDialog<bool>(context, (_) => _TxnDialog(kind: 'consume', rawOnly: widget.rawOnly));
+                      if (saved == true) _reload();
+                    },
+                    icon: const Icon(Icons.north_east_rounded, size: 18),
+                    label: Text(tr('Extra Consumption')),
+                  )),
+                  action(OutlinedButton.icon(
+                    onPressed: () async {
+                      final saved = await showFastDialog<bool>(context, (_) => _MaterialFormDialog(rawOnly: widget.rawOnly));
+                      if (saved == true) _reload();
+                    },
+                    icon: const Icon(Icons.add_rounded, size: 18),
+                    label: Text(tr('New Material')),
+                  )),
+                  if (auth.canManageBilling)
+                    action(OutlinedButton.icon(
+                      onPressed: () async {
+                        await context.push('/billing/purchases/new');
+                        _reload();
+                      },
+                      icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                      label: Text(tr('Enter Supplier Bill')),
+                    )),
+                  if (widget.rawOnly && CompanyProfile.usesRecipes) ...[
+                    action(OutlinedButton.icon(
+                      onPressed: () async {
+                        final saved = await showFastDialog<bool>(context, (_) => const _RecipeConsumeDialog());
+                        if (saved == true) _reload();
+                      },
+                      icon: const Icon(Icons.science_rounded, size: 18),
+                      label: Text(tr('Recipe Consumption')),
+                    )),
+                    action(OutlinedButton.icon(
+                      onPressed: () async {
+                        final saved = await showFastDialog<bool>(context, (_) => const _RecipeEditDialog());
+                        if (saved == true) _reload();
+                      },
+                      icon: const Icon(Icons.edit_note_rounded, size: 18),
+                      label: Text(tr('Edit Recipes')),
+                    )),
+                  ],
+                  if (widget.rawOnly) ...[
+                    action(OutlinedButton.icon(
+                      onPressed: _exporting ? null : () => _exportRaw(all, pdf: true),
+                      icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                      label: Text(tr('Export PDF')),
+                    )),
+                    action(OutlinedButton.icon(
+                      onPressed: _exporting ? null : () => _exportRaw(all, pdf: false),
+                      icon: const Icon(Icons.table_view_outlined, size: 18),
+                      label: Text(tr('Export Excel')),
+                    )),
+                  ],
+                  action(OutlinedButton.icon(
+                    onPressed: () async {
+                      final saved = await showImportDialog(context, ImportKind.materials, rawOnly: widget.rawOnly);
+                      if (saved == true) _reload();
+                    },
+                    icon: const Icon(Icons.upload_file_rounded, size: 18),
+                    label: Text(tr('Import')),
+                  )),
+                  if (hasCodes)
+                    action(OutlinedButton.icon(
+                      onPressed: () => showLabelDialog(context, rows),
+                      icon: const Icon(Icons.qr_code_2_rounded, size: 18),
+                      label: Text(tr('Labels')),
+                    )),
+                  if (all.isEmpty)
+                    action(OutlinedButton.icon(
+                      onPressed: () async {
+                        final added = await showFastDialog<bool>(context, (_) => _StarterListDialog(rawOnly: widget.rawOnly));
+                        if (added == true) _reload();
+                      },
+                      icon: const Icon(Icons.playlist_add_rounded, size: 18),
+                      label: Text(tr('Add industry starter list')),
+                    )),
+                ],
+              ),
+            ),
+          const SizedBox(height: 12),
+          TextField(
               controller: _q,
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
@@ -410,12 +421,11 @@ class _StockTabState extends State<_StockTab> {
                 suffixIcon: _q.text.isEmpty ? null : IconButton(icon: const Icon(Icons.clear_rounded, size: 18), onPressed: () => setState(_q.clear)),
               ),
             ),
-          ),
           const SizedBox(height: 12),
           SectionCard(
             title: widget.rawOnly
                 ? (_lowOnly ? 'Low Stock Raw Material' : 'Raw Material Stock')
-                : (_lowOnly ? 'Low Stock Packing Material' : 'Packing Material Stock'),
+                : (_lowOnly ? 'Low Stock Packing Material' : 'FlavorFlow Packing Material Stock'),
             child: rows.isEmpty
                 ? EmptyState(_lowOnly
                     ? 'Nothing running low 🎉'
@@ -473,6 +483,94 @@ class _StockTabState extends State<_StockTab> {
               style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
         ]);
       },
+    );
+  }
+}
+
+class _PackingHealthCard extends StatelessWidget {
+  final int itemCount;
+  final int categoryCount;
+  final int lowCount;
+  final bool rawOnly;
+  const _PackingHealthCard({required this.itemCount, required this.categoryCount, required this.lowCount, required this.rawOnly});
+
+  @override
+  Widget build(BuildContext context) {
+    final title = rawOnly ? 'Raw Material Stock' : 'Packing Stock';
+    final itemLabel = rawOnly ? 'raw materials' : 'items';
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+      decoration: BoxDecoration(
+        gradient: AppBrand.gradient,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: AppBrand.blue.withValues(alpha: .18), blurRadius: 14, offset: const Offset(0, 7))],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Center(child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800))),
+        const SizedBox(height: 8),
+        Center(child: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Text(qtyInt(itemCount), style: const TextStyle(color: Colors.white, fontSize: 43, fontWeight: FontWeight.w800, height: .95)),
+          const SizedBox(width: 7),
+          Padding(padding: const EdgeInsets.only(bottom: 4), child: Text(itemLabel, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600))),
+        ])),
+        const SizedBox(height: 12),
+        Center(child: Text('$categoryCount categories  |  $lowCount low stock', style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500))),
+      ]),
+    );
+  }
+}
+
+class _PackingMetrics extends StatelessWidget {
+  final int itemCount;
+  final int categoryCount;
+  final int lowCount;
+  final bool rawOnly;
+  const _PackingMetrics({required this.itemCount, required this.categoryCount, required this.lowCount, required this.rawOnly});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, constraints) {
+      return GridView.count(
+        crossAxisCount: 3,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        mainAxisSpacing: 10,
+        crossAxisSpacing: 10,
+        childAspectRatio: constraints.maxWidth >= 700 ? 1.7 : 1.35,
+        children: [
+          _PackingMetric(label: rawOnly ? 'Raw Materials' : 'Packing Items', value: qtyInt(itemCount), icon: rawOnly ? Icons.science_rounded : Icons.widgets_rounded, tint: AppColors.blue),
+          _PackingMetric(label: 'Categories', value: qtyInt(categoryCount), icon: Icons.category_rounded, tint: AppColors.teal),
+          _PackingMetric(label: 'Running Low', value: qtyInt(lowCount), icon: Icons.warning_amber_rounded, tint: AppColors.red),
+        ],
+      );
+    });
+  }
+}
+
+class _PackingMetric extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color tint;
+  const _PackingMetric({required this.label, required this.value, required this.icon, required this.tint});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 10, 10),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant),
+        boxShadow: [BoxShadow(color: scheme.shadow.withValues(alpha: .06), blurRadius: 7, offset: const Offset(0, 3))],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [Icon(icon, size: 18, color: tint), const Spacer(), Container(width: 7, height: 7, decoration: BoxDecoration(shape: BoxShape.circle, color: tint))]),
+        const Spacer(),
+        Text(value, style: TextStyle(color: scheme.onSurface, fontSize: 22, fontWeight: FontWeight.w800)),
+        Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w700)),
+      ]),
     );
   }
 }
@@ -697,7 +795,10 @@ class _TxnDialogState extends State<_TxnDialog> {
     if (widget.kind == 'consume' && !widget.rawOnly) {
       context.read<AuthController>().api.get('/products').then((json) {
         if (!mounted) return;
-        setState(() => products = ((json as Map)['products'] as List).cast<Map<String, dynamic>>());
+        setState(() => products = ((json as Map)['products'] as List)
+            .cast<Map<String, dynamic>>()
+            .where((p) => (p['active'] as num? ?? 1) != 0)
+            .toList());
       }).catchError((_) {});
     }
   }

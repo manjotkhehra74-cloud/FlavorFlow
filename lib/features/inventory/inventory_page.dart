@@ -94,25 +94,29 @@ class _InventoryPageState extends State<InventoryPage> {
       builder: (context, snap) {
         if (snap.hasError) return ErrorState(snap.error!, onRetry: _reload);
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        final allItems = (snap.data!['items'] as List).cast<Map<String, dynamic>>();
+        final allItems = (snap.data!['items'] as List)
+            .cast<Map<String, dynamic>>()
+            .where((it) => (it['active'] as num? ?? 1) != 0)
+            .toList();
         final hasCodes = ItemCode.anyIn(allItems);
         final items = allItems.where((it) => ItemCode.matches(it, _q.text)).toList();
         final s = (snap.data!['summary'] as Map).cast<String, dynamic>();
         return ListView(padding: const EdgeInsets.all(20), children: [
-          LayoutBuilder(builder: (context, c) {
-            final cols = c.maxWidth > 1000 ? 4 : 2;
-            final ratio = ((c.maxWidth - (cols - 1) * 12) / cols / 84).clamp(1.6, 5.0);
-            return GridView.count(
-              crossAxisCount: cols, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 12, crossAxisSpacing: 12, childAspectRatio: ratio,
+          _InventoryHealthCard(summary: s, productCount: allItems.length),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 104,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
               children: [
-                KpiCard(label: 'Stock on Hand (${U.cb})', value: qtyInt(s['total_cb']), icon: Icons.warehouse_rounded, tint: AppColors.cyan),
-                if (CompanyProfile.usesTrays) KpiCard(label: '${U.tray} on Hand', value: qtyInt(s['total_trays']), icon: Icons.dinner_dining_rounded, tint: AppColors.teal),
-                KpiCard(label: 'Total ${U.piece}', value: qtyInt(s['total_bottles']), icon: Icons.liquor_rounded, tint: AppColors.blue),
-                KpiCard(label: 'Low Stock Items', value: qtyInt(s['low_count']), icon: Icons.warning_amber_rounded, tint: AppColors.red),
+                _InventoryMetric(label: 'Low stock items', value: qtyInt(s['low_count']), icon: Icons.warning_amber_rounded, tint: AppColors.red),
+                _InventoryMetric(label: 'Total products', value: qtyInt(allItems.length), icon: Icons.category_outlined, tint: AppColors.blue),
+                _InventoryMetric(label: 'Total ${U.piece}', value: qtyInt(s['total_bottles']), icon: Icons.liquor_rounded, tint: AppColors.cyan),
+                if (CompanyProfile.usesTrays)
+                  _InventoryMetric(label: '${U.tray} on hand', value: qtyInt(s['total_trays']), icon: Icons.dinner_dining_rounded, tint: AppColors.teal),
               ],
-            );
-          }),
+            ),
+          ),
           const SizedBox(height: 16),
           Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
             ChoiceChip(
@@ -178,6 +182,10 @@ class _InventoryPageState extends State<InventoryPage> {
             ),
           ),
           const SizedBox(height: 12),
+          // Factory batch register comes first so current production stock is
+          // visible before the detailed product table.
+          const _BatchStockSection(),
+          const SizedBox(height: 16),
           SectionCard(
             title: _lowOnly ? 'Low Stock Products' : 'Stock on Hand',
             child: items.isEmpty
@@ -218,11 +226,82 @@ class _InventoryPageState extends State<InventoryPage> {
                     ],
                   ),
           ),
-          const SizedBox(height: 16),
-          // Batch-wise stock (factory register style) below Stock on Hand.
-          const _BatchStockSection(),
         ]);
       },
+    );
+  }
+}
+
+class _InventoryHealthCard extends StatelessWidget {
+  final Map<String, dynamic> summary;
+  final int productCount;
+  const _InventoryHealthCard({required this.summary, required this.productCount});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 17),
+      decoration: BoxDecoration(
+        gradient: AppBrand.gradient,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: AppBrand.blue.withValues(alpha: .18), blurRadius: 14, offset: const Offset(0, 7))],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Expanded(child: Text('Stock Health', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800))),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(color: Colors.white.withValues(alpha: .18), borderRadius: BorderRadius.circular(20)),
+            child: Text(fmtDate(todayYmd()), style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600)),
+          ),
+        ]),
+        const SizedBox(height: 8),
+        Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Text(qtyInt(summary['total_cb']), style: const TextStyle(color: Colors.white, fontSize: 34, fontWeight: FontWeight.w800, height: 1)),
+          const SizedBox(width: 8),
+          Padding(padding: const EdgeInsets.only(bottom: 2), child: Text('${U.cb} on hand', style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600))),
+        ]),
+        const SizedBox(height: 12),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Container(height: 7, decoration: BoxDecoration(color: Colors.white.withValues(alpha: .23)), child: FractionallySizedBox(widthFactor: 1, alignment: Alignment.centerLeft, child: Container(decoration: const BoxDecoration(color: Color(0xFF63E6C1))))),
+        ),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(child: Text('$productCount products tracked', style: const TextStyle(color: Colors.white, fontSize: 12.5))),
+          Text('${qtyInt(summary['low_count'])} low stock alerts', style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w700)),
+        ]),
+      ]),
+    );
+  }
+}
+
+class _InventoryMetric extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color tint;
+  const _InventoryMetric({required this.label, required this.value, required this.icon, required this.tint});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: 166,
+      margin: const EdgeInsets.only(right: 10),
+      padding: const EdgeInsets.fromLTRB(14, 12, 12, 10),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant),
+        boxShadow: [BoxShadow(color: scheme.shadow.withValues(alpha: .06), blurRadius: 7, offset: const Offset(0, 3))],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [Icon(icon, size: 18, color: tint), const Spacer(), Container(width: 7, height: 7, decoration: BoxDecoration(shape: BoxShape.circle, color: tint))]),
+        const Spacer(),
+        Text(value, style: TextStyle(color: scheme.onSurface, fontSize: 20, fontWeight: FontWeight.w800)),
+        Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5, fontWeight: FontWeight.w600)),
+      ]),
     );
   }
 }
@@ -236,9 +315,16 @@ class _BatchStockSection extends StatefulWidget {
   State<_BatchStockSection> createState() => _BatchStockSectionState();
 }
 
+String _shortRegisterDate(String raw) {
+  final m = RegExp(r'^\d{4}-(\d{1,2})-(\d{1,2})').firstMatch(raw.trim());
+  if (m == null) return raw.isEmpty ? '—' : raw;
+  return '${m.group(2)!.padLeft(2, '0')}/${m.group(1)!.padLeft(2, '0')}';
+}
+
 class _BatchStockSectionState extends State<_BatchStockSection> {
   late Future<Map<String, dynamic>> _future;
   bool _exporting = false;
+  final Set<String> _collapsed = <String>{};
 
   @override
   void initState() {
@@ -247,8 +333,26 @@ class _BatchStockSectionState extends State<_BatchStockSection> {
   }
 
   Future<Map<String, dynamic>> _load() async {
-    final json = await context.read<AuthController>().api.get('/reports/batch-stock');
-    return (json as Map).cast<String, dynamic>();
+    final api = context.read<AuthController>().api;
+    final report = (await api.get('/reports/batch-stock') as Map).cast<String, dynamic>();
+    // Keep the register correct for legacy/backdated completion rows while
+    // the server reconciler is being rolled out. The production endpoint is
+    // read-only here; it lets us restore a missing batch row instead of
+    // presenting its produced stock as "Unassigned".
+    List<Map<String, dynamic>> completedBatches = const [];
+    try {
+      final production = await api.get('/production/batches');
+      final raw = production is Map ? production['batches'] : null;
+      if (raw is List) {
+        completedBatches = [
+          for (final row in raw)
+            if (row is Map && '${row['status'] ?? ''}'.toUpperCase() == 'COMPLETED') row.cast<String, dynamic>(),
+        ];
+      }
+    } catch (_) {
+      // The batch report remains usable when the user lacks production.view.
+    }
+    return {...report, '_completedProductionBatches': completedBatches};
   }
 
   Future<void> _export(Map<String, dynamic> data, {required bool pdf}) async {
@@ -280,6 +384,167 @@ class _BatchStockSectionState extends State<_BatchStockSection> {
     }
   }
 
+  List<_BatchRegisterGroup> _parseGroups(Map<String, dynamic> data) {
+    final groups = <_BatchRegisterGroup>[];
+    _BatchRegisterGroup? current;
+    final raw = (data['rows'] as List?) ?? const [];
+    for (final rawRow in raw) {
+      final row = (rawRow as List).cast<dynamic>();
+      if (row.isEmpty) continue;
+      final first = '${row[0] ?? ''}';
+      if (first.startsWith('▶')) {
+        current = _BatchRegisterGroup(first.replaceFirst('▶', '').trim());
+        groups.add(current);
+        continue;
+      }
+      if (first == 'TOTAL' || first == 'GRAND TOTAL' || first.isEmpty) {
+        if (first == 'TOTAL' && current != null && row.length > 2) {
+          current.totalCb = row[2];
+          current.totalTrays = row.length > 3 ? row[3] : null;
+        }
+        continue;
+      }
+      if (current != null && row.length > 2) {
+        current.entries.add(_BatchRegisterEntry(
+          date: _shortRegisterDate('${row[0] ?? '—'}'),
+          code: '${row.length > 1 ? row[1] ?? '—' : '—'}',
+          cb: row[2],
+          trays: row.length > 3 ? row[3] : null,
+        ));
+      }
+    }
+    // A backdated production completion can already be present in
+    // /production/batches while an older batch-stock report still places its
+    // quantity in the product's Unassigned row. Reconcile that display-only
+    // gap using the authoritative completed batch list. Opening stock stays
+    // Unassigned unless a matching completed batch is missing from the report.
+    final completed = (data['_completedProductionBatches'] as List?)?.whereType<Map<String, dynamic>>() ?? const <Map<String, dynamic>>[];
+    num number(dynamic value) => value is num ? value : num.tryParse('${value ?? 0}') ?? 0;
+    String normal(String value) => value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '');
+    for (final batch in completed) {
+      final remainingCb = number(batch['produced_cb']) - number(batch['used_cb']);
+      final remainingTrays = number(batch['produced_trays']) - number(batch['used_trays']);
+      if (remainingCb <= 0 && remainingTrays <= 0) continue;
+      final productName = normal('${batch['product_name'] ?? batch['product'] ?? ''}');
+      _BatchRegisterGroup? group;
+      for (final candidate in groups) {
+        if (normal(candidate.name) == productName) {
+          group = candidate;
+          break;
+        }
+      }
+      if (group == null) continue;
+      final code = '${batch['code'] ?? '—'}'.trim();
+      final date = _shortRegisterDate('${batch['planned_date'] ?? batch['plannedDate'] ?? ''}');
+      if (group.entries.any((entry) => entry.code == code && entry.date == date)) continue;
+      // Only consume an Unassigned row when its amount matches this missing
+      // completed batch. This avoids hiding legitimate opening adjustments.
+      final unassignedIndex = group.entries.indexWhere((entry) =>
+          entry.code.toLowerCase().contains('unassigned') && number(entry.cb) >= remainingCb && number(entry.trays) >= remainingTrays);
+      if (unassignedIndex != -1) group.entries.removeAt(unassignedIndex);
+      group.entries.add(_BatchRegisterEntry(
+        date: date,
+        code: code,
+        cb: remainingCb,
+        trays: remainingTrays,
+      ));
+    }
+    return groups;
+  }
+
+  Widget _textCell(String value, {required int flex, TextAlign align = TextAlign.left, bool strong = false}) {
+    return Expanded(
+      flex: flex,
+      child: Text(
+        value,
+        textAlign: align,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(fontSize: 12.5, fontWeight: strong ? FontWeight.w700 : FontWeight.w500),
+      ),
+    );
+  }
+
+  Widget _group(BuildContext context, _BatchRegisterGroup group, bool showTrays) {
+    final scheme = Theme.of(context).colorScheme;
+    final collapsed = _collapsed.contains(group.name);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => setState(() {
+              if (collapsed) {
+                _collapsed.remove(group.name);
+              } else {
+                _collapsed.add(group.name);
+              }
+            }),
+            child: Ink(
+              decoration: const BoxDecoration(gradient: AppBrand.gradient),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+              child: Row(children: [
+                Icon(collapsed ? Icons.expand_more_rounded : Icons.expand_less_rounded, color: Colors.white, size: 21),
+                const SizedBox(width: 8),
+                Expanded(child: Text(group.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13.5, letterSpacing: .2))),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: .92), borderRadius: BorderRadius.circular(20)),
+                  child: Text('${qtyInt(group.totalCb)} ${U.cb}', style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w800, fontSize: 12)),
+                ),
+              ]),
+            ),
+          ),
+        ),
+        if (!collapsed) ...[
+          Container(
+            color: scheme.primaryContainer.withValues(alpha: .55),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            child: Row(children: [
+              _textCell('Mfg. Date', flex: 2, strong: true),
+              _textCell('Batch Code', flex: 3, strong: true),
+              _textCell('Stock (${U.cb})', flex: 2, align: TextAlign.right, strong: true),
+              if (showTrays) _textCell(U.tray, flex: 1, align: TextAlign.right, strong: true),
+            ]),
+          ),
+          for (var i = 0; i < group.entries.length; i++)
+            Container(
+              color: i.isEven ? scheme.surface : scheme.primaryContainer.withValues(alpha: .22),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(children: [
+                Expanded(
+                  flex: 2,
+                  child: Row(children: [
+                    Container(width: 7, height: 7, decoration: BoxDecoration(shape: BoxShape.circle, color: i.isEven ? AppColors.blue : AppColors.teal)),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(group.entries[i].date, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500))),
+                  ]),
+                ),
+                _textCell(group.entries[i].code, flex: 3, strong: true),
+                _textCell(qtyInt(group.entries[i].cb), flex: 2, align: TextAlign.right),
+                if (showTrays) _textCell(qtyInt(group.entries[i].trays), flex: 1, align: TextAlign.right),
+              ]),
+            ),
+          Container(
+            color: scheme.secondaryContainer.withValues(alpha: .65),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(children: [
+              _textCell('TOTAL', flex: 5, strong: true),
+              _textCell('${qtyInt(group.totalCb)} ${U.cb}', flex: 2, align: TextAlign.right, strong: true),
+              if (showTrays) _textCell(qtyInt(group.totalTrays), flex: 1, align: TextAlign.right, strong: true),
+            ]),
+          ),
+        ],
+      ]),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<Map<String, dynamic>>(
@@ -298,12 +563,9 @@ class _BatchStockSectionState extends State<_BatchStockSection> {
           );
         }
         final data = snap.data!;
-        // Server table is written for the default industry (CB / Trays) —
-        // drop the tray column for industries without it, unitize headers.
-        final (columns, rows) = U.table(
-          (data['columns'] as List).cast<String>(),
-          (data['rows'] as List).map((r) => (r as List).cast<dynamic>()).toList(),
-        );
+        final groups = _parseGroups(data);
+        final columns = (data['columns'] as List?)?.cast<String>() ?? const <String>[];
+        final showTrays = CompanyProfile.usesTrays && columns.length >= 4;
         return SectionCard(
           title: IndustryPack.current.runStockTitle,
           stackTrailingOnNarrow: true,
@@ -312,42 +574,38 @@ class _BatchStockSectionState extends State<_BatchStockSection> {
               onPressed: _exporting ? null : () => _export(data, pdf: true),
               icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
               label: Text(tr('PDF')),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFFB91C1C),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                minimumSize: const Size(0, 32),
-              ),
+              style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFFB91C1C), padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8), minimumSize: const Size(0, 32)),
             ),
             OutlinedButton.icon(
               onPressed: _exporting ? null : () => _export(data, pdf: false),
               icon: const Icon(Icons.table_view_outlined, size: 16),
               label: Text(tr('Excel')),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF047857),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                minimumSize: const Size(0, 32),
-              ),
+              style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFF047857), padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8), minimumSize: const Size(0, 32)),
             ),
           ]),
-          child: rows.isEmpty
+          child: groups.isEmpty
               ? EmptyState(U.ize('No completed batches with remaining stock'))
-              : AppDataTable(
-                  columns: columns,
-                  rows: [
-                    for (final r in rows)
-                      [
-                        // product headers / totals bold, batch rows normal
-                        r[0].toString().startsWith('▶') || r[0] == 'TOTAL' || r[0] == 'GRAND TOTAL'
-                            ? Text('${r[0]}', style: const TextStyle(fontWeight: FontWeight.w800))
-                            : '${r[0]}',
-                        for (var c = 1; c < r.length; c++) r[c],
-                      ],
-                  ],
-                ),
+              : Column(children: [for (final group in groups) _group(context, group, showTrays)]),
         );
       },
     );
   }
+}
+
+class _BatchRegisterGroup {
+  final String name;
+  final List<_BatchRegisterEntry> entries = [];
+  dynamic totalCb;
+  dynamic totalTrays;
+  _BatchRegisterGroup(this.name);
+}
+
+class _BatchRegisterEntry {
+  final String date;
+  final String code;
+  final dynamic cb;
+  final dynamic trays;
+  const _BatchRegisterEntry({required this.date, required this.code, required this.cb, required this.trays});
 }
 
 /// Set exact stock (opening stock / correction) — replaces current quantities.
@@ -442,7 +700,10 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
     super.initState();
     context.read<AuthController>().api.get('/products').then((json) {
       setState(() {
-        products = ((json as Map)['products'] as List).cast<Map<String, dynamic>>();
+        products = ((json as Map)['products'] as List)
+            .cast<Map<String, dynamic>>()
+            .where((p) => (p['active'] as num? ?? 1) != 0)
+            .toList();
         productId = products.isNotEmpty ? products.first['id'] as int : null;
       });
     }).catchError((e) {

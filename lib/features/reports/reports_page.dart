@@ -17,6 +17,88 @@ class ReportsPage extends StatefulWidget {
   State<ReportsPage> createState() => _ReportsPageState();
 }
 
+class _ReportsOverview extends StatelessWidget {
+  final List<Map<String, dynamic>> reports;
+  const _ReportsOverview({required this.reports});
+
+  int _count(String terms) {
+    final wanted = terms.split('|');
+    return reports.where((r) {
+      final key = '${r['id'] ?? ''} ${r['title'] ?? ''}'.toLowerCase();
+      return wanted.any((term) => key.contains(term));
+    }).length;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final stock = _count('stock|inventory|batch|low');
+    final production = _count('production|packing|bom');
+    final dispatch = _count('dispatch|truck|shipment');
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Container(
+        padding: const EdgeInsets.fromLTRB(18, 20, 18, 20),
+        decoration: BoxDecoration(
+          gradient: AppBrand.gradient,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [BoxShadow(color: AppBrand.blue.withValues(alpha: .18), blurRadius: 14, offset: const Offset(0, 7))],
+        ),
+        child: Column(children: [
+          const Text('Reports Overview', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 10),
+          Text('${reports.length}', style: const TextStyle(color: Colors.white, fontSize: 52, fontWeight: FontWeight.w800, height: .95)),
+          const SizedBox(height: 9),
+          const Text('PDF and Excel exports available', style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w500)),
+        ]),
+      ),
+      const SizedBox(height: 12),
+      LayoutBuilder(builder: (context, constraints) {
+        return GridView.count(
+          crossAxisCount: 3,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          childAspectRatio: constraints.maxWidth >= 700 ? 1.5 : 1.25,
+          children: [
+            _ReportMetric(label: 'Stock', value: '$stock', sub: 'reports', icon: Icons.inventory_2_outlined, tint: AppColors.blue),
+            _ReportMetric(label: 'Production', value: '$production', sub: 'reports', icon: Icons.factory_outlined, tint: AppColors.teal),
+            _ReportMetric(label: 'Dispatch', value: '$dispatch', sub: 'reports', icon: Icons.local_shipping_outlined, tint: AppColors.orange),
+          ],
+        );
+      }),
+    ]);
+  }
+}
+
+class _ReportMetric extends StatelessWidget {
+  final String label;
+  final String value;
+  final String sub;
+  final IconData icon;
+  final Color tint;
+  const _ReportMetric({required this.label, required this.value, required this.sub, required this.icon, required this.tint});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 10, 10),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant),
+        boxShadow: [BoxShadow(color: scheme.shadow.withValues(alpha: .06), blurRadius: 7, offset: const Offset(0, 3))],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [Icon(icon, size: 20, color: tint), const Spacer(), Container(width: 7, height: 7, decoration: BoxDecoration(shape: BoxShape.circle, color: tint))]),
+        const Spacer(),
+        Text(value, style: TextStyle(color: scheme.onSurface, fontSize: 22, fontWeight: FontWeight.w800)),
+        Text('$label · $sub', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w700)),
+      ]),
+    );
+  }
+}
+
 class _ReportsPageState extends State<ReportsPage> {
   late Future<List<Map<String, dynamic>>> _future;
   Map<String, dynamic>? _selected;
@@ -67,6 +149,28 @@ class _ReportsPageState extends State<ReportsPage> {
 
   List<String> get _columns => U.table((_data?['columns'] as List? ?? const []).cast<String>(), const []).$1;
 
+  /// Friendly mobile labels keep the report library readable while the
+  /// server-provided report id and data remain unchanged.
+  String _displayTitle(Map<String, dynamic> report) {
+    final key = '${report['id'] ?? ''} ${report['title'] ?? ''}'.toLowerCase();
+    if (key.contains('inventory') && key.contains('stock')) return 'Stock on Hand';
+    if (key.contains('batch')) return 'Batch Register';
+    if (key.contains('production')) return 'Production';
+    if (key.contains('dispatch')) return 'Dispatch History';
+    return '${report['title'] ?? ''}';
+  }
+
+  String _chipTitle(Map<String, dynamic> report) {
+    final key = '${report['id'] ?? ''} ${report['title'] ?? ''}'.toLowerCase();
+    if (key.contains('inventory') && key.contains('stock')) return 'Stock on Hand';
+    if (key.contains('batch')) return 'Batch Register';
+    if (key.contains('production')) return 'Production History';
+    if (key.contains('summary')) return 'Inventory Summary';
+    if (key.contains('low')) return 'Low Stock';
+    if (key.contains('warehouse') || key.contains('ledger') || key.contains('audit')) return 'Warehouse Logs';
+    return _displayTitle(report);
+  }
+
   /// Empty-state text that tells a NEW company what feeds each report.
   String _emptyHint(String id) {
     if (id.contains('raw')) return 'No data yet — add raw materials (Raw Material → New Material) and receive stock; consumption appears here.';
@@ -103,7 +207,7 @@ class _ReportsPageState extends State<ReportsPage> {
     setState(() => _exporting = true);
     try {
       final bytes = await ReportPdf.build(
-        title: U.ize(_data!['title'] as String),
+        title: U.ize(_displayTitle(_selected!)),
         desc: U.ize(_selected!['desc'] as String? ?? ''),
         columns: _columns,
         rows: _rows,
@@ -130,8 +234,14 @@ class _ReportsPageState extends State<ReportsPage> {
         return LayoutBuilder(builder: (context, c) {
           final wide = c.maxWidth >= 900;
           return ListView(padding: const EdgeInsets.all(18), children: [
+            _ReportsOverview(reports: reports),
+            const SizedBox(height: 16),
             if (!wide) ...[
-              Wrap(spacing: 7, runSpacing: 7, children: [for (final r in reports) _reportChip(r)]),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [for (final r in reports) _reportChip(r)],
+              ),
               const SizedBox(height: 14),
               _reportBody(),
             ] else
@@ -165,7 +275,7 @@ class _ReportsPageState extends State<ReportsPage> {
           borderRadius: BorderRadius.circular(5),
           border: Border.all(color: sel ? AppColors.blue : const Color(0xFFC3CEDA)),
         ),
-        child: Text(U.ize(tr(r['title'] as String)),
+        child: Text(U.ize(tr(_chipTitle(r))),
             style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: sel ? Theme.of(context).colorScheme.onPrimaryContainer : Theme.of(context).colorScheme.onSurface)),
       ),
     );
@@ -186,7 +296,7 @@ class _ReportsPageState extends State<ReportsPage> {
           ),
           padding: EdgeInsets.fromLTRB(sel ? 9 : 12, 9, 10, 9),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(U.ize(tr(r['title'] as String)),
+            Text(U.ize(tr(_displayTitle(r))),
                 style: TextStyle(fontSize: 12.6, fontWeight: FontWeight.w600, color: sel ? Theme.of(context).colorScheme.onPrimaryContainer : Theme.of(context).colorScheme.onSurface)),
             const SizedBox(height: 2),
             Text(U.ize(tr(r['desc'] as String)),
@@ -202,27 +312,29 @@ class _ReportsPageState extends State<ReportsPage> {
   Widget _reportBody() {
     if (_selected == null) return const SizedBox.shrink();
     return SectionCard(
-      title: U.ize(_selected!['title'] as String),
+      title: U.ize(_displayTitle(_selected!)),
       stackTrailingOnNarrow: true,
       trailing: Wrap(spacing: 8, runSpacing: 8, children: [
-        OutlinedButton.icon(
+        FilledButton.icon(
           onPressed: (_data == null || _exporting) ? null : _exportPdf,
           icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
           label: Text(tr('Export PDF')),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: const Color(0xFFB91C1C),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            minimumSize: const Size(0, 32),
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFFE65353),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            minimumSize: const Size(0, 36),
           ),
         ),
-        OutlinedButton.icon(
+        FilledButton.icon(
           onPressed: _exporting ? null : _exportExcel,
           icon: const Icon(Icons.table_view_outlined, size: 16),
           label: Text(tr('Export Excel')),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: const Color(0xFF047857),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            minimumSize: const Size(0, 32),
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFF4CAF70),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            minimumSize: const Size(0, 36),
           ),
         ),
       ]),
