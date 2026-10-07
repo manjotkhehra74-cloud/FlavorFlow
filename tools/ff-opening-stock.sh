@@ -59,28 +59,32 @@ if (!materialCols.includes('id') || !materialCols.includes('name') || !materialC
 }
 
 const targets = [
-  // Packing materials. The matcher is deliberately narrow and refuses an
-  // ambiguous match instead of changing the wrong material.
-  ['Shrink Soya 740g', /shrink .*soya .*740/, 418903, 'packing'],
-  ['Shrink White Vinegar 610ml', /shrink .*white vinegar .*610/, 436562, 'packing'],
-  ['Shrink Brown Vinegar 610ml', /shrink .*brown vinegar .*610/, 15265, 'packing'],
-  ['Label Soya 1.3kg', /label .*soya .*1 3/, 30155, 'packing'],
-  ['Label White Vinegar 1 Ltr', /label .*white vinegar .*1 l/, 67548, 'packing'],
-  ['Label Dark Soya 220g', /label .*dark soya .*220/, 10023, 'packing'],
-  ['Label White Vinegar 180ml', /label .*white vinegar .*180/, 158172, 'packing'],
-  ['Hologram 65 x 65 — shared Vinegar 180 / Dark Soya 220', /hologram .*65 .*65/, 171038, 'packing'],
-  ['Label White Vinegar 4 Ltr', /label .*white vinegar .*4 l/, 4092, 'packing'],
-  ['Label Dark Soya 4.7kg', /label .*dark soya .*4 7/, 4200, 'packing'],
-  ['Cap Orange', /cap orange/, 1195479, 'packing'],
-  ['Cap Purple', /cap purple/, 184785, 'packing'],
-  ['Cap Red 1.3kg', /cap red .*1 3/, 22518, 'packing'],
-  ['Cap Red Plastic 4gm', /cap red plastic .*4/, 135615, 'packing'],
-  ['Plug No 9', /plug .*9/, 422444, 'packing'],
-  ['CB 180ml / 220g', /cb .*180 .*220/, 5151, 'packing'],
-  ['CB 610ml / 740gm', /cb .*610 .*740/, 7812, 'packing'],
-  ['CB 1.3kg', /cb .*1 3/, 695, 'packing'],
-  ['Crown Cork', /crown cork/, 113050, 'packing'],
-  ['Jerry Can 4Ltr / 4.7kg', /jerry can .*4/, 8016, 'packing'],
+  // Packing materials. These aliases match the names in the live Product
+  // Master while keeping each target narrow and refusing ambiguity.
+  ['Shrink Soya 740g', /shrink sleeve 740/, 418903, 'packing'],
+  ['Shrink White Vinegar 610ml', /shrink sleeve white 610/, 436562, 'packing'],
+  ['Shrink Brown Vinegar 610ml', /shrink sleeve brown 610/, 15265, 'packing'],
+  ['Label Soya 1.3kg', /label soya 1 3/, 30155, 'packing'],
+  ['Label White Vinegar 1 Ltr', /label vinegar 1 ltr/, 67548, 'packing'],
+  ['Label Dark Soya 220g', /dark s label 220/, 10023, 'packing'],
+  ['Label White Vinegar 180ml', /label white 180/, 158172, 'packing'],
+  ['Hologram 65 x 65 — shared Vinegar 180 / Dark Soya 220', /hologram 180 220/, 171038, 'packing'],
+  ['Label White Vinegar 4 Ltr', /label front 4 ltr/, 4092, 'packing'],
+  ['Label Dark Soya 4.7kg', /label front 4 7/, 4200, 'packing'],
+  ['Cap Orange', /cap orange 610/, 1195479, 'packing'],
+  ['Cap Purple', /cap purple 740/, 184785, 'packing'],
+  ['Cap Red 1.3kg', /cap red 1 3 1 ltr/, 22518, 'packing'],
+  ['Cap Red Plastic 4gm', /cap red 180 220/, 135615, 'packing'],
+  ['Plug No 9', /^plug 180$/, 422444, 'packing'],
+  ['CB 180ml / 220g', /carton cb 180 220/, 5151, 'packing'],
+  ['CB 610ml / 740gm', /carton cb 610 740/, 7812, 'packing'],
+  ['CB 1.3kg', /carton cb 1 3 1 3/, 695, 'packing'],
+  ['Crown Cork', /crown cork 220/, 113050, 'packing'],
+  // Both Product Master rows draw from one physical shared pool. The apply
+  // path writes the same final shared balance to both rows; it never splits
+  // the user's 8,016 count between 4 Ltr and 4.7kg.
+  ['Jerry Can 4Ltr (shared pool)', /jerry can 4 ltr/, 8016, 'packing', 'jerry-shared'],
+  ['Jerry Can 4.7kg (shared pool)', /jerry can 4 7 kg/, 8016, 'packing', 'jerry-shared'],
 
   // Raw materials. These quantities were confirmed as kg by the user.
   ['Soyabean', /soya bean|soyabean/, 446.30, 'raw'],
@@ -89,9 +93,9 @@ const targets = [
   ['Citric Acid', /citric acid/, 623.20, 'raw'],
   ['Ascorbic Acid', /ascorbic acid/, 30.80, 'raw'],
   ['Sodium Benzoate', /sodium benzoate/, 1.16, 'raw'],
-  ['Oleoresin Garlic', /oleoresin garlic/, 29.49, 'raw'],
-  ['Oleoresin Cinnamon', /oleoresin cinnamon/, 28.48, 'raw'],
-  ['Oleoresin Coriander', /oleoresin coriander/, 38.79, 'raw'],
+  ['Oleoresin Garlic', /garlic oleoresin/, 29.49, 'raw'],
+  ['Oleoresin Cinnamon', /cinnamon oleoresin/, 28.48, 'raw'],
+  ['Oleoresin Coriander', /coriander oleoresin/, 38.79, 'raw'],
   ['Caramel Colour E150A', /caramel colour e 150 a|caramel colour e150a/, 4757.50, 'raw'],
   ['Black Salt', /black salt/, 100, 'raw'],
 ];
@@ -99,7 +103,7 @@ const targets = [
 const all = q('SELECT id, name, category, unit, COALESCE(stock, 0) stock FROM packing_materials ORDER BY id');
 const matched = [];
 let fatal = false;
-for (const [label, matcher, desired, kind] of targets) {
+for (const [label, matcher, desired, kind, group] of targets) {
   const candidates = all.filter((m) => {
     const category = norm(m.category);
     if (kind === 'raw' && category !== 'raw material') return false;
@@ -112,7 +116,7 @@ for (const [label, matcher, desired, kind] of targets) {
     continue;
   }
   const m = candidates[0];
-  matched.push({ label, desired: Number(desired), kind, ...m });
+  matched.push({ label, desired: Number(desired), kind, group: group || null, ...m });
   console.log(`MATCH ${label} -> #${m.id} ${m.name} | current=${m.stock} ${m.unit || ''} | 04/10 closing=${desired} ${m.unit || ''}`);
 }
 if (fatal) {
@@ -163,7 +167,43 @@ if (!recorded.size) console.log('  none recorded in packing_txns');
 for (const m of matched) if (recorded.has(Number(m.id))) console.log(`  #${m.id} ${m.name}: -${recorded.get(Number(m.id))} ${m.unit || ''}`);
 
 console.log('\nPROPOSED FINAL BALANCES:');
+const finalById = new Map();
+const grouped = new Map();
 for (const m of matched) {
+  if (m.group) {
+    if (!grouped.has(m.group)) grouped.set(m.group, []);
+    grouped.get(m.group).push(m);
+  }
+}
+
+// A shared physical pool is represented by multiple Product Master rows.
+// Compare and deduct consumption across the whole pool, then show/write the
+// same remaining balance to each alias row instead of splitting the target.
+for (const [group, rows] of grouped) {
+  const desiredValues = new Set(rows.map((m) => Number(m.desired)));
+  if (desiredValues.size !== 1) {
+    console.error(`MISMATCH shared group ${group}: target values differ; refusing to apply`);
+    fatal = true;
+    continue;
+  }
+  const rec = rows.reduce((sum, m) => sum + (recorded.get(Number(m.id)) || 0), 0);
+  const exp = rows.reduce((sum, m) => sum + (expected.get(Number(m.id)) || 0), 0);
+  if (rec > 0 && exp > 0 && Math.abs(rec - exp) > 0.001) {
+    console.error(`MISMATCH shared group ${group}: recorded=${rec}, expected BOM=${exp}; refusing to apply until reviewed`);
+    fatal = true;
+  }
+  const deduction = rec > 0 ? rec : exp;
+  const finalStock = Number(rows[0].desired) - deduction;
+  console.log(`  SHARED ${group}: ${rows[0].desired} - ${deduction} = ${finalStock} ${rows[0].unit || ''}`);
+  for (const m of rows) {
+    finalById.set(Number(m.id), finalStock);
+    console.log(`    #${m.id} ${m.name}: shared balance=${finalStock} ${m.unit || ''}`);
+  }
+  if (finalStock < 0) { console.error(`NEGATIVE RESULT for shared group ${group}; refusing to apply`); fatal = true; }
+}
+
+for (const m of matched) {
+  if (m.group) continue;
   const rec = recorded.get(Number(m.id)) || 0;
   const exp = expected.get(Number(m.id)) || 0;
   if (rec > 0 && exp > 0 && Math.abs(rec - exp) > 0.001) {
@@ -172,6 +212,7 @@ for (const m of matched) {
   }
   const deduction = rec > 0 ? rec : exp;
   const finalStock = Number(m.desired) - deduction;
+  finalById.set(Number(m.id), finalStock);
   console.log(`  #${m.id} ${m.name}: ${m.desired} - ${deduction} = ${finalStock} ${m.unit || ''}`);
   if (finalStock < 0) { console.error(`NEGATIVE RESULT for ${m.name}; refusing to apply`); fatal = true; }
 }
@@ -186,15 +227,13 @@ try {
   db.exec('BEGIN');
   const update = db.prepare('UPDATE packing_materials SET stock = ? WHERE id = ?');
   for (const m of matched) {
-    const rec = recorded.get(Number(m.id)) || 0;
-    const exp = expected.get(Number(m.id)) || 0;
-    const deduction = rec > 0 ? rec : exp;
-    const finalStock = Number(m.desired) - deduction;
+    const finalStock = finalById.get(Number(m.id));
+    if (finalStock == null) throw new Error(`missing proposed balance for #${m.id} ${m.name}`);
     update.run(finalStock, m.id);
     console.log(`UPDATED #${m.id} ${m.name}: stock=${finalStock} ${m.unit || ''}`);
   }
   db.exec('COMMIT');
-  console.log(`APPLIED: ${matched.length} materials. Backup was created by the shell wrapper before the write.`);
+  console.log(`APPLIED: ${matched.length} Product Master rows (${grouped.size} shared pool); backup was created by the shell wrapper before the write.`);
 } catch (e) {
   try { db.exec('ROLLBACK'); } catch (_) {}
   console.error('APPLY FAILED — transaction rolled back: ' + e.message);
