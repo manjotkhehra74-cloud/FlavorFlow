@@ -31,7 +31,7 @@ if (( APPLY )); then
   sleep 1
 fi
 
-export FF_DB CLOSING_DATE APPLY TS SERVER_DIR
+export FF_DB="$DB" CLOSING_DATE APPLY TS SERVER_DIR
 node <<'JS'
 'use strict';
 let DatabaseSync;
