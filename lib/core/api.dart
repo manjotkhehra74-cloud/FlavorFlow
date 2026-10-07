@@ -130,22 +130,35 @@ class ApiClient {
     }
     final uri = Uri.parse('$base$path');
     http.Response res;
-    try {
+    final requestTimeout = method == 'POST' ? const Duration(seconds: 30) : const Duration(seconds: 45);
+
+    Future<http.Response> requestOnce() {
       switch (method) {
         case 'POST':
-          res = await http.post(uri, headers: _headers, body: jsonEncode(body ?? {})).timeout(const Duration(seconds: 20));
-          break;
+          return http.post(uri, headers: _headers, body: jsonEncode(body ?? {}));
         case 'PUT':
-          res = await http.put(uri, headers: _headers, body: jsonEncode(body ?? {})).timeout(const Duration(seconds: 20));
-          break;
+          return http.put(uri, headers: _headers, body: jsonEncode(body ?? {}));
         case 'DELETE':
-          res = await http.delete(uri, headers: _headers).timeout(const Duration(seconds: 20));
-          break;
+          return http.delete(uri, headers: _headers);
         default:
-          res = await http.get(uri, headers: _headers).timeout(const Duration(seconds: 20));
+          return http.get(uri, headers: _headers);
       }
+    }
+
+    try {
+      res = await requestOnce().timeout(requestTimeout);
     } catch (e) {
-      throw ApiException(-1, 'Cannot reach the server at $base. Is the ERP running? ($e)');
+      // GETs are safe to retry, and PUT is idempotent for an existing
+      // material/batch/user record. This covers a slow or briefly waking
+      // DuckDNS/ERP instance without repeating stock-receive POSTs.
+      if (method != 'GET' && method != 'PUT') {
+        throw ApiException(-1, 'Cannot reach the server at $base. Is the ERP running? ($e)');
+      }
+      try {
+        res = await requestOnce().timeout(requestTimeout);
+      } catch (retryError) {
+        throw ApiException(-1, 'Cannot reach the server at $base. Is the ERP running? ($retryError)');
+      }
     }
     dynamic json;
     try {
