@@ -20,30 +20,34 @@ When a completed batch is reported for a date, resolve the effective net weight 
 
 ## Daily labour
 
-`POST /labour/daily` stores one line-level row for each date, production line, and shift. Worker count does not change when the product or production batch on that line changes:
+`POST /labour/daily` stores one row for each date, production line, shift, and SKU. Batch code is intentionally not captured. If a line changes SKU during the same shift, create one labour row for each SKU; the same workers and actual hours can be repeated for the SKU that ran during that part of the shift:
 
 ```json
 {
   "date": "2026-10-06",
   "shift": "Day",
   "line": "Line 2",
-  "workerCount": 8,
-  "actualHours": 8,
+  "productId": 12,
+  "sku": "White Vinegar 610",
+  "workerCount": 29,
+  "actualHours": 9,
   "supervisor": "Supervisor name",
   "remarks": ""
 }
 ```
 
-Required values are `date`, `shift` (`Day` or `Night`), `line`, positive `workerCount`, and positive `actualHours`. There is deliberately no overtime, product, or batch-code field in this line-level labour entry. The uniqueness key is `date + line + shift`; the API should reject an accidental duplicate instead of overwriting it. Product and batch production remain authoritative in the Production register.
+Required values are `date`, `shift` (`Day` or `Night`), `line`, `productId`/`sku`, positive `workerCount`, and positive `actualHours`. There is deliberately no overtime or batch-code field. The uniqueness key is `date + line + shift + SKU`; the API should reject an accidental duplicate instead of overwriting it. Product and batch production remain authoritative in the Production register.
 
-`PUT /labour/daily/:id` accepts the same body and updates a saved manual row; the UI exposes this as **Edit Entry**. `GET /labour/daily?from=YYYY-MM-DD&to=YYYY-MM-DD&line=Line%201&shift=Day` returns `{ "rows": [...] }`. Omit `shift` for combined reporting.
+For example, if Line 2 runs White Vinegar 610 with 29 workers for 9 hours, that labour row belongs to White Vinegar 610. If the same line then runs Soya Sauce 740 for 4.5 hours and Soya Sauce 1.3 for 4.5 hours with the same 29 workers, create separate SKU rows; each SKU receives its own 29-worker/4.5-hour labour assignment. The same rule applies to Line 3 and every other production line.
+
+`PUT /labour/daily/:id` accepts the same body and updates a saved manual row; the UI exposes this as **Edit Entry**. `GET /labour/daily?from=YYYY-MM-DD&to=YYYY-MM-DD&sku=12&line=Line%202&shift=Day` returns `{ "rows": [...] }`. Omit `sku` or `shift` for combined reporting.
 
 Line/SKU configuration used by Production and the reports:
 
 - **Line 2:** Soya Sauce 740, Soya Sauce 1.3, White Vinegar 610, Brown Vinegar 610, Vinegar 1.0.
 - **Line 3:** Dark Soya 220, White Vinegar 180, Soya Sauce 4.7, White Vinegar 4.0 for packing and labelling.
 
-Production/report aggregation must validate these mappings when a completed record has a line and SKU; a Line 2 or Line 3 record outside its configured family must be rejected or surfaced as a reconciliation/configuration error, not silently reassigned. When legacy completed records have no line value, the client may infer Line 2 or Line 3 from the configured SKU family and display the inferred line rather than leaving a permitted SKU as `Unassigned`. Other lines can have their own configured SKU list. The line-level labour row is not duplicated when the product or batch code changes.
+Production/report aggregation must validate these mappings when a completed record has a line and SKU; a Line 2 or Line 3 record outside its configured family must be rejected or surfaced as a reconciliation/configuration error, not silently reassigned. When legacy completed records have no line value, the client may infer Line 2 or Line 3 from the configured SKU family and display the inferred line rather than leaving a permitted SKU as `Unassigned`. Other lines can have their own configured SKU list.
 
 ## Productivity summary
 
@@ -66,7 +70,7 @@ The response is shaped for the existing table and remains grouped by SKU plus pr
 }
 ```
 
-Manpower is derived from the saved daily labour rows matching the selected date, line, and shift. A product or batch change on a line does not create another labour assignment. It must not be a product-master constant. If the API normalizes hours, use `workerCount * actualHours / configuredStandardShiftHours`; do not add overtime. The client fallback counts each date + line + shift assignment once and allocates it across multiple SKU rows by completed CB so a product change cannot duplicate the line assignment.
+Manpower is derived from the saved daily labour rows matching the selected date, line, shift, and SKU. A product change creates a separate SKU labour row, while a batch change for the same SKU does not create another labour assignment. It must not be a product-master constant. If the API normalizes hours, use `workerCount * actualHours / configuredStandardShiftHours`; do not add overtime. The client fallback matches each completed SKU to its date + line + shift + SKU labour row, so labour and hours stay with the SKU that actually ran.
 
 ## Analysis and exports
 
@@ -123,7 +127,7 @@ For each source SKU and selected shift:
 
 To use the manually entered hours in the same way as the decimal manpower values in the workbook, calculate normalized manpower as `workerCount × actualHours ÷ configuredStandardShiftHours`. No overtime column or overtime premium is introduced. If no standard shift-hours value is configured, the report must show the configuration warning instead of silently guessing.
 
-The app should keep the workbook-style horizontal matrix for each section, with date/month, line, source SKU, and shift filters. A line filter of `All lines` gives the period matrix; selecting a line recalculates the same three sections for that line. The detailed Daily Labour tab remains row-wise and contains only date, shift, line, workers, actual hours, supervisor, and remarks; product and batch code are intentionally absent.
+The app should keep the workbook-style horizontal matrix for each section, with date/month, line, source SKU, and shift filters. A line filter of `All lines` gives the period matrix; selecting a line recalculates the same three sections for that line. The detailed Daily Labour tab remains row-wise and contains date, shift, line, SKU, workers, actual hours, supervisor, and remarks; batch code is intentionally absent.
 
 The analysis response can provide the three matrices as `sections.day`, `sections.night`, and `sections.combined`, each shaped as `{ "columns": ["METRIC", "740", "1.3", "White Vinegar 610", "Brown Vinegar 610", ...], "rows": [...] }`. The Flutter client renders each matrix separately and keeps a flat-response fallback for older servers.
 

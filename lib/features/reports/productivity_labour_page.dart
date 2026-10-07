@@ -63,8 +63,11 @@ bool _skuAllowedForLine(String line, String sku) {
   return allowed.contains(_skuRuleKey(sku)) || _skuRuleKey(_lineForSku(sku) ?? '') == _skuRuleKey(line);
 }
 
+String _labourSku(Map<String, dynamic> row) =>
+    '${row['productId'] ?? row['product_id'] ?? row['sku'] ?? row['product'] ?? row['productName'] ?? ''}';
+
 String _labourIdentity(Map<String, dynamic> row) =>
-    '${row['date'] ?? ''}|${_skuRuleKey('${row['line'] ?? ''}')}|${_skuRuleKey('${row['shift'] ?? ''}')}';
+    '${row['date'] ?? ''}|${_skuRuleKey('${row['line'] ?? ''}')}|${_skuRuleKey('${row['shift'] ?? ''}')}|${_skuRuleKey(_labourSku(row))}';
 
 Future<List<Map<String, dynamic>>> _readLocalLabour() async {
   try {
@@ -108,8 +111,10 @@ Future<List<Map<String, dynamic>>> _loadLabourRows(ApiClient api, String query) 
     final date = '${r['date'] ?? ''}'.split(RegExp(r'[T ]')).first;
     final shift = '${r['shift'] ?? ''}';
     final line = '${r['line'] ?? ''}';
+    final sku = _labourSku(r);
     return (params['from'] == null || date.compareTo(params['from']!) >= 0) &&
         (params['to'] == null || date.compareTo(params['to']!) <= 0) &&
+        (params['sku'] == null || sku == params['sku'] || _skuRuleKey(sku) == _skuRuleKey(params['sku']!)) &&
         (params['shift'] == null || shift.toLowerCase() == params['shift']!.toLowerCase()) &&
         (params['line'] == null || line.toLowerCase() == params['line']!.toLowerCase());
   }).toList();
@@ -138,8 +143,8 @@ Future<List<Map<String, dynamic>>> _loadLabourRows(ApiClient api, String query) 
 /// Production productivity + daily labour register.
 ///
 /// Productivity is read from completed production batches. Labour is entered
-/// manually per date / shift / line; it is deliberately not a fixed value on
-/// the product master because line manpower changes every day.
+/// manually per date / shift / line / SKU; it is deliberately not a fixed
+/// value on the product master because line manpower changes every day.
 class ProductivityLabourPage extends StatefulWidget {
   const ProductivityLabourPage({super.key});
 
@@ -319,8 +324,10 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
 
     final seenIds = <String>{};
     final metrics = <String, Map<String, dynamic>>{};
-    final labourByLine = <String, double>{};
+    final labourBySku = <String, double>{};
     final assignmentManpower = <String, double>{};
+    String labourKey(String date, String line, String shift, String skuKey) =>
+        '${date}|${line.toLowerCase()}|${shift.toLowerCase()}|$skuKey';
     for (final entry in labour) {
       final date = _dateOnly(entry['date']);
       if (date.isNotEmpty && (date.compareTo(_fromYmd) < 0 || date.compareTo(_toYmd) > 0)) continue;
@@ -332,15 +339,40 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
       final hours = _n(entry['actualHours'] ?? entry['hours']);
       final standard = _n(entry['standardShiftHours']);
       final manpower = standard > 0 ? worker * hours / standard : worker;
-      final key = '${date}|${line.toLowerCase()}|${entryShift.toLowerCase()}';
-      // One line-level labour row is reused when the product/batch changes.
-      labourByLine[key] = manpower.toDouble();
+      final productId = '${entry['productId'] ?? entry['product_id'] ?? ''}';
+      final skuName = '${entry['sku'] ?? entry['productName'] ?? entry['product_name'] ?? ''}';
+      final skuKeys = <String>{
+        if (productId.isNotEmpty) productId,
+        if (skuName.trim().isNotEmpty) _skuRuleKey(skuName),
+      };
+      // SKU is now part of the labour assignment. A line can have several
+      // SKU rows in one shift, each carrying its own workers and hours.
+      for (final skuKey in skuKeys) {
+        labourBySku[labourKey(date, line, entryShift, skuKey)] = manpower.toDouble();
+      }
     }
 
-    double lineManpower(String date, String line, String shift) {
+    double skuManpower(String date, String line, String shift, List<String> skuKeys) {
       final prefix = '${date}|${line.toLowerCase()}|';
-      if (shift.isNotEmpty) return labourByLine['$prefix${shift.toLowerCase()}'] ?? 0;
-      return labourByLine.entries.where((e) => e.key.startsWith(prefix)).fold<double>(0, (sum, e) => sum + e.value);
+      for (final skuKey in skuKeys) {
+        if (shift.isNotEmpty) {
+          final value = labourBySku['$prefix${shift.toLowerCase()}|$skuKey'];
+          if (value != null) return value;
+        } else {
+          final values = labourBySku.entries.where((e) => e.key.startsWith(prefix) && e.key.endsWith('|$skuKey')).map((e) => e.value).toList();
+          if (values.isNotEmpty) return values.fold<double>(0, (sum, value) => sum + value);
+        }
+      }
+      return 0;
+    }
+
+    String skuAssignmentKey(String date, String line, String shift, List<String> skuKeys) {
+      final prefix = '${date}|${line.toLowerCase()}|';
+      for (final skuKey in skuKeys) {
+        if (shift.isNotEmpty && labourBySku.containsKey('$prefix${shift.toLowerCase()}|$skuKey')) return '$prefix${shift.toLowerCase()}|$skuKey';
+        if (shift.isEmpty && labourBySku.keys.any((key) => key.startsWith(prefix) && key.endsWith('|$skuKey'))) return '$prefix|$skuKey';
+      }
+      return '$prefix${shift.toLowerCase()}|${skuKeys.first}';
     }
 
     for (final batch in batchList) {
@@ -369,8 +401,12 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
       row['cb'] = _n(row['cb']) + cb;
       row['kg'] = _n(row['kg']) + cb * net;
       final runShift = batchShift.isEmpty ? '' : batchShift;
-      final labourKey = '${date}|${line.toLowerCase()}|${runShift.toLowerCase()}';
-      assignmentManpower.putIfAbsent(labourKey, () => lineManpower(date, line, runShift));
+      final skuKeys = <String>{
+        if (sourcePid.isNotEmpty) sourcePid,
+        _skuRuleKey(source),
+      }.where((key) => key.isNotEmpty).toList();
+      final labourKey = skuAssignmentKey(date, line, runShift, skuKeys);
+      assignmentManpower.putIfAbsent(labourKey, () => skuManpower(date, line, runShift, skuKeys));
       final labourCb = row['labourCb'] as Map<String, double>;
       labourCb[labourKey] = (labourCb[labourKey] ?? 0) + cb;
     }
@@ -389,9 +425,8 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
       final cb = _n(entry.value['cb']).toDouble();
       final kg = _n(entry.value['kg']).toDouble();
       final labourCb = entry.value['labourCb'] as Map<String, double>;
-      // A line/date/shift assignment is counted once. When a line changes SKU
-      // within that shift, the fallback allocates that one assignment by CB so
-      // product rows cannot create a second labour assignment.
+      // A date/line/shift/SKU assignment is counted once. Multiple completed
+      // batches of the same SKU reuse the matching labour row.
       var manpower = 0.0;
       for (final assignment in labourCb.entries) {
         final assignmentCb = assignmentProductionCb[assignment.key] ?? 0;
@@ -439,7 +474,7 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
   void _reload() {
     final api = context.read<AuthController>().api;
     final productivity = _loadProductivity();
-    final labour = _loadLabourRows(api, _query(includeSku: false));
+    final labour = _loadLabourRows(api, _query());
     final analysis = api.get('/reports/productivity/analysis?${_query()}').then((v) => (v as Map).cast<String, dynamic>()).catchError((_) => <String, dynamic>{'rows': const []});
     void assign() {
       _productivityFuture = productivity;
@@ -718,7 +753,7 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
       builder: (context, snap) {
         final rows = snap.data ?? const <Map<String, dynamic>>[];
         return ListView(padding: const EdgeInsets.all(18), children: [
-          _dateFilters(context, includeSku: false),
+          _dateFilters(context),
           const SizedBox(height: 8),
           Align(alignment: Alignment.centerRight, child: OutlinedButton.icon(onPressed: _exporting ? null : () => _export('labour'), icon: const Icon(Icons.download_outlined, size: 18), label: const Text('Export Labour Excel'))),
           const SizedBox(height: 8),
@@ -728,10 +763,10 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
             child: rows.isEmpty
                 ? const EmptyState('No daily labour entries yet. Start entering line-wise details tomorrow.')
                 : AppDataTable(
-                    columns: const ['DATE', 'SHIFT', 'LINE', 'WORKERS', 'HOURS', 'SUPERVISOR', 'REMARKS', ''],
+                    columns: const ['DATE', 'SHIFT', 'LINE', 'SKU', 'WORKERS', 'HOURS', 'SUPERVISOR', 'REMARKS', ''],
                     rows: [
                       for (final r in rows)
-                        [r['date'], r['shift'], r['line'], r['workerCount'] ?? r['workers'], r['actualHours'] ?? r['hours'], r['supervisor'], r['remarks'], IconButton(tooltip: 'Edit entry', onPressed: () => _openLabourForm(entry: r), icon: const Icon(Icons.edit_outlined, size: 18))],
+                        [r['date'], r['shift'], r['line'], r['productName'] ?? r['sku'] ?? r['product'], r['workerCount'] ?? r['workers'], r['actualHours'] ?? r['hours'], r['supervisor'], r['remarks'], IconButton(tooltip: 'Edit entry', onPressed: () => _openLabourForm(entry: r), icon: const Icon(Icons.edit_outlined, size: 18))],
                     ],
                   ),
           ),
@@ -773,6 +808,8 @@ class _DailyLabourDialogState extends State<_DailyLabourDialog> {
   final remarks = TextEditingController();
   DateTime date = DateTime.now();
   String shift = 'Day';
+  String? product;
+  List<Map<String, dynamic>> products = [];
   bool busy = false;
 
   @override
@@ -787,8 +824,23 @@ class _DailyLabourDialogState extends State<_DailyLabourDialog> {
       hours.text = '${e['actualHours'] ?? e['hours'] ?? ''}';
       supervisor.text = '${e['supervisor'] ?? ''}';
       remarks.text = '${e['remarks'] ?? ''}';
+      final rawProduct = e['productId'] ?? e['product_id'] ?? e['sku'] ?? e['product'];
+      if (rawProduct != null) product = '$rawProduct';
     }
-
+    context.read<AuthController>().api.get('/products').then((json) {
+      if (!mounted) return;
+      final loaded = ((json as Map)['products'] as List? ?? const []).cast<Map<String, dynamic>>().where((p) => (p['active'] as num? ?? 1) != 0).toList();
+      setState(() {
+        products = loaded;
+        if (product != null && !loaded.any((p) => '${p['id']}' == product)) {
+          final match = loaded.where((p) => _skuRuleKey('${p['name']}') == _skuRuleKey(product!)).toList();
+          if (match.isNotEmpty) product = '${match.first['id']}';
+        }
+        final selected = loaded.where((p) => '${p['id']}' == product).toList();
+        final inferred = selected.isEmpty ? null : _lineForSku('${selected.first['name']}');
+        if (_isUnassignedLine(line.text) && inferred != null) line.text = inferred;
+      });
+    }).catchError((_) {});
   }
 
   @override
@@ -800,8 +852,15 @@ class _DailyLabourDialogState extends State<_DailyLabourDialog> {
   Future<void> _save() async {
     final w = double.tryParse(workers.text.trim());
     final h = double.tryParse(hours.text.trim());
-    if (line.text.trim().isEmpty || w == null || h == null || w <= 0 || h <= 0) {
-      showErr(context, 'Line, workers and actual hours are required.');
+    final selected = products.where((p) => '${p['id']}' == product).toList();
+    final selectedName = selected.isEmpty ? '' : '${selected.first['name']}';
+    if (line.text.trim().isEmpty || product == null || selectedName.isEmpty || w == null || h == null || w <= 0 || h <= 0) {
+      showErr(context, 'SKU, line, workers and actual hours are required.');
+      return;
+    }
+    final inferredLine = _lineForSku(selectedName);
+    if (inferredLine != null && _skuRuleKey(line.text) != _skuRuleKey(inferredLine)) {
+      showErr(context, '$selectedName belongs to $inferredLine.');
       return;
     }
     setState(() => busy = true);
@@ -810,6 +869,9 @@ class _DailyLabourDialogState extends State<_DailyLabourDialog> {
         'date': _ymd(date),
         'shift': shift,
         'line': line.text.trim(),
+        'productId': int.tryParse(product!) ?? product,
+        'sku': selectedName,
+        'productName': selectedName,
         'workerCount': w,
         'workers': w,
         'actualHours': h,
@@ -857,6 +919,21 @@ class _DailyLabourDialogState extends State<_DailyLabourDialog> {
           ]),
           const SizedBox(height: 10),
           TextField(controller: line, decoration: const InputDecoration(labelText: 'Production line *', hintText: 'e.g. Line 1')),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            value: products.any((p) => '${p['id']}' == product) ? product : null,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'SKU / Product *'),
+            items: [for (final p in products) DropdownMenuItem(value: '${p['id']}', child: Text('${p['name']}'))],
+            onChanged: (v) {
+              final selected = products.where((p) => '${p['id']}' == v).toList();
+              final inferred = selected.isEmpty ? null : _lineForSku('${selected.first['name']}');
+              setState(() {
+                product = v;
+                if (_isUnassignedLine(line.text) && inferred != null) line.text = inferred;
+              });
+            },
+          ),
           const SizedBox(height: 10),
           Row(children: [Expanded(child: TextField(controller: workers, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Workers *'))), const SizedBox(width: 10), Expanded(child: TextField(controller: hours, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Actual hours *')))]),
           const SizedBox(height: 10),
