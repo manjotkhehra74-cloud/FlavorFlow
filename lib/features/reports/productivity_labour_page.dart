@@ -31,9 +31,36 @@ const _lineSkuRules = <String, Set<String>>{
 
 String _skuRuleKey(String value) => value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
 
+String? _lineForSku(String sku) {
+  final key = _skuRuleKey(sku).replaceAll(' ', '');
+  // Production history sometimes stores the pack size as gm/ml/Ltr instead
+  // of the product-master text. Keep those existing records line-assigned.
+  if (key.contains('soyasauce740') ||
+      key.contains('soyasauce1.3') ||
+      key.contains('whitevinegar610') ||
+      key.contains('brownvinegar610') ||
+      key.contains('vinegar610') ||
+      key.contains('vinegar1.0') ||
+      key.contains('vinegar1ltr') ||
+      key.contains('whitevinegar1ltr')) return 'Line 2';
+  if (key.contains('darksoya220') ||
+      key.contains('whitevinegar180') ||
+      key.contains('vinegar180') ||
+      key.contains('soyasauce4.7') ||
+      key.contains('whitevinegar4.0') ||
+      key.contains('whitevinegar4ltr')) return 'Line 3';
+  return null;
+}
+
+bool _isUnassignedLine(String line) {
+  final key = _skuRuleKey(line);
+  return key.isEmpty || key == 'unassigned' || key == 'unknown' || key == 'n/a';
+}
+
 bool _skuAllowedForLine(String line, String sku) {
   final allowed = _lineSkuRules[_skuRuleKey(line)];
-  return allowed == null || allowed.contains(_skuRuleKey(sku));
+  if (allowed == null) return true;
+  return allowed.contains(_skuRuleKey(sku)) || _skuRuleKey(_lineForSku(sku) ?? '') == _skuRuleKey(line);
 }
 
 String _labourIdentity(Map<String, dynamic> row) =>
@@ -226,7 +253,9 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
       if (item is! List || item.isEmpty) continue;
       final row = item.toList();
       final label = _productivityLabel('${skuIndex < row.length ? row[skuIndex] : ''}');
-      final line = lineIndex >= 0 && lineIndex < row.length ? '${row[lineIndex]}' : '';
+      final reportedLine = lineIndex >= 0 && lineIndex < row.length ? '${row[lineIndex]}' : '';
+      final line = _isUnassignedLine(reportedLine) ? (_lineForSku(label) ?? reportedLine) : reportedLine;
+      if (lineIndex >= 0 && lineIndex < row.length) row[lineIndex] = line;
       final key = '$label\u0000${line.toLowerCase()}';
       final current = grouped[key];
       if (current == null) {
@@ -325,7 +354,8 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
       final product = products[sourcePid];
       final source = '${batch['product_name'] ?? batch['productName'] ?? product?['name'] ?? 'Unknown SKU'}';
       if (_skuFilter != null && _skuFilter!.isNotEmpty && sourcePid != _skuFilter) continue;
-      final line = '${batch['line'] ?? batch['production_line'] ?? ''}'.trim();
+      var line = '${batch['line'] ?? batch['production_line'] ?? ''}'.trim();
+      if (_isUnassignedLine(line)) line = _lineForSku(source) ?? line;
       if (!_skuAllowedForLine(line, source)) continue;
       if (_lineFilter.text.trim().isNotEmpty && line.toLowerCase() != _lineFilter.text.trim().toLowerCase()) continue;
       final lineLabel = line.isEmpty ? 'Unassigned' : line;

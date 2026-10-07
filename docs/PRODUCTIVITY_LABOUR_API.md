@@ -43,7 +43,7 @@ Line/SKU configuration used by Production and the reports:
 - **Line 2:** Soya Sauce 740, Soya Sauce 1.3, White Vinegar 610, Brown Vinegar 610, Vinegar 1.0.
 - **Line 3:** Dark Soya 220, White Vinegar 180, Soya Sauce 4.7, White Vinegar 4.0 for packing and labelling.
 
-Production/report aggregation must validate these mappings when a completed record has a line and SKU; a Line 2 or Line 3 record outside its configured family must be rejected or surfaced as a reconciliation/configuration error, not silently reassigned. Other lines can have their own configured SKU list. The line-level labour row is not duplicated when the product or batch code changes.
+Production/report aggregation must validate these mappings when a completed record has a line and SKU; a Line 2 or Line 3 record outside its configured family must be rejected or surfaced as a reconciliation/configuration error, not silently reassigned. When legacy completed records have no line value, the client may infer Line 2 or Line 3 from the configured SKU family and display the inferred line rather than leaving a permitted SKU as `Unassigned`. Other lines can have their own configured SKU list. The line-level labour row is not duplicated when the product or batch code changes.
 
 ## Productivity summary
 
