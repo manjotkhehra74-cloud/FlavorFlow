@@ -63,8 +63,12 @@ bool _skuAllowedForLine(String line, String sku) {
   return allowed.contains(_skuRuleKey(sku)) || _skuRuleKey(_lineForSku(sku) ?? '') == _skuRuleKey(line);
 }
 
-String _labourSku(Map<String, dynamic> row) =>
-    '${row['productId'] ?? row['product_id'] ?? row['sku'] ?? row['product'] ?? row['productName'] ?? ''}';
+String _labourSku(Map<String, dynamic> row) {
+  for (final value in [row['productId'], row['product_id'], row['sku'], row['product'], row['productName'], row['product_name']]) {
+    if (value != null && '$value'.trim().isNotEmpty) return '$value';
+  }
+  return '';
+}
 
 String _labourIdentity(Map<String, dynamic> row) =>
     '${row['date'] ?? ''}|${_skuRuleKey('${row['line'] ?? ''}')}|${_skuRuleKey('${row['shift'] ?? ''}')}|${_skuRuleKey(_labourSku(row))}';
@@ -577,7 +581,7 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
     setState(() => _exporting = true);
     try {
       final path = kind == 'labour' ? '/labour/daily.xlsx' : '/reports/productivity.xlsx';
-      final bytes = await context.read<AuthController>().api.getBytes('$path?${kind == 'labour' ? _query(includeSku: false) : _query()}');
+      final bytes = await context.read<AuthController>().api.getBytes('$path?${_query()}');
       final date = DateTime.now().toIso8601String().substring(0, 10);
       downloadBytes('flavorflow-${kind == 'labour' ? 'daily-labour' : 'productivity'}-$date.xlsx', bytes,
           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -824,7 +828,7 @@ class _DailyLabourDialogState extends State<_DailyLabourDialog> {
       hours.text = '${e['actualHours'] ?? e['hours'] ?? ''}';
       supervisor.text = '${e['supervisor'] ?? ''}';
       remarks.text = '${e['remarks'] ?? ''}';
-      final rawProduct = e['productId'] ?? e['product_id'] ?? e['sku'] ?? e['product'];
+      final rawProduct = e['productId'] ?? e['product_id'] ?? e['sku'] ?? e['product'] ?? e['productName'] ?? e['product_name'];
       if (rawProduct != null) product = '$rawProduct';
     }
     context.read<AuthController>().api.get('/products').then((json) {
