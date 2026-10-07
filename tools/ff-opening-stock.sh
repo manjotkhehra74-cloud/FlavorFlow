@@ -73,18 +73,18 @@ const targets = [
   ['Label Dark Soya 4.7kg', /label front 4 7/, 4200, 'packing'],
   ['Cap Orange', /cap orange 610/, 1195479, 'packing'],
   ['Cap Purple', /cap purple 740/, 184785, 'packing'],
-  ['Cap Red 1.3kg', /cap red 1 3 1 ltr/, 22518, 'packing'],
-  ['Cap Red Plastic 4gm', /cap red 180 220/, 135615, 'packing'],
+  ['Cap Red 1.3kg', /red cap 1 3/, 22518, 'packing'],
+  ['Cap Red Plastic 4gm', /red cap 180 220/, 135615, 'packing'],
   ['Plug No 9', /^plug 180$/, 422444, 'packing'],
   ['CB 180ml / 220g', /carton cb 180 220/, 5151, 'packing'],
   ['CB 610ml / 740gm', /carton cb 610 740/, 7812, 'packing'],
-  ['CB 1.3kg', /carton cb 1 3 1 3/, 695, 'packing'],
+  ['CB 1.3kg', /carton cb 1 3/, 695, 'packing'],
   ['Crown Cork', /crown cork 220/, 113050, 'packing'],
   // Both Product Master rows draw from one physical shared pool. The apply
   // path writes the same final shared balance to both rows; it never splits
   // the user's 8,016 count between 4 Ltr and 4.7kg.
   ['Jerry Can 4Ltr (shared pool)', /jerry can 4 ltr/, 8016, 'packing', 'jerry-shared'],
-  ['Jerry Can 4.7kg (shared pool)', /jerry can 4 7 kg/, 8016, 'packing', 'jerry-shared'],
+  ['Jerry Can 4.7kg (shared pool)', /jerry can 4 7/, 8016, 'packing', 'jerry-shared'],
 
   // Raw materials. These quantities were confirmed as kg by the user.
   ['Soyabean', /soya bean|soyabean/, 446.30, 'raw'],
