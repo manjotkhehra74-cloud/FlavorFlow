@@ -155,6 +155,79 @@ function reconcile(db, opts) {
   if (apply) runTx(db, work); else work();
   return { changed, unallocated, groups: demand.size };
 }
+/**
+ * Backdated production repair.
+ *
+ * A completed production batch must remain visible in batch-wise stock. Older
+ * completion paths could leave its produced quantity in inventory while a
+ * stale used_cb counter made the batch look fully consumed; the report then
+ * put the quantity in Unassigned. Restore only the unexplained used quantity:
+ * dispatch/invoice demand for the product+code is never undone, and the
+ * newest planned-date row is repaired first (the usual backdated-entry case).
+ * Opening stock remains Unassigned when no completed batch has unexplained
+ * consumption to repair.
+ */
+function repairCompletionDrift(db, opts) {
+  const apply = !!(opts && opts.apply);
+  const B = cols(db, 'batches'), I = cols(db, 'inventory');
+  // Only repair the known failure mode: a batch completed today with an
+  // earlier planned/production date. Never reinterpret ordinary opening-stock
+  // drift or same-day manual adjustments as a production batch.
+  if (!B.includes('used_cb') || !B.includes('produced_cb') || !B.includes('product_id') || !B.includes('planned_date') || !B.includes('completed_at') || !I.includes('product_id') || !I.includes('qty_cb')) return [];
+  const hasTrays = B.includes('used_trays') && B.includes('produced_trays') && I.includes('qty_trays');
+  const invRows = db.prepare('SELECT product_id pid, COALESCE(qty_cb, 0) stock_cb' + (hasTrays ? ', COALESCE(qty_trays, 0) stock_tr' : ', 0 stock_tr') + ' FROM inventory').all();
+  const completed = db.prepare(
+    "SELECT id, product_id pid, COALESCE(code, '') code, COALESCE(produced_cb, 0) pcb, COALESCE(used_cb, 0) ucb, " +
+    (hasTrays ? 'COALESCE(produced_trays, 0) ptr, COALESCE(used_trays, 0) utr, ' : '0 ptr, 0 utr, ') +
+    "COALESCE(planned_date, '') pd, COALESCE(completed_at, '') completed_at " +
+    "FROM batches WHERE UPPER(COALESCE(status, '')) = 'COMPLETED' ORDER BY product_id, COALESCE(planned_date, '') DESC, id DESC"
+  ).all();
+  const demand = demandMap(db);
+  const groups = new Map();
+  for (const b of completed) {
+    const plannedDay = String(b.pd || '').slice(0, 10);
+    const completedDay = String(b.completed_at || '').slice(0, 10);
+    if (!plannedDay || !completedDay || plannedDay === completedDay) continue;
+    const key = n(b.pid) + '|' + String(b.code || '').trim().toUpperCase();
+    const g = groups.get(key) || { pid: n(b.pid), rows: [], demandCb: 0, demandTr: 0 };
+    g.rows.push(b);
+    const d = demand.get(key);
+    g.demandCb = d ? n(d.cb) : 0;
+    g.demandTr = d ? n(d.tr) : 0;
+    groups.set(key, g);
+  }
+  const gapByProduct = new Map();
+  for (const r of invRows) {
+    const productRows = completed.filter((b) => n(b.pid) === n(r.pid));
+    const batchCb = productRows.reduce((s, b) => s + Math.max(0, n(b.pcb) - n(b.ucb)), 0);
+    const batchTr = productRows.reduce((s, b) => s + Math.max(0, n(b.ptr) - n(b.utr)), 0);
+    gapByProduct.set(n(r.pid), { cb: Math.max(0, n(r.stock_cb) - batchCb), tr: Math.max(0, n(r.stock_tr) - batchTr) });
+  }
+  const changes = [];
+  for (const g of groups.values()) {
+    let excessCb = Math.max(0, g.rows.reduce((s, b) => s + n(b.ucb), 0) - g.demandCb);
+    let excessTr = Math.max(0, g.rows.reduce((s, b) => s + n(b.utr), 0) - g.demandTr);
+    const gap = gapByProduct.get(g.pid);
+    if (!gap || (gap.cb <= 0 && gap.tr <= 0) || (excessCb <= 0 && excessTr <= 0)) continue;
+    // rows are already newest planned date first; restore the backdated row
+    // before older rows when a code is reused on multiple production dates.
+    for (const b of g.rows) {
+      if (gap.cb <= 0 && gap.tr <= 0) break;
+      const restoreCb = Math.min(gap.cb, excessCb, n(b.ucb));
+      const restoreTr = Math.min(gap.tr, excessTr, n(b.utr));
+      if (!restoreCb && !restoreTr) continue;
+      const nextCb = n(b.ucb) - restoreCb, nextTr = n(b.utr) - restoreTr;
+      if (apply) {
+        db.prepare('UPDATE batches SET used_cb = ?' + (hasTrays ? ', used_trays = ?' : '') + ' WHERE id = ?')
+          .run(...(hasTrays ? [nextCb, nextTr, b.id] : [nextCb, b.id]));
+      }
+      changes.push({ id: b.id, pid: b.pid, code: b.code, plannedDate: b.pd, restoredCb: restoreCb, restoredTrays: restoreTr });
+      gap.cb -= restoreCb; gap.tr -= restoreTr; excessCb -= restoreCb; excessTr -= restoreTr;
+    }
+  }
+  return changes;
+}
+
 function productList(db) {
   const p = cols(db, 'products'), inv = cols(db, 'inventory');
   if (!p.length) return [];
@@ -183,6 +256,10 @@ function batchesLeft(db) {
 const UNASSIGNED = 'Unassigned (opening stock / adjustments)';
 /** Batch-wise Stock report rows — every product TOTAL equals Stock on Hand (products with batches). */
 function batchStockRows(db) {
+  // Keep the report self-healing for legacy/backdated completion rows. The
+  // repair is conservative and only restores unexplained used_cb/used_trays;
+  // dispatch/invoice demand and legitimate opening stock are untouched.
+  try { runTx(db, () => repairCompletionDrift(db, { apply: true })); } catch (_) {}
   const rows = [], by = batchesLeft(db);
   let totCb = 0, totTr = 0;
   for (const p of productList(db)) {
@@ -213,7 +290,7 @@ function stockDiff(db) {
   }
   return out;
 }
-module.exports = { reconcile, demandMap, batchStockRows, stockDiff, deleteBlock, editBlock, runTx, UNASSIGNED };
+module.exports = { reconcile, repairCompletionDrift, demandMap, batchStockRows, stockDiff, deleteBlock, editBlock, runTx, UNASSIGNED };
 JSFILE
 if ! node --check "$NEWMOD"; then echo "FATAL: module syntax fail — kuch nahi badleya"; rm -f "$NEWMOD"; exit 1; fi
 MOD_CHANGED=0
@@ -238,7 +315,7 @@ if (!DatabaseSync) { console.log('SELFTEST: koi sqlite wrapper nahi — DB check
 const db = new DatabaseSync(':memory:');
 db.exec(`CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT, bottles_per_tray INTEGER DEFAULT 0, active INTEGER DEFAULT 1);
 CREATE TABLE inventory (product_id INTEGER PRIMARY KEY, qty_cb INTEGER DEFAULT 0, qty_trays INTEGER DEFAULT 0, updated_at TEXT);
-CREATE TABLE batches (id INTEGER PRIMARY KEY, code TEXT, product_id INTEGER, planned_cb INTEGER, produced_cb INTEGER DEFAULT 0, produced_trays INTEGER DEFAULT 0, status TEXT, planned_date TEXT, used_trays INTEGER DEFAULT 0, used_cb INTEGER DEFAULT 0);
+CREATE TABLE batches (id INTEGER PRIMARY KEY, code TEXT, product_id INTEGER, planned_cb INTEGER, produced_cb INTEGER DEFAULT 0, produced_trays INTEGER DEFAULT 0, status TEXT, planned_date TEXT, completed_at TEXT, used_trays INTEGER DEFAULT 0, used_cb INTEGER DEFAULT 0);
 CREATE TABLE dispatches (id INTEGER PRIMARY KEY, code TEXT, status TEXT);
 CREATE TABLE dispatch_items (id INTEGER PRIMARY KEY, dispatch_id INTEGER, product_id INTEGER, cartons INTEGER, trays INTEGER, batch_code TEXT);
 CREATE TABLE invoices (id INTEGER PRIMARY KEY, number TEXT, status TEXT, stock_deducted INTEGER DEFAULT 0);
@@ -288,6 +365,14 @@ const s6 = sect('MULTI');
 ok(s6 && s6.length === 2 && s6[0][2] === 30 && s6[1][2] === 30, 'FIFO product: one batch row 30, TOTAL 30');
 const g = rows[rows.length - 1];
 ok(g[0] === 'GRAND TOTAL' && g[2] === 217 + 40 + 30 + 16 && g[3] === 5, 'GRAND TOTAL = Σ Stock on Hand of shown products (' + JSON.stringify(g) + ')');
+// Backdated completion drift: the completed batch is dated yesterday but was
+// completed today. Its stale used counter must be repaired to own the stock;
+// this is deliberately separate from the ordinary opening-stock drift test.
+db.exec("INSERT INTO products VALUES (8,'Backdated Production',0,1); INSERT INTO inventory VALUES (8,100,0,''); INSERT INTO batches (id,code,product_id,planned_cb,produced_cb,produced_trays,status,planned_date,completed_at,used_cb,used_trays) VALUES (80,'BACKDATE',8,100,100,0,'COMPLETED','2026-09-28','2026-09-29',100,0);");
+const backRows = R.batchStockRows(db).rows;
+const backStart = backRows.findIndex((r) => r[0] === '▶ BACKDATED PRODUCTION');
+const backTotal = backRows.findIndex((r, k) => k > backStart && r[0] === 'TOTAL');
+ok(backStart !== -1 && backRows[backStart + 1][1] === 'BACKDATE' && backRows[backStart + 1][2] === 100 && backRows[backStart + 1][1] !== R.UNASSIGNED && backRows[backTotal][2] === 100 && db.prepare('SELECT used_cb FROM batches WHERE id = 80').get().used_cb === 0, 'backdated completion: batch owns 100 CB and stale used counter is repaired');
 db.prepare('UPDATE inventory SET qty_cb = 400 WHERE product_id = 1').run();
 const rows2 = R.batchStockRows(db).rows; const i2 = rows2.findIndex((r) => r[0] === '▶ SOYA SAUCE 740GM');
 ok(rows2[i2 + 2][1] === R.UNASSIGNED && rows2[i2 + 2][2] === 183 && rows2[i2 + 3][2] === 400, 'drift visible: Unassigned 183, TOTAL 400 = Stock on Hand');
@@ -300,7 +385,7 @@ db.prepare('UPDATE inventory SET qty_cb = 400 WHERE product_id = 1').run();
 let threw = false;
 try { R.runTx(db, () => { db.prepare('UPDATE batches SET used_cb = 999 WHERE id = 189').run(); throw new Error('boom'); }); } catch (_) { threw = true; }
 ok(threw && used(189)[0] === 21, 'rollback: failed tx leaves used_cb untouched');
-console.log('SELFTEST ' + checks + ' checks ✓ (user scenario 6I0102AK 0→21, FIFO, VOID/CANCELLED excluded, trays, guards, report totals = Stock on Hand, rollback)');
+console.log('SELFTEST ' + checks + ' checks ✓ (user scenario 6I0102AK 0→21, backdated completion owns stock, FIFO, VOID/CANCELLED excluded, trays, guards, report totals = Stock on Hand, rollback)');
 JS
 RC=$?
 if [ $RC -ne 0 ]; then echo "FATAL: self-test fail (rc=$RC) — kuch patch NAHI kita, module restored"; restore_module; exit 1; fi
@@ -427,6 +512,21 @@ for (const file of dbs) {
       for (const u of res.unallocated) { unalloc++; console.log('RECON ' + label + ': NOTE ' + pn(u.pid) + ' · ' + u.code + ': ' + u.cb + ' CB' + (u.tr ? ' / ' + u.tr + ' trays' : '') + ' dispatched but ' + u.reason + ' — batch register cannot place it (stock on hand unaffected)'); }
     } else {
       for (const u of dry.unallocated) { unalloc++; if (MODE !== 'saas') console.log('RECON ' + label + ': NOTE ' + pn(u.pid) + ' · ' + u.code + ': ' + u.cb + ' CB' + (u.tr ? ' / ' + u.tr + ' trays' : '') + ' dispatched but ' + u.reason); }
+    }
+    // Separate, conservative repair for the reported backdated-production
+    // failure. It only touches COMPLETED rows whose completed_at day differs
+    // from planned_date, and only when the inventory gap is explainable by a
+    // stale used counter. Back up before applying just like dispatch repair.
+    const driftDry = R.repairCompletionDrift(db, { apply: false });
+    if (driftDry.length) {
+      const driftBak = BK + '/erp.db.' + label + '.backdated-drift.bak-batchrecon-' + TS;
+      try {
+        db.exec("VACUUM INTO '" + driftBak.replace(/'/g, "''") + "'");
+        const drift = R.runTx(db, () => R.repairCompletionDrift(db, { apply: true }));
+        for (const c of drift) console.log('RECON ' + label + ': ' + pn(c.pid) + ' · ' + c.code + ' / ' + c.plannedDate + ': stale used counter restored ' + c.restoredCb + ' CB' + (c.restoredTrays ? ' / ' + c.restoredTrays + ' trays' : '') + ' to the completed batch');
+        if (drift.length) { fixed += drift.length; if (!dry.changed.length) dbsFixed++; }
+        console.log('RECON ' + label + ': backdated completion drift repaired (' + drift.length + ' batch(es)); DB backup -> ' + driftBak);
+      } catch (e) { console.log('RECON ' + label + ': backdated drift backup/apply FAIL (' + e.message + ') — skipped for safety'); }
     }
     const diffs = R.stockDiff(db);
     if (MODE !== 'saas' || dry.changed.length) {

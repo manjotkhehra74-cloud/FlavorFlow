@@ -23,6 +23,7 @@ import 'features/production/production_detail_page.dart';
 import 'features/production/production_page.dart';
 import 'features/products/products_page.dart';
 import 'features/reports/reports_page.dart';
+import 'features/reports/productivity_labour_page.dart';
 import 'features/settings/settings_page.dart';
 import 'features/stock/stock_ledger_page.dart';
 import 'features/users/users_page.dart';
@@ -43,7 +44,7 @@ String? permForPath(String path) {
   if (path.startsWith('/production')) return 'production.view';
   if (path.startsWith('/dispatch')) return 'dispatch.view';
   if (path.startsWith('/billing')) return 'billing.view';
-  if (path.startsWith('/reports')) return 'reports.view';
+  if (path.startsWith('/reports') || path.startsWith('/productivity')) return 'reports.view';
   if (path.startsWith('/users')) return 'users.view';
   if (path.startsWith('/audit')) return 'audit.view';
   return null; // dashboard & notifications are universal
@@ -146,6 +147,7 @@ GoRouter buildRouter(AuthController auth) {
             ],
           ),
           GoRoute(path: '/reports', builder: (c, s) => const ReportsPage()),
+          GoRoute(path: '/productivity', builder: (c, s) => const ProductivityLabourPage()),
           GoRoute(path: '/users', builder: (c, s) => const UsersPage()),
           GoRoute(path: '/audit', builder: (c, s) => const AuditPage()),
           GoRoute(path: '/notifications', builder: (c, s) => const NotificationsPage()),

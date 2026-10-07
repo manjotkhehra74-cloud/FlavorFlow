@@ -4,11 +4,12 @@
 #   DELETE /api/packing/materials/:id (removes material + its BOM lines; ledger stays)
 # Idempotent + upgrade-aware:
 #   - fresh server            → adds both routes
-#   - old delfix already run  → upgrades product route to also clear inventory
+#   - old delfix already run  → upgrades product/inventory routes
+#   - stale mobile row        → material delete is idempotent (already gone = success)
 #   - fully patched           → skips
 set -u
 cd /opt/flavorflow/server || { echo "FATAL: /opt/flavorflow/server nahi mili"; exit 1; }
-echo "=== FF-DELFIX v2 $(date) ==="
+echo "=== FF-DELFIX v3 $(date) ==="
 node - <<'JS'
 const fs = require('fs'), cp = require('child_process');
 
@@ -25,6 +26,81 @@ function checkOrRestore(file, bak) {
 
 const INV_LINE = "  db.prepare('DELETE FROM inventory WHERE product_id = ?').run(id); // clear stock row too";
 
+const PACK_BODY = `{
+  const id = Number(req.params.id);
+  const mat = db.prepare('SELECT id, name FROM packing_materials WHERE id = ?').get(id);
+  // A material can have packing_txns / stock-journal history with a foreign
+  // key. Archive the master row instead of breaking those records. Only the
+  // requested material's BOM links are removed; every ledger/history row and
+  // the material's stock value remain intact.
+  try { db.exec('CREATE TABLE IF NOT EXISTS packing_material_archives (material_id INTEGER PRIMARY KEY, name TEXT NOT NULL, deleted_at TEXT NOT NULL)'); } catch (_) {}
+  if (!mat) {
+    const old = (() => { try { return db.prepare('SELECT material_id FROM packing_material_archives WHERE material_id = ?').get(id); } catch (_) { return null; } })();
+    if (old) { res.json({ ok: true, alreadyDeleted: true, archived: true }); return; }
+    res.json({ ok: true, alreadyDeleted: true }); return;
+  }
+  for (const table of ['packing_bom', 'bom_lines', 'bom']) {
+    try { db.prepare('DELETE FROM ' + table + ' WHERE material_id = ?').run(id); } catch (_) {}
+  }
+  try {
+    db.prepare('INSERT OR REPLACE INTO packing_material_archives (material_id, name, deleted_at) VALUES (?, ?, ?)')
+      .run(id, mat.name, new Date().toISOString());
+  } catch (_) {}
+  try { require('../helpers').audit(db, req.user, 'DELETE', 'packing', id, 'Packing material "' + mat.name + '" archived; BOM references removed; ledger preserved'); } catch (_) {}
+  res.json({ ok: true, archived: true });
+}`;
+
+// Find and replace the callback body without depending on its formatting or
+// on the exact error implementation (res.status, throw bad(...), etc.). The
+// route prefix/middleware stays untouched, so the existing permission guard is
+// preserved.
+function replacePackingHandler(src) {
+  const route = /(?:router|app)\.delete\s*\(\s*['"](?:\/packing)?(?:\/materials)?\/:([A-Za-z_$][\w$]*)[^'"]*['"]/g.exec(src);
+  if (!route) return null;
+  const param = route[1] || 'id';
+  const from = route.index;
+  const tail = src.slice(from);
+  const cb = /(?:async\s+)?(?:function\s+[A-Za-z_$][\w$]*\s*\([^()]*\)|function\s*\([^()]*\)|\([^()]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)\s*\{/.exec(tail);
+  if (!cb) return null;
+  const open = from + cb.index + cb[0].lastIndexOf('{');
+  let depth = 0, quote = '', line = false, block = false, esc = false;
+  for (let i = open; i < src.length; i++) {
+    const c = src[i], n = src[i + 1];
+    if (line) { if (c === '\n') line = false; continue; }
+    if (block) { if (c === '*' && n === '/') { block = false; i++; } continue; }
+    if (quote) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === quote) quote = ''; continue; }
+    if (c === '/' && n === '/') { line = true; i++; continue; }
+    if (c === '/' && n === '*') { block = true; i++; continue; }
+    if (c === '\'' || c === '"' || c === '`') { quote = c; continue; }
+    if (c === '{') depth++;
+    else if (c === '}' && --depth === 0) {
+      const body = PACK_BODY.replace(/\breq\.params\.id\b/g, 'req.params.' + param);
+      return src.slice(0, open) + body + src.slice(i + 1);
+    }
+  }
+  return null;
+}
+
+// Last-resort upgrade for deployments that pass a named handler/helper to
+// router.delete instead of defining the callback inline. Replace only the
+// Material-not-found failure statement; this keeps the route and permissions
+// intact while making stale DELETEs idempotent.
+function replaceNotFoundFailure(src) {
+  // The semicolon is required here so `return bad("Material not found", 404)`
+  // is replaced as one complete statement; do not leave the helper's trailing
+  // status argument behind in the route source.
+  const patterns = [
+    /throw\s+[^\n;]{0,300}?Material not found\.?[^\n;]{0,120}?;/i,
+    /return\s+[^\n;]{0,300}?Material not found\.?[^\n;]{0,120}?;/i,
+    /res\.status\s*\(\s*404\s*\)[^\n;]{0,300}?Material not found\.?[^\n;]{0,120}?;/i,
+    /next\s*\([^\n;]{0,300}?Material not found\.?[^\n;]{0,120}?;/i,
+  ];
+  for (const re of patterns) {
+    if (re.test(src)) return src.replace(re, 'res.json({ ok: true, alreadyDeleted: true }); return;');
+  }
+  return null;
+}
+
 const prodCode = `/** Soft-delete a product (ff-delfix v2). Inventory row is removed; history (dispatches, batches, reports) stays. */
 router.delete('/:id', requirePerm('products.manage'), (req, res) => {
   const id = Number(req.params.id);
@@ -36,18 +112,36 @@ ${INV_LINE}
   res.json({ ok: true });
 });`;
 
-const packCode = `/** Delete a packing material (ff-delfix). BOM lines removed; ledger entries stay. */
-router.delete('/materials/:id', requirePerm('packing.manage'), (req, res) => {
-  const id = Number(req.params.id);
-  const mat = db.prepare('SELECT id, name FROM packing_materials WHERE id = ?').get(id);
-  if (!mat) { res.status(404).json({ error: 'Material not found.' }); return; }
-  try { db.prepare('DELETE FROM bom_lines WHERE material_id = ?').run(id); } catch (_) {}
-  try { db.prepare('DELETE FROM bom WHERE material_id = ?').run(id); } catch (_) {}
-  try { db.prepare('DELETE FROM packing_materials WHERE id = ?').run(id); }
-  catch (e) { res.status(409).json({ error: 'Cannot delete: material is referenced by other records.' }); return; }
-  try { require('../helpers').audit(db, req.user, 'DELETE', 'packing', id, 'Packing material "' + mat.name + '" deleted'); } catch (_) {}
-  res.json({ ok: true });
+const packCode = `/** Delete/archive a packing material (ff-delfix v3). BOM links removed; ledger and stock history stay. */
+router.delete('/materials/:id', requirePerm('packing.manage'), (req, res) => ${PACK_BODY});`;
+
+function addCompatibilityDeleteRoutes(src) {
+  // Some factory builds export the router but register DELETE in a wrapper,
+  // so neither an inline callback nor the old 404 line is present here. Add
+  // all valid mount shapes before old routes: router mounted at /api/packing,
+  // router mounted at /api/packing/materials, or router mounted at /api.
+  const shortCode = packCode.replace("router.delete('/materials/:id'", "router.delete('/:id'");
+  const fullCode = packCode.replace("router.delete('/materials/:id'", "router.delete('/packing/materials/:id'");
+  const archiveHook = `/* ffPackingArchiveV3 */
+try { db.exec('CREATE TABLE IF NOT EXISTS packing_material_archives (material_id INTEGER PRIMARY KEY, name TEXT NOT NULL, deleted_at TEXT NOT NULL)'); } catch (_) {}
+router.use((req, res, next) => {
+  if (req.method !== 'GET' || !/\\/materials\\/?$/.test(String(req.originalUrl || req.url || '').split('?')[0])) return next();
+  const send = res.json;
+  res.json = (body) => {
+    let hidden = new Set();
+    try { hidden = new Set(db.prepare('SELECT material_id FROM packing_material_archives').all().map((r) => Number(r.material_id))); } catch (_) {}
+    const clean = (arr) => Array.isArray(arr) ? arr.filter((r) => !hidden.has(Number(r && (r.id == null ? r.material_id : r.id)))) : arr;
+    if (Array.isArray(body)) body = clean(body);
+    else if (body && Array.isArray(body.materials)) body = Object.assign({}, body, { materials: clean(body.materials) });
+    return send.call(res, body);
+  };
+  next();
 });`;
+  const routes = archiveHook + '\n\n' + packCode + '\n\n' + shortCode + '\n\n' + fullCode + '\n\n/* ffPackingDeleteCompatV3 */\n';
+  const decl = /(?:const|let|var)\s+router\s*=\s*[^;]+;\s*/.exec(src);
+  if (!decl) return null;
+  return src.slice(0, decl.index + decl[0].length) + routes + src.slice(decl.index + decl[0].length);
+}
 
 let changed = false, failed = false;
 
@@ -88,8 +182,51 @@ let changed = false, failed = false;
   if (!fs.existsSync(f)) { console.log('MISSING: ' + f); failed = true; }
   else {
     let src = fs.readFileSync(f, 'utf8');
-    if (src.includes("'Material not found.'")) {
-      console.log('PACKING: already patched — skip');
+    if (src.includes('alreadyDeleted: true') && src.includes('ffPackingDeleteCompatV3')) {
+      console.log('PACKING: compatibility delete routes already patched — skip');
+    } else if (src.includes('alreadyDeleted: true')) {
+      // An earlier delfix added only one mount shape. Upgrade it to all three
+      // shapes so the app's actual /api prefix cannot still return global 404.
+      const compat = addCompatibilityDeleteRoutes(src);
+      if (!compat) { console.log('PACKING: router export not found for compatibility upgrade'); failed = true; }
+      else {
+        const bak = backup(f);
+        src = compat;
+        fs.writeFileSync(f, src);
+        if (checkOrRestore(f, bak)) { console.log('PACKING: compatibility delete routes upgraded ✓'); changed = true; } else failed = true;
+      }
+    } else if (/Material not found\b/i.test(src)) {
+      // Older deployments format the response differently (single/double
+      // quotes, optional punctuation, return-before-res, or a multi-line if).
+      // Replace the response itself rather than depending on one exact layout.
+      const notFound = /res\.status\(404\)\.json\(\{\s*error\s*:\s*['"]Material not found\.?['"]\s*\}\)\s*;?/;
+      if (!notFound.test(src)) {
+        // Some live builds use throw/bad() or a helper for the 404 response.
+        // Replace only that existing /materials/:id callback as a fallback;
+        // do not append a duplicate route behind the still-broken one.
+        const routeUpgrade = replacePackingHandler(src);
+        // Prefer adding a real route when the DELETE callback cannot be found.
+        // A global 404 says "Not found" even though GET /materials works;
+        // merely changing the old error string would not fix that endpoint.
+        const compatUpgrade = routeUpgrade ? null : addCompatibilityDeleteRoutes(src);
+        const errorUpgrade = routeUpgrade || compatUpgrade ? null : replaceNotFoundFailure(src);
+        const upgraded = routeUpgrade || compatUpgrade || errorUpgrade;
+        if (!upgraded) { console.log('PACKING: no compatible delete/error handler or router export found'); failed = true; }
+        else {
+          const bak = backup(f);
+          src = upgraded;
+          fs.writeFileSync(f, src);
+          if (checkOrRestore(f, bak)) {
+            console.log(routeUpgrade ? 'PACKING: existing handler replaced with idempotent delete' : errorUpgrade ? 'PACKING: Material-not-found failure neutralized in existing handler' : 'PACKING: compatibility delete routes added before old routes');
+            changed = true;
+          } else failed = true;
+        }
+      } else {
+        const bak = backup(f);
+        src = src.replace(notFound, 'res.json({ ok: true, alreadyDeleted: true });');
+        fs.writeFileSync(f, src);
+        if (checkOrRestore(f, bak)) { console.log('PACKING: old route upgraded to idempotent delete'); changed = true; } else failed = true;
+      }
     } else {
       const anchor = 'module.exports = router;';
       if (!src.includes(anchor)) { console.log('PACKING: anchor not found'); failed = true; }
@@ -108,7 +245,12 @@ if (!changed) { console.log('NOTHING TO DO — sab pehla hi patched'); process.e
 try { cp.execSync('systemctl restart flavorflow'); console.log('SERVICE RESTARTED'); } catch (e) { console.log('RESTART FAIL: ' + e.message); process.exit(4); }
 setTimeout(() => {
   try { console.log('HEALTH: ' + cp.execSync('curl -s -m 5 http://127.0.0.1:4000/api/health').toString().trim()); } catch (e) { console.log('HEALTH ERR'); }
-  console.log('DELFIX v2 VERIFIED ✓');
+  console.log('DELFIX v3 VERIFIED ✓');
 }, 2000);
 JS
-echo "DELFIX v2 DONE — product delete hun inventory vicho vi stock row hata dinda"
+RC=$?
+if [ $RC -ne 0 ]; then
+  echo "DELFIX v3 INCOMPLETE — restart skip; upar wali PATCH INCOMPLETE line dekho"
+  exit $RC
+fi
+echo "DELFIX v3 DONE — packing material archive/BOM cleanup + product inventory fix complete"

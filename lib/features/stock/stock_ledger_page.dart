@@ -122,6 +122,205 @@ mixin _PeriodMixin<T extends StatefulWidget> on State<T> {
       ];
 }
 
+/// Client-side compatibility reader for servers that predate the stock
+/// journal routes. The billing ledger already exposes the same derived
+/// purchase / production / dispatch / sale movements per item, so the Stock
+/// Ledger stays useful until the server journal migration is installed.
+class _DerivedStockLedger {
+  final ApiClient api;
+  final DateTime from;
+  final DateTime to;
+  Future<List<Map<String, dynamic>>>? _itemsMemo;
+  _DerivedStockLedger(this.api, this.from, this.to);
+
+  String get _from => ymd(from);
+  String get _to => ymd(to);
+
+  Future<dynamic> _tryGet(String path) async {
+    try {
+      return await api.get(path);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _loadItems() async {
+    final rawInventory = await _tryGet('/inventory');
+    final rawMaterials = await _tryGet('/packing/materials');
+    final specs = <Map<String, dynamic>>[];
+    if (rawInventory is Map && rawInventory['items'] is List) {
+      for (final item in (rawInventory['items'] as List).whereType<Map>()) {
+        if ((item['active'] as num? ?? 1) == 0) continue;
+        specs.add({
+          'type': 'product',
+          'id': item['product_id'] ?? item['id'],
+          'item': item['name'] ?? 'Product',
+          'code': item['item_code'] ?? item['code'] ?? '',
+          'unit': item['unit'] ?? '',
+          'category': item['category'] ?? '',
+          'stock': item['qty_cb'] ?? item['stock'] ?? 0,
+        });
+      }
+    }
+    if (rawMaterials is Map && rawMaterials['materials'] is List) {
+      for (final item in (rawMaterials['materials'] as List).whereType<Map>()) {
+        if ((item['active'] as num? ?? 1) == 0) continue;
+        specs.add({
+          'type': 'material',
+          'id': item['id'],
+          'item': item['name'] ?? 'Material',
+          'code': item['item_code'] ?? item['code'] ?? '',
+          'unit': item['unit'] ?? '',
+          'category': item['category'] ?? 'Material',
+          'stock': item['stock'] ?? 0,
+        });
+      }
+    }
+    return [for (final item in specs) item.cast<String, dynamic>()];
+  }
+
+  Future<List<Map<String, dynamic>>> _items() => _itemsMemo ??= _loadItems();
+
+  String _date(Map<String, dynamic> row) {
+    final raw = row['date'] ?? row['txn_date'] ?? row['created_at'] ?? '';
+    final value = '$raw';
+    return value.length >= 10 ? value.substring(0, 10) : value;
+  }
+
+  num _number(Object? value) {
+    if (value is num) return value;
+    return num.tryParse('${value ?? 0}') ?? 0;
+  }
+
+  bool _inRange(String date) => date.isNotEmpty && date.compareTo(_from) >= 0 && date.compareTo(_to) <= 0;
+
+  Future<List<Map<String, dynamic>>> _rows() async {
+    final specs = await _items();
+    final loaded = await Future.wait(specs.map((spec) async {
+      final type = spec['type'];
+      final id = spec['id'];
+      if (id == null) return <Map<String, dynamic>>[];
+      final raw = await _tryGet('/billing/ledger?type=$type&id=$id');
+      if (raw is! Map || raw['rows'] is! List) return <Map<String, dynamic>>[];
+      final rows = <Map<String, dynamic>>[];
+      for (final source in (raw['rows'] as List).whereType<Map>()) {
+        final row = source.cast<String, dynamic>();
+        final date = _date(row);
+        if (!_inRange(date)) continue;
+        final signed = _number(row['signed']) != 0
+            ? _number(row['signed'])
+            : (row['dir'] == 'out' ? -_number(row['qty']) : _number(row['qty']));
+        final dir = signed < 0 ? 'out' : 'in';
+        rows.add({
+          'id': '${spec['type']}:${spec['id']}:${rows.length}',
+          'type': spec['type'],
+          'itemId': spec['id'],
+          'item': spec['item'],
+          'code': spec['code'],
+          'unit': row['unit'] ?? spec['unit'],
+          'category': spec['category'],
+          'date': date,
+          'at': row['at'] ?? row['created_at'] ?? date,
+          'kind': row['kind'] ?? 'OTHER',
+          'dir': dir,
+          'qty': _number(row['qty']).abs() == 0 ? signed.abs() : _number(row['qty']).abs(),
+          'signed': signed,
+          'balance': row['balance'] ?? 0,
+          'ref': row['ref'] ?? row['reference'] ?? '',
+          'doc2': row['doc2'] ?? '',
+          'party': row['party'] ?? '',
+          'note': row['note'] ?? '',
+          'by': row['by'] ?? row['created_by_name'] ?? '',
+          'link': row['link'] ?? '',
+        });
+      }
+      return rows;
+    }));
+    final rows = [for (final group in loaded) ...group];
+    rows.sort((a, b) {
+      final date = '${b['date']}'.compareTo('${a['date']}');
+      return date != 0 ? date : '${b['at']}'.compareTo('${a['at']}');
+    });
+    return rows;
+  }
+
+  Future<Map<String, dynamic>> movements({String dir = '', String kind = '', String type = '', String query = ''}) async {
+    final all = await _rows();
+    final q = query.trim().toLowerCase();
+    final rows = all.where((row) {
+      if (dir.isNotEmpty && row['dir'] != dir) return false;
+      if (kind.isNotEmpty && row['kind'] != kind) return false;
+      if (type.isNotEmpty && row['type'] != type) return false;
+      if (q.isEmpty) return true;
+      return '${row['item']} ${row['code']} ${row['ref']} ${row['doc2']} ${row['party']} ${row['note']} ${row['by']}'.toLowerCase().contains(q);
+    }).toList();
+    num totalIn = 0, totalOut = 0;
+    final kinds = <String, int>{};
+    for (final row in rows) {
+      final qty = _number(row['qty']);
+      if (row['dir'] == 'in') totalIn += qty; else totalOut += qty;
+      final kind = '${row['kind']}';
+      kinds[kind] = (kinds[kind] ?? 0) + 1;
+    }
+    return {'from': _from, 'to': _to, 'count': rows.length, 'totalIn': totalIn, 'totalOut': totalOut, 'kinds': kinds, 'rows': rows};
+  }
+
+  Future<Map<String, dynamic>> balances(String type, bool movedOnly, String query) async {
+    final specs = await _items();
+    final allRows = await _rows();
+    final q = query.trim().toLowerCase();
+    final result = <Map<String, dynamic>>[];
+    num totalIn = 0, totalOut = 0, moves = 0;
+    for (final spec in specs) {
+      if (type.isNotEmpty && spec['type'] != type) continue;
+      if (q.isNotEmpty && !'${spec['item']} ${spec['code']} ${spec['category']}'.toLowerCase().contains(q)) continue;
+      final rows = allRows.where((row) => row['type'] == spec['type'] && row['itemId'] == spec['id']).toList();
+      if (movedOnly && rows.isEmpty) continue;
+      num qin = 0, qout = 0;
+      for (final row in rows) {
+        final qty = _number(row['qty']);
+        if (row['dir'] == 'in') qin += qty; else qout += qty;
+      }
+      final stock = _number(spec['stock']);
+      final signed = qin - qout;
+      // Legacy rows have a running balance. If there are no derived rows, the
+      // inventory endpoint still gives a truthful live stock snapshot.
+      final closing = rows.isEmpty ? stock : _number(rows.first['balance']);
+      final opening = closing - signed;
+      totalIn += qin;
+      totalOut += qout;
+      moves += rows.length;
+      result.add({
+        'type': spec['type'], 'itemId': spec['id'], 'item': spec['item'], 'code': spec['code'],
+        'unit': rows.isEmpty ? spec['unit'] : rows.first['unit'], 'category': spec['category'],
+        'opening': opening, 'qin': qin, 'qout': qout, 'closing': closing, 'stock': stock,
+        'moves': rows.length, 'last': rows.isEmpty ? '' : rows.first['date'],
+      });
+    }
+    result.sort((a, b) => a['type'] == b['type'] ? '${a['item']}'.compareTo('${b['item']}') : (a['type'] == 'product' ? -1 : 1));
+    return {'from': _from, 'to': _to, 'count': result.length, 'totalIn': totalIn, 'totalOut': totalOut, 'moves': moves, 'rows': result};
+  }
+
+  Future<Map<String, dynamic>> documents() async {
+    final rows = await _rows();
+    final grouped = <String, Map<String, dynamic>>{};
+    for (final row in rows) {
+      final ref = '${row['ref'] ?? ''}';
+      if (ref.trim().isEmpty) continue;
+      final key = '${row['kind']}|$ref|${row['doc2']}|${row['party']}';
+      final doc = grouped.putIfAbsent(key, () => {
+        'kind': row['kind'], 'ref': ref, 'doc2': row['doc2'], 'party': row['party'], 'link': row['link'],
+        'date': row['date'], 'lines': 0, 'qin': 0, 'qout': 0,
+      });
+      doc['lines'] = (doc['lines'] as int) + 1;
+      if (row['dir'] == 'in') doc['qin'] = (doc['qin'] as num) + _number(row['qty']);
+      else doc['qout'] = (doc['qout'] as num) + _number(row['qty']);
+    }
+    final result = grouped.values.toList()..sort((a, b) => '${b['date']}'.compareTo('${a['date']}'));
+    return {'from': _from, 'to': _to, 'rows': result};
+  }
+}
+
 Widget _notPatched(BuildContext context, Object error, VoidCallback retry) {
   if (error is ApiException && error.status == 404) {
     return Padding(
@@ -174,7 +373,15 @@ class _MovementsTabState extends State<_MovementsTab> with _PeriodMixin, Automat
 
   String get _filters => '$periodQuery${_dir.isEmpty ? '' : '&dir=$_dir'}${_kind.isEmpty ? '' : '&kind=$_kind'}${_type.isEmpty ? '' : '&type=$_type'}${_q.text.trim().isEmpty ? '' : '&q=${Uri.encodeQueryComponent(_q.text.trim())}'}';
 
-  Future<Map<String, dynamic>> _load() async => ((await context.read<AuthController>().api.get('/stock/register?$_filters')) as Map).cast<String, dynamic>();
+  Future<Map<String, dynamic>> _load() async {
+    final api = context.read<AuthController>().api;
+    try {
+      return ((await api.get('/stock/register?$_filters')) as Map).cast<String, dynamic>();
+    } on ApiException catch (e) {
+      if (e.status != 404) rethrow;
+      return _DerivedStockLedger(api, from, to).movements(dir: _dir, kind: _kind, type: _type, query: _q.text);
+    }
+  }
   void _reload() => setState(() => _future = _load());
 
   @override
@@ -334,7 +541,15 @@ class _BalancesTabState extends State<_BalancesTab> with _PeriodMixin, Automatic
   void dispose() { _q.dispose(); super.dispose(); }
 
   String get _filters => '$periodQuery${_type.isEmpty ? '' : '&type=$_type'}${_movedOnly ? '&moved=1' : ''}${_q.text.trim().isEmpty ? '' : '&q=${Uri.encodeQueryComponent(_q.text.trim())}'}';
-  Future<Map<String, dynamic>> _load() async => ((await context.read<AuthController>().api.get('/stock/balances?$_filters')) as Map).cast<String, dynamic>();
+  Future<Map<String, dynamic>> _load() async {
+    final api = context.read<AuthController>().api;
+    try {
+      return ((await api.get('/stock/balances?$_filters')) as Map).cast<String, dynamic>();
+    } on ApiException catch (e) {
+      if (e.status != 404) rethrow;
+      return _DerivedStockLedger(api, from, to).balances(_type, _movedOnly, _q.text);
+    }
+  }
   void _reload() => setState(() => _future = _load());
 
   @override
@@ -445,7 +660,15 @@ class _DocumentsTabState extends State<_DocumentsTab> with _PeriodMixin, Automat
   @override
   void dispose() { _q.dispose(); super.dispose(); }
 
-  Future<Map<String, dynamic>> _load() async => ((await context.read<AuthController>().api.get('/stock/documents?$periodQuery')) as Map).cast<String, dynamic>();
+  Future<Map<String, dynamic>> _load() async {
+    final api = context.read<AuthController>().api;
+    try {
+      return ((await api.get('/stock/documents?$periodQuery')) as Map).cast<String, dynamic>();
+    } on ApiException catch (e) {
+      if (e.status != 404) rethrow;
+      return _DerivedStockLedger(api, from, to).documents();
+    }
+  }
   void _reload() => setState(() => _future = _load());
 
   @override

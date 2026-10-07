@@ -21,6 +21,19 @@ class DashboardPage extends StatefulWidget {
   State<DashboardPage> createState() => _DashboardPageState();
 }
 
+num? _todayTotal(dynamic raw, String listKey, String dateKey, String valueKey, {String? fallbackKey}) {
+  if (raw is! Map || raw[listKey] is! List) return null;
+  final today = todayYmd();
+  num total = 0;
+  for (final row in (raw[listKey] as List)) {
+    if (row is! Map || !'${row[dateKey] ?? ''}'.startsWith(today)) continue;
+    final value = row[valueKey] ?? (fallbackKey == null ? null : row[fallbackKey]);
+    if (value is num) total += value;
+    else total += num.tryParse('${value ?? 0}') ?? 0;
+  }
+  return total;
+}
+
 class _DashboardPageState extends State<DashboardPage> {
   late Future<Map<String, dynamic>> _future;
 
@@ -31,8 +44,36 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Future<Map<String, dynamic>> _load() async {
-    final json = await context.read<AuthController>().api.get('/dashboard');
-    return (json as Map).cast<String, dynamic>();
+    final api = context.read<AuthController>().api;
+    final dashboard = (await api.get('/dashboard') as Map).cast<String, dynamic>();
+
+    // The dashboard endpoint is intentionally role/server driven. On older
+    // servers it does not yet include today's production/dispatch roll-ups,
+    // so enrich the same live response from the existing read-only endpoints.
+    // A missing permission or legacy route is harmless — the UI keeps the
+    // server KPI or an em dash instead of inventing a count.
+    Future<dynamic> safeGet(String path) async {
+      try {
+        return await api.get(path);
+      } catch (_) {
+        return null;
+      }
+    }
+    final extra = await Future.wait<dynamic>([
+      safeGet('/production/batches'),
+      safeGet('/dispatch'),
+      safeGet('/inventory'),
+    ]);
+    final liveKpis = <Map<String, dynamic>>[];
+    final production = _todayTotal(extra[0], 'batches', 'planned_date', 'produced_cb', fallbackKey: 'planned_cb');
+    final dispatch = _todayTotal(extra[1], 'dispatches', 'dispatch_date', 'total_cartons');
+    final inventory = extra[2] is Map ? (extra[2] as Map)['summary'] : null;
+    if (production != null) liveKpis.add({'label': 'Production Today', 'value': production});
+    if (dispatch != null) liveKpis.add({'label': 'Dispatch Today', 'value': dispatch});
+    if (inventory is Map && inventory['low_count'] != null) {
+      liveKpis.add({'label': 'Low Stock', 'value': inventory['low_count']});
+    }
+    return {...dashboard, '_liveKpis': liveKpis};
   }
 
   void _reload() {
@@ -42,7 +83,6 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    final session = context.watch<AuthController>().session!;
     return FutureBuilder<Map<String, dynamic>>(
       future: _future,
       builder: (context, snap) {
@@ -56,23 +96,82 @@ class _DashboardPageState extends State<DashboardPage> {
           for (final w in (data['widgets'] as List).cast<Map<String, dynamic>>())
             if (CompanyProfile.sectionVisible((w['route'] as String?) ?? '/')) _gateWidget(w),
         ];
-        return RefreshIndicator(
-          onRefresh: () async => _reload(),
-          child: ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: EdgeInsets.all(MediaQuery.sizeOf(context).width < 600 ? 14 : 24),
-            children: [
-              _Header(greeting: data['greeting'] as String, name: data['name'] as String, session: session),
-              const SizedBox(height: 18),
-              const SubscriptionBanner(),
-              // HRMate head-count (read-only bridge) — renders nothing when
-              // HRMate is not connected on this device or is unreachable.
-              const HrPresenceStrip(),
-              for (final w in widgets) ...[
-                _buildWidget(w),
-                const SizedBox(height: 16),
+        final kpis = <Map<String, dynamic>>[
+          for (final w in widgets.where((w) => w['type'] == 'kpi'))
+            ...(w['items'] as List).cast<Map<String, dynamic>>(),
+          ...((data['_liveKpis'] as List?) ?? const []).cast<Map<String, dynamic>>(),
+        ];
+        final alerts = _firstWidget(widgets, 'alerts');
+        final actions = _firstWidget(widgets, 'actions');
+        final coreKpis = _referenceKpis(kpis, alerts);
+        final additionalKpis = _additionalKpis(kpis);
+        final secondaryWidgets = widgets.where((w) {
+          final type = w['type'];
+          return type != 'kpi' && type != 'actions' && type != 'alerts';
+        }).toList();
+        // Keep the old dashboard's complete detail flow together in the new
+        // shell: role table first, then production/dispatch charts, followed
+        // by any other server-provided detail widgets.
+        final detailWidgets = [
+          ...secondaryWidgets.where((w) => w['type'] == 'table'),
+          ...secondaryWidgets.where((w) => const {'line', 'bar', 'pie'}.contains(w['type'])),
+          ...secondaryWidgets.where((w) => !const {'table', 'line', 'bar', 'pie'}.contains(w['type'])),
+        ];
+        final session = context.read<AuthController>().session;
+        final scheme = Theme.of(context).colorScheme;
+        final dashboardBackground = Theme.of(context).brightness == Brightness.light
+            ? const Color(0xFFF3F8FC)
+            : scheme.surfaceContainerLow;
+        return Container(
+          // Match the approved mobile preview: a soft blue-gray canvas in light
+          // mode, while retaining the user's dark theme without white flashes.
+          color: dashboardBackground,
+          child: RefreshIndicator(
+            onRefresh: () async => _reload(),
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: EdgeInsets.fromLTRB(
+                MediaQuery.sizeOf(context).width < 600 ? 14 : 24,
+                14,
+                MediaQuery.sizeOf(context).width < 600 ? 14 : 24,
+                28,
+              ),
+              children: [
+                _DashboardHero(
+                  kpis: kpis,
+                  greeting: (data['greeting'] as String?) ?? 'Good day',
+                  name: (data['name'] as String?) ?? session?.name ?? 'there',
+                  role: session?.roleLabel ?? 'Team',
+                ),
+                const SizedBox(height: 14),
+                _DashboardKpiGrid(items: coreKpis),
+                if (additionalKpis.isNotEmpty) ...[
+                  const SizedBox(height: 18),
+                  Text('Workspace snapshot', style: TextStyle(color: scheme.onSurface, fontSize: 18, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 9),
+                  _DashboardKpiGrid(items: additionalKpis),
+                ],
+                const SizedBox(height: 18),
+                if (actions != null) _DashboardQuickActions(widget: actions),
+                if (actions != null) const SizedBox(height: 18),
+                _DashboardActivity(kpis: kpis),
+                const SizedBox(height: 18),
+                if (alerts != null) _buildWidget(alerts),
+                if (alerts != null) const SizedBox(height: 18),
+                if (detailWidgets.isNotEmpty) ...[
+                  Text('Dashboard details', style: TextStyle(color: scheme.onSurface, fontSize: 18, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 10),
+                  for (final w in detailWidgets) ...[
+                    _buildWidget(w),
+                    const SizedBox(height: 16),
+                  ],
+                ],
+                const SubscriptionBanner(),
+                // HRMate head-count (read-only bridge) — renders nothing when
+                // HRMate is not connected on this device or is unreachable.
+                const HrPresenceStrip(),
               ],
-            ],
+            ),
           ),
         );
       },
@@ -96,11 +195,13 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Widget _buildWidget(Map<String, dynamic> w) {
     switch (w['type']) {
-      case 'kpi': return _KpiGrid(items: (w['items'] as List).cast<Map<String, dynamic>>());
+      case 'kpi': return _DashboardKpiGrid(items: (w['items'] as List).cast<Map<String, dynamic>>());
       case 'line': return SectionCard(title: U.ize(w['title'] as String), child: _Line(w));
       case 'bar': return SectionCard(title: U.ize(w['title'] as String), child: _Bar(w));
       case 'pie': return SectionCard(title: U.ize(w['title'] as String), child: _Pie(w));
-      case 'alerts': return SectionCard(title: U.ize(w['title'] as String), child: _Alerts(w));
+      case 'alerts':
+        final alertTitle = (w['title'] as String?)?.trim();
+        return SectionCard(title: U.ize(alertTitle == null || alertTitle.isEmpty ? 'System Alerts' : alertTitle), child: _Alerts(w));
       case 'table':
         final route = w['route'] as String?;
         return SectionCard(
@@ -120,65 +221,325 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 }
 
-class _Header extends StatelessWidget {
-  final String greeting, name;
-  final UserSession session;
-  const _Header({required this.greeting, required this.name, required this.session});
+class _DashboardHero extends StatelessWidget {
+  final List<Map<String, dynamic>> kpis;
+  final String greeting;
+  final String name;
+  final String role;
+  const _DashboardHero({required this.kpis, required this.greeting, required this.name, required this.role});
+
+  String _value(List<String> terms) {
+    for (final term in terms) {
+      for (final item in kpis) {
+        final label = '${item['label'] ?? ''}'.toLowerCase();
+        if (label.contains(term)) return item['money'] == true ? inr(item['value']) : qtyInt(item['value']);
+      }
+    }
+    return '—';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final stock = _value(['stock on hand', 'stock']);
+    final production = _value(['production today', 'production']);
+    final dispatch = _value(['dispatch today', 'dispatch']);
+    final firstName = name.trim().split(RegExp(r'\s+')).first;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1459D9), Color(0xFF247FE7), Color(0xFF13A879)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          stops: [0, 0.62, 1],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: AppBrand.blue.withValues(alpha: 0.22), blurRadius: 18, offset: const Offset(0, 7))],
+        gradient: AppBrand.gradient,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: AppBrand.blue.withValues(alpha: .18), blurRadius: 14, offset: const Offset(0, 7))],
       ),
-      child: Row(children: [
-        Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(13)),
-          child: const Icon(Icons.insights_rounded, color: Colors.white, size: 23),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('$greeting, ${name.split(' ').first}',
-                style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -0.45, color: Colors.white)),
-            const SizedBox(height: 4),
-            Wrap(spacing: 6, runSpacing: 2, children: [
-              Text('${session.roleLabel} workspace', style: TextStyle(color: Colors.white.withValues(alpha: 0.78), fontSize: 12.5)),
-              Text('·  ${fmtDateWithDay(todayYmd())}', softWrap: false, style: TextStyle(color: Colors.white.withValues(alpha: 0.78), fontSize: 12.5)),
-            ]),
-          ]),
-        ),
-        if (MediaQuery.sizeOf(context).width >= 520) ...[
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.26)),
-            ),
-            child: Text(session.roleLabel.toUpperCase(),
-                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 10.5, letterSpacing: 0.8, color: Colors.white)),
-          ),
-        ],
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('$greeting, $firstName', style: const TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w800, letterSpacing: -.35)),
+        const SizedBox(height: 3),
+        Text('$role workspace  ·  ${fmtDateWithDay(todayYmd())}', style: TextStyle(color: Colors.white.withValues(alpha: .82), fontSize: 12.5, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 14),
+        const Text('Dashboard Overview', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 9),
+        Text('Stock on Hand ${U.cb} value', style: const TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 2),
+        Text(stock, style: const TextStyle(color: Colors.white, fontSize: 38, fontWeight: FontWeight.w800, height: .95)),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(child: _summary('Production Today', production)),
+          const SizedBox(width: 10),
+          Expanded(child: _summary('Dispatch Today', dispatch)),
+        ]),
       ]),
     );
   }
+
+  Widget _summary(String label, String value) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(color: Colors.white.withValues(alpha: .14), borderRadius: BorderRadius.circular(12)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white.withValues(alpha: .86), fontSize: 10.8, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 2),
+          Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800)),
+        ]),
+      );
 }
 
 /// Replace default-industry unit words in server-sent labels with the active
 /// industry's unit names (e.g. "Stock on Hand (CB)" → "... (Bag)").
 String _unitize(String label) => U.ize(label);
+
+Map<String, dynamic>? _firstWidget(List<Map<String, dynamic>> widgets, String type) {
+  for (final widget in widgets) {
+    if (widget['type'] == type) return widget;
+  }
+  return null;
+}
+
+Map<String, dynamic>? _findKpi(List<Map<String, dynamic>> items, List<String> terms) {
+  for (final term in terms) {
+    for (final item in items) {
+      final label = '${item['label'] ?? ''}'.toLowerCase();
+      if (label == term || label.contains(term)) return item;
+    }
+  }
+  return null;
+}
+
+String _liveKpiValue(List<Map<String, dynamic>> items, List<String> terms) {
+  final item = _findKpi(items, terms);
+  if (item == null) return '—';
+  return item['money'] == true ? inr(item['value']) : qtyInt(item['value']);
+}
+
+List<Map<String, dynamic>> _additionalKpis(List<Map<String, dynamic>> items) {
+  const coreTerms = ['stock on hand', 'stock', 'production today', 'production', 'dispatch today', 'dispatch', 'low stock', 'low'];
+  return [
+    for (final item in items)
+      if (!coreTerms.any((term) => '${item['label'] ?? ''}'.toLowerCase().contains(term))) item,
+  ];
+}
+
+List<Map<String, dynamic>> _referenceKpis(List<Map<String, dynamic>> items, Map<String, dynamic>? alerts) {
+  Map<String, dynamic> metric(String label, List<String> terms, IconData icon, Color tint, {String? display}) {
+    final source = _findKpi(items, terms);
+    return {
+      'label': label,
+      'display': display ?? (source == null ? '—' : (source['money'] == true ? inr(source['value']) : qtyInt(source['value']))),
+      'iconData': icon,
+      'tintColor': tint,
+    };
+  }
+
+  String? lowDisplay;
+  if (alerts != null) {
+    final alertItems = (alerts['items'] as List?) ?? const [];
+    final low = alertItems.where((item) {
+      if (item is! Map) return false;
+      final severity = '${item['severity'] ?? ''}'.toLowerCase();
+      return severity == 'high' || severity == 'medium';
+    }).length;
+    lowDisplay = qtyInt(low);
+  }
+  return [
+    metric(_unitize('Stock on Hand'), ['stock on hand', 'stock'], Icons.inventory_2_outlined, AppBrand.blue),
+    metric(_unitize('Production Today'), ['production today', 'production'], Icons.factory_outlined, AppColors.cyan),
+    metric(_unitize('Dispatch Today'), ['dispatch today', 'dispatch'], Icons.local_shipping_outlined, AppBrand.green),
+    metric(_unitize('Low Stock'), ['low stock', 'low'], Icons.trending_down_rounded, AppColors.red, display: lowDisplay),
+  ];
+}
+
+class _DashboardQuickActions extends StatelessWidget {
+  final Map<String, dynamic> widget;
+  const _DashboardQuickActions({required this.widget});
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.read<AuthController>();
+    final items = <Map<String, dynamic>>[];
+    void add(String label, String route, IconData icon, Color color, bool allowed) {
+      if (allowed && !items.any((item) => item['route'] == route)) {
+        items.add({'label': label, 'route': route, 'icon': icon, 'color': color});
+      }
+    }
+
+    // These are the four operational shortcuts from the mobile reference. The
+    // permission checks keep the shortcuts role-safe; values remain server/API
+    // driven and the modules drawer remains the complete navigation surface.
+    add('Receive Stock', '/inventory', Icons.inventory_2_outlined, AppBrand.blue, auth.can('inventory.manage'));
+    add('New Batch', '/production', Icons.factory_outlined, AppColors.cyan, auth.can('production.manage'));
+    add('Dispatch', '/dispatch', Icons.local_shipping_outlined, AppBrand.green, auth.can('dispatch.manage'));
+    add('Reports', '/reports', Icons.bar_chart_rounded, AppColors.slate, auth.can('reports.view'));
+
+    // Keep the server-defined shortcuts too: the old dashboard exposed
+    // Manage Users and Audit Log here for permitted roles. They remain live,
+    // role-gated actions; the complete module drawer is still unchanged.
+    for (final action in (widget['items'] as List).cast<Map<String, dynamic>>()) {
+      final route = action['route'] as String?;
+      if (route == null || items.any((item) => item['route'] == route)) continue;
+      items.add({
+        'label': U.ize(action['label'] as String),
+        'route': route,
+        'icon': iconFor(action['icon'] as String?),
+        'color': AppColors.slate,
+      });
+    }
+
+    final scheme = Theme.of(context).colorScheme;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text('Quick Actions', style: TextStyle(color: scheme.onSurface, fontSize: 17, fontWeight: FontWeight.w800)),
+      const SizedBox(height: 8),
+      Wrap(spacing: 9, runSpacing: 9, children: [
+        for (final item in items)
+          _DashboardActionChip(
+            label: item['label'] as String,
+            icon: item['icon'] as IconData,
+            route: item['route'] as String,
+            color: item['color'] as Color,
+            filled: items.first == item,
+          ),
+      ]),
+    ]);
+  }
+}
+
+class _DashboardActionChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final String route;
+  final Color color;
+  final bool filled;
+  const _DashboardActionChip({required this.label, required this.icon, required this.route, required this.color, required this.filled});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: filled ? color : Colors.transparent,
+      borderRadius: BorderRadius.circular(22),
+      child: InkWell(
+        onTap: () => context.go(route),
+        borderRadius: BorderRadius.circular(22),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: color.withValues(alpha: filled ? 0 : .70), width: 1.4),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 16, color: filled ? Colors.white : color),
+            const SizedBox(width: 6),
+            Text(label, style: TextStyle(color: filled ? Colors.white : color, fontSize: 12.5, fontWeight: FontWeight.w700)),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _DashboardActivity extends StatelessWidget {
+  final List<Map<String, dynamic>> kpis;
+  const _DashboardActivity({required this.kpis});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final rows = [
+      ('Production batches', _liveKpiValue(kpis, ['production today', 'production'])),
+      ('Dispatches', _liveKpiValue(kpis, ['dispatch today', 'dispatch'])),
+      ('Stock updates', _liveKpiValue(kpis, ['stock updates', 'updates'])),
+    ];
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 15, 16, 14),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: scheme.outlineVariant),
+        boxShadow: [BoxShadow(color: scheme.shadow.withValues(alpha: .06), blurRadius: 8, offset: const Offset(0, 3))],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text("Today's Activity", style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 11),
+        Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Container(width: 6, decoration: BoxDecoration(color: AppColors.cyan, borderRadius: BorderRadius.circular(8))),
+          const SizedBox(width: 11),
+          Expanded(child: Column(children: [
+            for (var i = 0; i < rows.length; i++)
+              Padding(
+                padding: EdgeInsets.only(bottom: i == rows.length - 1 ? 0 : 9),
+                child: Column(children: [
+                  Row(children: [
+                    Expanded(child: Text(rows[i].$1, style: TextStyle(color: scheme.onSurface, fontSize: 13.5, fontWeight: FontWeight.w500))),
+                    Text(rows[i].$2, style: TextStyle(color: scheme.onSurface, fontSize: 13.5, fontWeight: FontWeight.w700)),
+                  ]),
+                  if (i != rows.length - 1) ...[
+                    const SizedBox(height: 8),
+                    Divider(height: 1, color: scheme.outlineVariant),
+                  ],
+                ]),
+              ),
+          ])),
+        ]),
+      ]),
+    );
+  }
+}
+
+class _DashboardKpiGrid extends StatelessWidget {
+  final List<Map<String, dynamic>> items;
+  const _DashboardKpiGrid({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, c) {
+      final cols = c.maxWidth < 340 ? 1 : 2;
+      return GridView.count(
+        crossAxisCount: cols,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childAspectRatio: cols == 1 ? 3.1 : 2.1,
+        children: [
+          for (final item in items)
+            _DashboardKpiTile(
+              label: item['label'] as String,
+              value: item['display'] as String? ?? (item['money'] == true ? inr(item['value']) : qtyInt(item['value'])),
+              icon: item['iconData'] as IconData? ?? iconFor(item['icon'] as String?),
+              tint: item['tintColor'] as Color? ?? hexColor(item['tint'] as String?),
+            ),
+        ],
+      );
+    });
+  }
+}
+
+class _DashboardKpiTile extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color tint;
+  const _DashboardKpiTile({required this.label, required this.value, required this.icon, required this.tint});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 12, 11),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant),
+        boxShadow: [BoxShadow(color: scheme.shadow.withValues(alpha: .06), blurRadius: 7, offset: const Offset(0, 3))],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(width: 30, height: 30, decoration: BoxDecoration(color: tint.withValues(alpha: .12), shape: BoxShape.circle), child: Icon(icon, size: 17, color: tint)),
+          const SizedBox(width: 9),
+          Expanded(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 13.5, fontWeight: FontWeight.w600))),
+        ]),
+        const Spacer(),
+        Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 23, fontWeight: FontWeight.w800)),
+      ]),
+    );
+  }
+}
 
 class _KpiGrid extends StatelessWidget {
   final List<Map<String, dynamic>> items;

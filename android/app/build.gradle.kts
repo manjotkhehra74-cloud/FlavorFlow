@@ -15,6 +15,8 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "in.flavorflow.sauce_erp"
+    // Use the SDK/NDK selected by the installed Flutter toolchain. This keeps
+    // GitHub Actions on the platform already bundled in its runner.
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
