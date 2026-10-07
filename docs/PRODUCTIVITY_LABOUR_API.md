@@ -74,7 +74,7 @@ Manpower is derived from the saved daily labour rows matching the selected date,
 
 ## Analysis and exports
 
-- `GET /reports/productivity/analysis` returns product-wise, line-wise, shift-wise, and period-total rows using the same filters and formulas.
+- `GET /reports/productivity/analysis` returns product-wise, line-wise, shift-wise, and period-total rows using the same filters and formulas. When an older server returns an empty analysis response, the Flutter client rebuilds the day/night/combined matrices from completed batches plus the SKU-specific Daily Labour rows, so manually entered labour remains visible.
 - `GET /reports/productivity.xlsx` exports the filtered productivity/analysis data.
 - `GET /labour/daily.xlsx` exports the filtered manual labour register.
 

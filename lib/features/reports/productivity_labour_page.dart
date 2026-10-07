@@ -466,6 +466,164 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
     };
   }
 
+  String _analysisSkuName(Map<String, dynamic> row, Map<String, Map<String, dynamic>> products) {
+    final rawId = row['productId'] ?? row['product_id'];
+    final product = rawId == null ? null : products['$rawId'];
+    final name = row['productName'] ?? row['product_name'] ?? row['sku'] ?? row['product'] ?? product?['name'];
+    return '${name ?? 'Unknown SKU'}';
+  }
+
+  double _analysisNetWeight(Map<String, dynamic>? product, Map<String, dynamic> row) =>
+      _n(product?['net_weight_per_cb'] ?? product?['weight_without_cb'] ?? product?['netWeightPerCb'] ?? row['net_weight_per_cb'] ?? row['weight_without_cb']).toDouble();
+
+  Future<Map<String, dynamic>> _legacyAnalysis() async {
+    final api = context.read<AuthController>().api;
+    final productsJson = await api.get('/products');
+    final productList = ((productsJson as Map)['products'] as List? ?? const []).cast<Map<String, dynamic>>();
+    final products = <String, Map<String, dynamic>>{for (final p in productList) '${p['id']}': p};
+    final filterProduct = _skuFilter == null ? null : products[_skuFilter!];
+    final filterName = filterProduct == null ? '' : _skuRuleKey('${filterProduct['name']}');
+    final batchList = <Map<String, dynamic>>[];
+    try {
+      final batchesJson = await api.get('/production/batches?status=COMPLETED');
+      batchList.addAll(((batchesJson as Map)['batches'] as List? ?? const []).cast<Map<String, dynamic>>());
+    } catch (_) {}
+    final labour = await _loadLabourRows(api, _query());
+    final stats = <String, Map<String, dynamic>>{};
+
+    bool selectedSku(String id, String name) =>
+        _skuFilter == null || id == _skuFilter || (filterName.isNotEmpty && _skuRuleKey(name) == filterName);
+
+    bool selectedShift(String shift) =>
+        _shiftFilter == 'Combined' || shift.isEmpty || shift.toLowerCase() == _shiftFilter.toLowerCase();
+
+    void add(String section, String sku, {double cb = 0, double kg = 0, double manpower = 0, double net = 0}) {
+      final key = '$section\u0000${_skuRuleKey(sku)}';
+      final value = stats.putIfAbsent(key, () => {'section': section, 'sku': sku, 'cb': 0.0, 'kg': 0.0, 'manpower': 0.0, 'net': net});
+      value['cb'] = _n(value['cb']).toDouble() + cb;
+      value['kg'] = _n(value['kg']).toDouble() + kg;
+      value['manpower'] = _n(value['manpower']).toDouble() + manpower;
+      if (_n(value['net']) == 0 && net != 0) value['net'] = net;
+    }
+
+    void addToSections(String shift, String sku, {double cb = 0, double kg = 0, double manpower = 0, double net = 0}) {
+      if (!selectedShift(shift)) return;
+      if (shift.isEmpty) {
+        add('combined', sku, cb: cb, kg: kg, manpower: manpower, net: net);
+      } else {
+        add(shift.toLowerCase(), sku, cb: cb, kg: kg, manpower: manpower, net: net);
+        add('combined', sku, cb: cb, kg: kg, manpower: manpower, net: net);
+      }
+    }
+
+    final seenBatches = <String>{};
+    for (final batch in batchList) {
+      if ('${batch['status'] ?? ''}'.toUpperCase() != 'COMPLETED') continue;
+      final id = '${batch['id'] ?? ''}';
+      if (id.isNotEmpty && !seenBatches.add(id)) continue;
+      final date = _productionDate(batch);
+      if (date.isEmpty || date.compareTo(_fromYmd) < 0 || date.compareTo(_toYmd) > 0) continue;
+      final productId = '${batch['product_id'] ?? batch['productId'] ?? ''}';
+      final product = products[productId];
+      final sku = '${batch['product_name'] ?? batch['productName'] ?? product?['name'] ?? 'Unknown SKU'}';
+      if (!selectedSku(productId, sku)) continue;
+      var line = '${batch['line'] ?? batch['production_line'] ?? ''}'.trim();
+      if (_isUnassignedLine(line)) line = _lineForSku(sku) ?? line;
+      if (!_skuAllowedForLine(line, sku)) continue;
+      if (_lineFilter.text.trim().isNotEmpty && line.toLowerCase() != _lineFilter.text.trim().toLowerCase()) continue;
+      final shift = '${batch['shift'] ?? ''}'.trim();
+      final cb = _n(batch['produced_cb'] ?? batch['producedCb']).toDouble();
+      final net = _analysisNetWeight(product, batch);
+      addToSections(shift, sku, cb: cb, kg: cb * net, net: net);
+    }
+
+    for (final entry in labour) {
+      final date = _dateOnly(entry['date']);
+      if (date.isEmpty || date.compareTo(_fromYmd) < 0 || date.compareTo(_toYmd) > 0) continue;
+      final productId = '${entry['productId'] ?? entry['product_id'] ?? ''}';
+      final sku = _analysisSkuName(entry, products);
+      if (!selectedSku(productId, sku)) continue;
+      final line = '${entry['line'] ?? ''}'.trim();
+      if (_lineFilter.text.trim().isNotEmpty && line.toLowerCase() != _lineFilter.text.trim().toLowerCase()) continue;
+      final shift = '${entry['shift'] ?? ''}'.trim();
+      final worker = _n(entry['manpower'] ?? entry['workerCount'] ?? entry['workers']);
+      final hours = _n(entry['actualHours'] ?? entry['hours']);
+      final standard = _n(entry['standardShiftHours']);
+      final manpower = (standard > 0 ? worker * hours / standard : worker).toDouble();
+      addToSections(shift, sku, manpower: manpower, net: _analysisNetWeight(products[productId], entry));
+    }
+
+    Map<String, dynamic> section(String name) {
+      final values = stats.values.where((v) => v['section'] == name).toList()
+        ..sort((a, b) => '${a['sku']}'.compareTo('${b['sku']}'));
+      final skus = values.map((v) => '${v['sku']}').toList();
+      if (values.isEmpty) return {'columns': const ['METRIC'], 'rows': const []};
+      List<dynamic> metric(String label, Object Function(Map<String, dynamic>) value) => [label, for (final v in values) value(v)];
+      final rows = <List<dynamic>>[
+        metric('Net weight per CB', (v) => v['net']),
+        metric('CB', (v) => v['cb']),
+        metric('Manpower', (v) => v['manpower']),
+        metric('Prod in kg', (v) => v['kg']),
+        metric('CB/man', (v) {
+          final manpower = _n(v['manpower']);
+          return manpower == 0 ? 0 : _n(v['cb']) / manpower;
+        }),
+        metric('Wt/man', (v) {
+          final manpower = _n(v['manpower']);
+          return manpower == 0 ? 0 : _n(v['kg']) / manpower;
+        }),
+      ];
+      return {'columns': ['METRIC', ...skus], 'rows': rows};
+    }
+
+    final combined = stats.values.where((v) => v['section'] == 'combined');
+    final totalCb = combined.fold<double>(0, (sum, v) => sum + _n(v['cb']).toDouble());
+    final totalKg = combined.fold<double>(0, (sum, v) => sum + _n(v['kg']).toDouble());
+    final totalManpower = combined.fold<double>(0, (sum, v) => sum + _n(v['manpower']).toDouble());
+    return {
+      'sections': {
+        'day': section('day'),
+        'night': section('night'),
+        'combined': section('combined'),
+      },
+      'periodTotals': {
+        'cb': totalCb,
+        'producedCb': totalCb,
+        'kg': totalKg,
+        'netKg': totalKg,
+        'manpower': totalManpower,
+        'kgPerHead': totalManpower == 0 ? 0 : totalKg / totalManpower,
+        'cbPerHead': totalManpower == 0 ? 0 : totalCb / totalManpower,
+      },
+    };
+  }
+
+  bool _analysisHasRows(Map<String, dynamic> data) {
+    final sections = data['sections'];
+    if (sections is Map) {
+      for (final section in sections.values) {
+        if (section is Map && section['rows'] is List && (section['rows'] as List).isNotEmpty) return true;
+      }
+    }
+    return data['rows'] is List && (data['rows'] as List).isNotEmpty;
+  }
+
+  Future<Map<String, dynamic>> _loadAnalysis() async {
+    try {
+      final response = (await context.read<AuthController>().api.get('/reports/productivity/analysis?${_query()}') as Map).cast<String, dynamic>();
+      if (_analysisHasRows(response)) return response;
+      final fallback = await _legacyAnalysis();
+      if (_analysisHasRows(fallback)) return fallback;
+      return response;
+    } catch (_) {
+      try {
+        return await _legacyAnalysis();
+      } catch (_) {
+        return {'rows': const []};
+      }
+    }
+  }
+
   Future<Map<String, dynamic>> _loadProductivity() async {
     // Completed batches are the source of truth for the selected production
     // dates. Do this before the aggregate report endpoint so a late-entered
@@ -488,7 +646,7 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
     final api = context.read<AuthController>().api;
     final productivity = _loadProductivity();
     final labour = _loadLabourRows(api, _query());
-    final analysis = api.get('/reports/productivity/analysis?${_query()}').then((v) => (v as Map).cast<String, dynamic>()).catchError((_) => <String, dynamic>{'rows': const []});
+    final analysis = _loadAnalysis();
     void assign() {
       _productivityFuture = productivity;
       _labourFuture = labour;
