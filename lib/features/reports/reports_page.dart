@@ -172,7 +172,8 @@ class _ReportsPageState extends State<ReportsPage> {
     // duplicated even though their report bodies were different.
     if (key.contains('packing') && key.contains('ledger')) return 'Packing Material Logs';
     if (key.contains('raw') && key.contains('ledger')) return 'Raw Material Logs';
-    if (key.contains('warehouse') || key.contains('audit')) return 'Warehouse Logs';
+    if (key.contains('audit')) return 'Approval Audit Trail';
+    if (key.contains('warehouse')) return 'Warehouse Logs';
     return _displayTitle(report);
   }
 
