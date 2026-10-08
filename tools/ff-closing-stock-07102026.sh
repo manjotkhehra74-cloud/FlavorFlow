@@ -116,7 +116,7 @@ if (external && external.length) {
   console.log(`Loaded ${external.length} targets from ${countJsonPath}`);
   rawTargets = external;
 } else {
-  rawTargets = [
+    rawTargets = [
     { name: 'Shrink Sleeve 740', count: 418903, kind: 'packing' },
     { name: 'Shrink Sleeve White 610', count: 436562, kind: 'packing' },
     { name: 'Shrink Sleeve Brown 610', count: 15265, kind: 'packing' },
@@ -131,11 +131,11 @@ if (external && external.length) {
     { name: 'Red Cap (1.3 / 1 Ltr)', count: 22518, kind: 'packing' },
     { name: 'Red Cap (180/220)', count: 135615, kind: 'packing' },
     { name: 'Plug (180)', count: 422444, kind: 'packing' },
-    { name: 'Crown (220)', count: 113050, kind: 'packing' },
+    { name: 'Crown Cork (220)', count: 113050, kind: 'packing' },
     { name: 'Carton CB 180/220', count: 5151, kind: 'packing' },
     { name: 'Carton CB (610/740)', count: 7812, kind: 'packing' },
     { name: 'Carton CB (1.3/1 Ltr)', count: 695, kind: 'packing' },
-    { name: 'Jerry Can 4Ltr', count: 8016, kind: 'packing', sharedGroup: 'jerry-shared' },
+    { name: 'Jerry Can 4 Ltr', count: 8016, kind: 'packing', sharedGroup: 'jerry-shared' },
     { name: 'Jerry Can 4.7kg', count: 8016, kind: 'packing', sharedGroup: 'jerry-shared' },
     { name: 'Soyabean', count: 446.30, kind: 'raw' },
     { name: 'Potassium Sorbate', count: 277.46, kind: 'raw' },
@@ -145,7 +145,7 @@ if (external && external.length) {
     { name: 'Garlic Oleoresin', count: 29.49, kind: 'raw' },
     { name: 'Cinnamon Oleoresin', count: 28.48, kind: 'raw' },
     { name: 'Coriander Oleoresin', count: 38.79, kind: 'raw' },
-    { name: 'Caramel Colour (E150A)', count: 4757.50, kind: 'raw' },
+    { name: 'Caramel Colour (E150a)', count: 4757.50, kind: 'raw' },
     { name: 'Black Salt', count: 100, kind: 'raw' },
   ];
 }
