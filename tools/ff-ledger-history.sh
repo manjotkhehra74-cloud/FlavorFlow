@@ -44,28 +44,32 @@ for (const key of ['packing-ledger', 'raw-material-ledger']) {
   const end = next < 0 ? src.length : next;
   let block = src.slice(start, end);
 
-  // The existing report queries are intentionally unbounded. Refuse to edit
-  // if a future route adds a row limit, so this tool never claims full history
-  // while silently truncating it.
-  if (/\bLIMIT\s+\d+/i.test(block)) {
-    console.error(`FATAL: '${key}' contains a row limit; review reports.js manually`);
-    process.exit(3);
-  }
-
+  // The ledger must cover the first entry through the latest one. Remove a
+  // numeric SQL row limit if an older server route added one, then order by
+  // transaction date and use the entry id as a same-day tie-breaker.
   const old = 'ORDER BY t.id DESC';
   const modern = 'ORDER BY t.txn_date ASC, t.id ASC';
-  if (block.includes(modern)) {
-    console.log(`${key}: already earliest-to-latest`);
-    continue;
+  let blockChanged = false;
+  if (block.includes(old)) {
+    block = block.replace(old, modern);
+    blockChanged = true;
+    console.log(`${key}: changed to txn_date ASC, id ASC`);
+  } else if (!block.includes(modern)) {
+    console.error(`FATAL: '${key}' does not have a recognized transaction order`);
+    process.exit(3);
   }
-  if (!block.includes(old)) {
-    console.error(`FATAL: '${key}' does not have the expected descending order`);
-    process.exit(4);
+  const limits = block.match(/\s+LIMIT\s+\d+/gi) || [];
+  if (limits.length) {
+    block = block.replace(/\s+LIMIT\s+\d+/gi, '');
+    blockChanged = true;
+    console.log(`${key}: removed row limit (${limits.join(', ').trim()}) — full history enabled`);
   }
-  block = block.replace(old, modern);
-  src = src.slice(0, start) + block + src.slice(end);
-  changed++;
-  console.log(`${key}: changed to txn_date ASC, id ASC`);
+  if (blockChanged) {
+    src = src.slice(0, start) + block + src.slice(end);
+    changed++;
+  } else {
+    console.log(`${key}: already earliest-to-latest with full history`);
+  }
 }
 
 if (!changed) {
