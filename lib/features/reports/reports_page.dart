@@ -167,7 +167,12 @@ class _ReportsPageState extends State<ReportsPage> {
     if (key.contains('production')) return 'Production History';
     if (key.contains('summary')) return 'Inventory Summary';
     if (key.contains('low')) return 'Low Stock';
-    if (key.contains('warehouse') || key.contains('ledger') || key.contains('audit')) return 'Warehouse Logs';
+    // Keep the two material ledgers distinct. They used to both fall through
+    // to the generic "Warehouse Logs" label, which made the mobile chips look
+    // duplicated even though their report bodies were different.
+    if (key.contains('packing') && key.contains('ledger')) return 'Packing Material Logs';
+    if (key.contains('raw') && key.contains('ledger')) return 'Raw Material Logs';
+    if (key.contains('warehouse') || key.contains('audit')) return 'Warehouse Logs';
     return _displayTitle(report);
   }
 
