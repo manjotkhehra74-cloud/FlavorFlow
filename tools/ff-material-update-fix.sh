@@ -30,11 +30,6 @@ const route = process.env.ROUTE;
 const backup = process.env.BACKUP;
 let src = fs.readFileSync(route, 'utf8');
 
-if (src.includes('[packing] material update audit queued')) {
-  console.log('MATERIAL UPDATE FIX: already present — no change');
-  process.exit(0);
-}
-
 // Work inside the material PUT route only. The live route has had small
 // formatting/entity-string changes, so do not depend on the audit message.
 const putStart = src.indexOf("router.put('/materials/:id'");
@@ -45,30 +40,25 @@ if (putStart < 0) {
   process.exit(2);
 }
 const routeBlock = src.slice(putStart, routeEnd);
-const auditRel = routeBlock.search(/\baudit\s*\(/);
-const responseRel = routeBlock.search(/res\.json\(\{\s*ok\s*:\s*true\s*\}\);/);
-const replacement = [
-  '  // Respond before notification fan-out so a stock edit cannot sit behind',
-  '  // a slow SQLite/user-notification write until the mobile HTTP timeout.',
-  '  res.json({ ok: true });',
-  '  setImmediate(() => {',
-  '    try {',
-  '      audit(db, req.user, \'UPDATE\', \'packing-material\', id,',
-  '        `Updated ${m.name} → ${name}, min ${minStock}, stock ${m.stock} → ${stock}`);',
-  "      console.log('[packing] material update audit queued');",
-  '    } catch (e) {',
-  "      console.error('[packing] material update audit failed:', e.message);",
-  '    }',
-  '  });',
-].join('\n');
-
-if (auditRel < 0 || responseRel < 0 || responseRel <= auditRel) {
-  console.error('FATAL: material PUT audit/response anchors not found inside route; route was not changed');
-  process.exit(3);
+let patchedBlock = routeBlock;
+const queuedRe = /\n\s*setImmediate\(\(\) => \{[\s\S]*?\n\s*\}\);/;
+if (queuedRe.test(patchedBlock)) {
+  // A previous version queued the audit but still left the notification work
+  // on the Node event loop. Remove that work completely; the global audit
+  // middleware already records/broadcasts the request once.
+  patchedBlock = patchedBlock.replace(queuedRe, '\n  // Audit is handled once by the global request middleware.');
+} else {
+  const auditRel = patchedBlock.search(/\baudit\s*\(/);
+  const responseMatch = /res\.json\(\{\s*ok\s*:\s*true\s*\}\);/.exec(patchedBlock);
+  if (auditRel < 0 || !responseMatch || responseMatch.index <= auditRel) {
+    console.error('FATAL: material PUT audit/response anchors not found inside route; route was not changed');
+    process.exit(3);
+  }
+  patchedBlock = patchedBlock.slice(0, auditRel) +
+    '\n  // Audit is handled once by the global request middleware.\n' +
+    patchedBlock.slice(responseMatch.index);
 }
-const absoluteAudit = putStart + auditRel;
-const absoluteResponse = putStart + responseRel;
-src = src.slice(0, absoluteAudit) + replacement + src.slice(absoluteResponse + routeBlock.slice(responseRel).match(/^res\.json\(\{\s*ok\s*:\s*true\s*\}\);/)[0].length);
+src = src.slice(0, putStart) + patchedBlock + src.slice(routeEnd);
 fs.writeFileSync(route, src);
 try {
   cp.execFileSync(process.execPath, ['--check', route], { stdio: 'inherit' });
@@ -88,4 +78,4 @@ if command -v curl >/dev/null; then
 else
   echo "Health check skipped: curl not found in root PATH"
 fi
-echo "MATERIAL UPDATE FIX VERIFIED — PUT responds before audit notification fan-out."
+echo "MATERIAL UPDATE FIX VERIFIED — PUT no longer runs duplicate audit notification fan-out."
