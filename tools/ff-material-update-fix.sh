@@ -35,24 +35,25 @@ if (src.includes('[packing] material update audit queued')) {
   process.exit(0);
 }
 
-// Locate only the material PUT handler's UPDATE audit and its success
-// response. The live route has had small formatting/string changes over time,
-// so use structural anchors rather than matching the entire message text.
-const auditStart = /audit\(\s*db\s*,\s*req\.user\s*,\s*['\"]UPDATE['\"]\s*,\s*['\"]packing-material['\"]\s*,\s*id\s*,/;
-const am = auditStart.exec(src);
-const responseRe = /res\.json\(\{\s*ok\s*:\s*true\s*\}\);/g;
-let responseMatch = null;
-if (am) {
-  responseRe.lastIndex = am.index;
-  responseMatch = responseRe.exec(src);
+// Work inside the material PUT route only. The live route has had small
+// formatting/entity-string changes, so do not depend on the audit message.
+const putStart = src.indexOf("router.put('/materials/:id'");
+const nextRoute = putStart < 0 ? -1 : src.indexOf('\nrouter.', putStart + 1);
+const routeEnd = nextRoute < 0 ? src.length : nextRoute;
+if (putStart < 0) {
+  console.error('FATAL: material PUT route not found; route was not changed');
+  process.exit(2);
 }
+const routeBlock = src.slice(putStart, routeEnd);
+const auditRel = routeBlock.search(/\baudit\s*\(/);
+const responseRel = routeBlock.search(/res\.json\(\{\s*ok\s*:\s*true\s*\}\);/);
 const replacement = [
   '  // Respond before notification fan-out so a stock edit cannot sit behind',
   '  // a slow SQLite/user-notification write until the mobile HTTP timeout.',
   '  res.json({ ok: true });',
   '  setImmediate(() => {',
   '    try {',
-  "      audit(db, req.user, 'UPDATE', 'packing-material', id,",
+  '      audit(db, req.user, \'UPDATE\', \'packing-material\', id,',
   '        `Updated ${m.name} → ${name}, min ${minStock}, stock ${m.stock} → ${stock}`);',
   "      console.log('[packing] material update audit queued');",
   '    } catch (e) {',
@@ -61,11 +62,13 @@ const replacement = [
   '  });',
 ].join('\n');
 
-if (!am || !responseMatch || responseMatch.index <= am.index) {
-  console.error('FATAL: material PUT audit/response anchors not found; route was not changed');
-  process.exit(2);
+if (auditRel < 0 || responseRel < 0 || responseRel <= auditRel) {
+  console.error('FATAL: material PUT audit/response anchors not found inside route; route was not changed');
+  process.exit(3);
 }
-src = src.slice(0, am.index) + replacement + src.slice(responseMatch.index + responseMatch[0].length);
+const absoluteAudit = putStart + auditRel;
+const absoluteResponse = putStart + responseRel;
+src = src.slice(0, absoluteAudit) + replacement + src.slice(absoluteResponse + routeBlock.slice(responseRel).match(/^res\.json\(\{\s*ok\s*:\s*true\s*\}\);/)[0].length);
 fs.writeFileSync(route, src);
 try {
   cp.execFileSync(process.execPath, ['--check', route], { stdio: 'inherit' });
