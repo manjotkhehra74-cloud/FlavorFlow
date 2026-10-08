@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# FlavorFlow — 07/10/2026 closing stock reconciliation (PM + RM).
+# FlavorFlow — 07/10/2026 closing stock reconciliation (PM + RM) — DIRECT UPDATE, NO DEDUCTION.
 #
 # Purpose: Update Packing Material (PM) and Raw Material (RM) stock using the
-# physical closing count as of 07/10/2026, cross-checking production and
-# consumption from 05/10 to 07/10.
+# physical closing count as of 07/10/2026. NO deduction — final stock = physical count.
+# Cross-check production/consumption from 05/10 to 07/10 is informational only.
 #
-# Requirements from MAN-5:
+# Requirements from MAN-5 (updated per user: sirf stock update krna, koi deduction nahi):
 #   - Attach the 07/10/2026 physical stock photos/list.  -> docs/reconciliation/07102026_closing_count.md
 #   - Match all materials by exact Product Master name.  -> exact match, no regex
-#   - Cross-check completed production and recorded consumption from 05/10 to 07/10.
-#   - Do not double-deduct production already represented in ERP records.
+#   - Cross-check completed production and recorded consumption from 05/10 to 07/10 (info only).
+#   - Do not double-deduct production already represented in ERP records (no deduction at all now).
 #   - Run dry-run first and review proposed balances.
 #   - Create a database backup before applying.
 #   - Update only targeted PM/RM stock rows.
@@ -17,9 +17,8 @@
 #   - Shared materials must remain shared; do not split them without confirmation.
 #
 # Usage:
-#   Dry-run (default, READ-ONLY, safe):
+#   Dry-run (default, READ-ONLY):
 #     bash tools/ff-closing-stock-07102026.sh
-#     FF_DB=/path/to/erp.db bash tools/ff-closing-stock-07102026.sh
 #
 #   Apply after reviewing dry-run:
 #     bash tools/ff-closing-stock-07102026.sh --apply
@@ -27,15 +26,9 @@
 #   With external JSON list (exact names -> count):
 #     FF_COUNT_JSON=/opt/flavorflow/data/closing-07102026.json bash tools/ff-closing-stock-07102026.sh --apply
 #
-# The script is idempotent and refuses to apply on:
-#   - ambiguous or missing exact-name matches
-#   - recorded vs expected BOM consumption mismatch (would double-deduct)
-#   - negative resulting balances
-#   - shared-pool target values that differ
-#
-# Data source priority for physical counts:
-#   1. FF_COUNT_JSON env (JSON file: [{"name":"Exact Product Master Name","count":123}, ...] or {"Name":count} map)
-#   2. Embedded list below (transcribed from 07/10/2026 physical count photos/list)
+# Data source priority:
+#   1. FF_COUNT_JSON env (JSON: [{"name":"Exact Name","count":123}, ...] or {"Name":count} map)
+#   2. Embedded list below (transcribed from 07/10/2026 photos)
 #
 set -euo pipefail
 
@@ -73,8 +66,8 @@ if (!DatabaseSync) { console.error('FATAL: SQLite wrapper not available'); proce
 
 const fs = require('fs');
 const db = new DatabaseSync(process.env.FF_DB);
-const closingDate = process.env.CLOSING_DATE; // 2026-10-07
-const startDate = process.env.START_DATE;     // 2026-10-05
+const closingDate = process.env.CLOSING_DATE;
+const startDate = process.env.START_DATE;
 const apply = process.env.APPLY === '1';
 const countJsonPath = process.env.COUNT_JSON;
 
@@ -86,26 +79,11 @@ const tables = new Set(db.prepare("SELECT name FROM sqlite_master WHERE type='ta
 const hasTable = (t) => tables.has(t);
 const hasCol = (t, c) => hasTable(t) && cols(t).includes(c);
 const q = (sql, args = []) => db.prepare(sql).all(...args);
-const one = (sql, args = []) => db.prepare(sql).get(...args);
 
 if (!hasTable('packing_materials')) { console.error('FATAL: packing_materials table missing'); process.exit(1); }
-const materialCols = cols('packing_materials');
-if (!materialCols.includes('id') || !materialCols.includes('name') || !materialCols.includes('stock')) {
-  console.error('FATAL: packing_materials must contain id, name, stock');
-  process.exit(1);
-}
-
-// ---------------------------------------------------------------------------
-// Load physical counts: exact Product Master name -> desired count as of 07/10
-// Priority: external JSON file if provided, else embedded list.
-// The embedded list is transcribed from the 07/10/2026 physical stock
-// photos/list attached to MAN-5 (docs/reconciliation/07102026_closing_count.md).
-// Update this list only from the photos — do not guess.
-// ---------------------------------------------------------------------------
 
 let rawTargets = [];
 
-// Helper: parse external JSON if supplied
 function loadExternal() {
   if (!countJsonPath) return null;
   if (!fs.existsSync(countJsonPath)) {
@@ -120,7 +98,6 @@ function loadExternal() {
       out.push({ name: String(row.name).trim(), count: Number(row.count), kind: row.kind || null, sharedGroup: row.sharedGroup || null });
     }
   } else if (typeof data === 'object') {
-    // map form: {"Exact Name": 123, ...} or {"Exact Name": {"count":123,"kind":"packing"}}
     for (const [k, v] of Object.entries(data)) {
       if (typeof v === 'number') out.push({ name: k.trim(), count: v, kind: null, sharedGroup: null });
       else if (v && typeof v === 'object') out.push({ name: k.trim(), count: Number(v.count), kind: v.kind || null, sharedGroup: v.sharedGroup || null });
@@ -135,12 +112,9 @@ if (external && external.length) {
   rawTargets = external;
 } else {
   // Embedded 07/10/2026 closing count — exact Product Master names.
-  // These values were transcribed from the physical stock photos attached to MAN-5.
-  // NOTE: If the screenshot shows different numbers, update ONLY the count values,
-  // keeping the exact names unchanged. Shared pool (Jerry Can) must keep identical counts.
+  // DIRECT UPDATE MODE: final stock = physical count, no deduction.
   rawTargets = [
-    // --- Packing Materials (PM) - exact Product Master names ---
-    // Labels & Shrink
+    // --- Packing Materials (PM) ---
     { name: 'Shrink Soya 740g', count: 418903, kind: 'packing' },
     { name: 'Shrink White Vinegar 610ml', count: 436562, kind: 'packing' },
     { name: 'Shrink Brown Vinegar 610ml', count: 15265, kind: 'packing' },
@@ -148,36 +122,28 @@ if (external && external.length) {
     { name: 'Label White Vinegar 1 Ltr', count: 67548, kind: 'packing' },
     { name: 'Label Dark Soya 220g', count: 10023, kind: 'packing' },
     { name: 'Label White Vinegar 180ml', count: 158172, kind: 'packing' },
-    { name: 'Hologram 65 x 65', count: 171038, kind: 'packing', sharedGroup: 'hologram-180-220' }, // shared Vinegar 180 / Dark Soya 220
-    // If Product Master stores it as "Hologram 65 x 65 — shared Vinegar 180 / Dark Soya 220", exact match will use that full name.
-    // We list both variants to guarantee exact match; deduplication below handles it.
+    { name: 'Hologram 65 x 65', count: 171038, kind: 'packing', sharedGroup: 'hologram-180-220' },
     { name: 'Hologram 65 x 65 — shared Vinegar 180 / Dark Soya 220', count: 171038, kind: 'packing', sharedGroup: 'hologram-180-220', aliasOf: 'Hologram 65 x 65' },
-
     { name: 'Label White Vinegar 4 Ltr', count: 4092, kind: 'packing' },
     { name: 'Label Dark Soya 4.7kg', count: 4200, kind: 'packing' },
-
-    // Caps & Plugs
     { name: 'Cap Orange', count: 1195479, kind: 'packing' },
     { name: 'Cap Purple', count: 184785, kind: 'packing' },
     { name: 'Cap Red 1.3kg', count: 22518, kind: 'packing' },
     { name: 'Cap Red Plastic 4gm', count: 135615, kind: 'packing' },
     { name: 'Plug No 9', count: 422444, kind: 'packing' },
     { name: 'Crown Cork', count: 113050, kind: 'packing' },
-
-    // Cartons (CB)
     { name: 'CB 180ml / 220g', count: 5151, kind: 'packing' },
     { name: 'CB 610ml / 740gm', count: 7812, kind: 'packing' },
     { name: 'CB 1.3kg', count: 695, kind: 'packing' },
-
-    // Jerry Can — shared physical pool, represented by two Product Master rows.
-    // Both rows must receive the SAME final balance; we never split the count.
+    // Shared pool — both rows get SAME final balance, no split
     { name: 'Jerry Can 4Ltr', count: 8016, kind: 'packing', sharedGroup: 'jerry-shared' },
     { name: 'Jerry Can 4.7kg', count: 8016, kind: 'packing', sharedGroup: 'jerry-shared' },
-    // Full exact names if stored with "(shared pool)" suffix:
     { name: 'Jerry Can 4Ltr (shared pool)', count: 8016, kind: 'packing', sharedGroup: 'jerry-shared', aliasOf: 'Jerry Can 4Ltr' },
     { name: 'Jerry Can 4.7kg (shared pool)', count: 8016, kind: 'packing', sharedGroup: 'jerry-shared', aliasOf: 'Jerry Can 4.7kg' },
 
-    // --- Raw Materials (RM) — exact Product Master names, kg ---
+    // --- Raw Materials (RM) — exact names, kg ---
+    // NOTE: These will be updated from the new RM image you uploaded.
+    // If Product Master has slightly different names, keep exact DB names.
     { name: 'Soyabean', count: 446.30, kind: 'raw' },
     { name: 'Haldi Powder', count: 35.50, kind: 'raw' },
     { name: 'Potassium Sorbate', count: 277.46, kind: 'raw' },
@@ -192,50 +158,37 @@ if (external && external.length) {
   ];
 }
 
-// Deduplicate by exact name, prefer non-alias, and keep sharedGroup
 const deduped = new Map();
 for (const t of rawTargets) {
   if (!t.name) continue;
   const key = t.name.trim();
   if (!deduped.has(key) || !deduped.get(key).aliasOf) {
-    // if existing is alias and new is not alias, replace; otherwise keep first
     const existing = deduped.get(key);
     if (existing && existing.aliasOf && !t.aliasOf) deduped.set(key, t);
     else if (!existing) deduped.set(key, t);
   }
 }
-let targets = Array.from(deduped.values()).filter(t => !t.aliasOf); // remove alias entries unless they are the only match
-
-// If external JSON not used, we may have included alias duplicates that should be resolved
-// to actual DB names later; keep alias mapping for fallback.
+let targets = Array.from(deduped.values()).filter(t => !t.aliasOf);
 const aliasMap = new Map();
-for (const t of rawTargets) {
-  if (t.aliasOf) aliasMap.set(t.name.trim(), t.aliasOf);
-}
+for (const t of rawTargets) if (t.aliasOf) aliasMap.set(t.name.trim(), t.aliasOf);
 
-console.log(`\n=== FlavorFlow 07/10/2026 Closing Stock Reconciliation ===`);
+console.log(`\n=== FlavorFlow 07/10/2026 Closing Stock Reconciliation (DIRECT UPDATE, NO DEDUCTION) ===`);
 console.log(`Closing Date: ${closingDate} (physical count)`);
-console.log(`Cross-check Window: ${startDate} -> ${closingDate} (production & consumption)`);
-console.log(`Mode: ${apply ? 'APPLY (will write)' : 'DRY-RUN (read-only)'}`);
+console.log(`Cross-check Window (info only): ${startDate} -> ${closingDate}`);
+console.log(`Mode: ${apply ? 'APPLY (will write)' : 'DRY-RUN (read-only)'} — NO DEDUCTION, final = physical`);
 console.log(`DB: ${process.env.FF_DB}`);
 console.log(`Targets loaded: ${targets.length}\n`);
 
-// ---------------------------------------------------------------------------
-// Exact Product Master name matching
-// ---------------------------------------------------------------------------
 const allMaterials = q('SELECT id, name, category, unit, COALESCE(stock,0) stock FROM packing_materials ORDER BY id');
 
 function findExact(name, kind) {
-  // 1) exact case-sensitive
   let candidates = allMaterials.filter(m => m.name === name);
-  // 2) exact case-insensitive but preserve case (if Product Master has different case)
   if (candidates.length === 0) {
     candidates = allMaterials.filter(m => m.name.toLowerCase() === name.toLowerCase());
     if (candidates.length === 1) {
-      console.log(`  WARN: case-insensitive exact match for "${name}" -> "${candidates[0].name}" (consider correcting master to exact case)`);
+      console.log(`  WARN: case-insensitive exact match for "${name}" -> "${candidates[0].name}"`);
     }
   }
-  // 3) category filter if kind specified
   if (kind) {
     const wantRaw = kind === 'raw';
     candidates = candidates.filter(m => {
@@ -255,7 +208,6 @@ for (const t of targets) {
   const candidates = findExact(t.name, t.kind);
   if (candidates.length !== 1) {
     if (candidates.length === 0) {
-      // Try alias fallback for shared pools where DB might store short name
       const aliasTarget = aliasMap.has(t.name) ? aliasMap.get(t.name) : null;
       if (aliasTarget) {
         const alt = findExact(aliasTarget, t.kind);
@@ -266,19 +218,17 @@ for (const t of targets) {
           continue;
         }
       }
-      console.log(`TARGET "${t.name}": NOT FOUND (exact Product Master name required) — available names containing similar words:`);
-      const similar = allMaterials.filter(m => norm(m.name).includes(norm(t.name).split(' ')[0]) ).slice(0,5).map(m => `[#${m.id} "${m.name}" (${m.category})]`).join(' ');
+      console.log(`TARGET "${t.name}": NOT FOUND (exact name required) — similar:`);
+      const similar = allMaterials.filter(m => norm(m.name).includes(norm(t.name).split(' ')[0])).slice(0,5).map(m => `[#${m.id} "${m.name}" (${m.category})]`).join(' ');
       console.log(`  ${similar || '(no similar)'}`);
     } else {
-      console.log(`TARGET "${t.name}": AMBIGUOUS (${candidates.length} matches) ${candidates.map(m => `[#${m.id} "${m.name}" (${m.category})]`).join(' ')}`);
+      console.log(`TARGET "${t.name}": AMBIGUOUS (${candidates.length}) ${candidates.map(m => `[#${m.id} "${m.name}"]`).join(' ')}`);
     }
     fatal = true;
     continue;
   }
   const m = candidates[0];
   if (matchedByName.has(m.name)) {
-    // duplicate target mapping to same DB row (e.g., both short and long Jerry Can names)
-    // keep the first, ensure counts match
     const prev = matched.find(x => x.id === m.id);
     if (prev && Number(prev.desired) !== Number(t.count)) {
       console.log(`TARGET "${t.name}": DUPLICATE DB ROW #${m.id} "${m.name}" but count ${t.count} != previous ${prev.desired} — shared pool must have identical counts`);
@@ -292,198 +242,99 @@ for (const t of targets) {
 }
 
 if (fatal) {
-  console.log('\nSTOPPED: every target must match exactly one Product Master row by exact name. No database rows changed.');
-  console.log('Fix: update Product Master names to match the list, or update the list to exact DB names.');
+  console.log('\nSTOPPED: every target must match exactly one Product Master row by exact name. No changes.');
   db.close();
   process.exit(2);
 }
 
-// ---------------------------------------------------------------------------
-// Production cross-check: completed production from 05/10 to 07/10
-// ---------------------------------------------------------------------------
-console.log(`\nCOMPLETED PRODUCTION BETWEEN ${startDate} AND ${closingDate}:`);
-let prodRows = [];
+// Cross-check info only (no deduction)
+console.log(`\nCOMPLETED PRODUCTION BETWEEN ${startDate} AND ${closingDate} (INFO ONLY, NO DEDUCTION):`);
 if (hasTable('batches')) {
   const bc = cols('batches');
-  const hasPlanned = bc.includes('planned_date');
-  const hasProdDate = bc.includes('production_date');
-  const dateCol = hasProdDate ? 'production_date' : (hasPlanned ? 'planned_date' : null);
-  if (dateCol && bc.includes('product_id') && bc.includes('produced_cb')) {
-    const nameCol = bc.includes('product_name') ? 'product_name' : null;
+  const dateCol = bc.includes('production_date') ? 'production_date' : (bc.includes('planned_date') ? 'planned_date' : null);
+  if (dateCol && bc.includes('product_id')) {
     try {
-      prodRows = q(`SELECT b.${dateCol} date, b.product_id product_id, ${nameCol ? `b.${nameCol}` : 'NULL'} product_name, COALESCE(b.produced_cb,0) produced_cb${bc.includes('produced_trays') ? ', COALESCE(b.produced_trays,0) produced_trays' : ''} FROM batches b WHERE UPPER(COALESCE(b.status,''))='COMPLETED' AND b.${dateCol} > ? AND b.${dateCol} <= ? ORDER BY b.${dateCol}, b.id`, [startDate, closingDate]);
-    } catch (e) {
-      console.log(`  WARN: could not query batches: ${e.message}`);
-    }
-    if (!prodRows.length) console.log('  none');
-    for (const r of prodRows) console.log(`  ${r.date} | ${r.product_name || ('product #' + r.product_id)} | CB ${r.produced_cb}${r.produced_trays != null ? ' | trays ' + r.produced_trays : ''}`);
-  } else {
-    console.log('  batches table missing required columns — skipping');
-  }
-} else {
-  console.log('  batches table not found — skipping');
-}
-
-// ---------------------------------------------------------------------------
-// Expected BOM consumption from 05/10 to 07/10 (packing)
-// ---------------------------------------------------------------------------
-const expected = new Map();
-if (hasTable('batches') && hasTable('packing_bom') && hasCol('batches','product_id') && hasCol('batches','produced_cb')) {
-  const dateCol = hasCol('batches','production_date') ? 'production_date' : (hasCol('batches','planned_date') ? 'planned_date' : null);
-  if (dateCol) {
-    const trayExpr = hasCol('batches','produced_trays') ? 'COALESCE(b.produced_trays,0)' : '0';
-    try {
-      const expectedRows = q(`SELECT pb.material_id material_id,
-          SUM(COALESCE(b.produced_cb,0) * COALESCE(pb.qty_per_cb,0) + ${trayExpr} * COALESCE(pb.qty_per_tray,0)) qty
-        FROM batches b JOIN packing_bom pb ON pb.product_id = b.product_id
-        WHERE UPPER(COALESCE(b.status,''))='COMPLETED' AND b.${dateCol} > ? AND b.${dateCol} <= ?
-        GROUP BY pb.material_id`, [startDate, closingDate]);
-      for (const r of expectedRows) expected.set(Number(r.material_id), n(r.qty));
-    } catch (e) {
-      console.log(`  WARN: could not calculate expected BOM consumption: ${e.message}`);
-    }
+      const rows = q(`SELECT b.${dateCol} date, b.product_id, COALESCE(b.product_name,'') product_name, COALESCE(b.produced_cb,0) produced_cb FROM batches b WHERE UPPER(COALESCE(b.status,''))='COMPLETED' AND b.${dateCol} > ? AND b.${dateCol} <= ? ORDER BY b.${dateCol}, b.id`, [startDate, closingDate]);
+      if (!rows.length) console.log('  none');
+      for (const r of rows) console.log(`  ${r.date} | ${r.product_name || ('product #' + r.product_id)} | CB ${r.produced_cb}`);
+    } catch (e) { console.log(`  WARN: ${e.message}`); }
   }
 }
-console.log(`\nEXPECTED PACKING-BOM CONSUMPTION BETWEEN ${startDate} AND ${closingDate}:`);
-if (!expected.size) console.log('  none calculated');
-for (const m of matched) if (expected.has(Number(m.id))) console.log(`  #${m.id} "${m.name}": -${expected.get(Number(m.id))} ${m.unit || ''}`);
 
-// ---------------------------------------------------------------------------
-// Recorded consumption from 05/10 to 07/10 (authoritative if exists)
-// ---------------------------------------------------------------------------
-const recorded = new Map();
-if (hasTable('packing_txns') && hasCol('packing_txns','material_id') && hasCol('packing_txns','qty') && hasCol('packing_txns','txn_date')) {
-  try {
-    const rows = q(`SELECT material_id, SUM(COALESCE(qty,0)) qty FROM packing_txns WHERE txn_type='CONSUMED' AND txn_date > ? AND txn_date <= ? GROUP BY material_id`, [startDate, closingDate]);
-    for (const r of rows) recorded.set(Number(r.material_id), n(r.qty));
-  } catch (e) {
-    console.log(`  WARN: could not query packing_txns: ${e.message}`);
-  }
-}
-console.log(`\nRECORDED CONSUMPTION BETWEEN ${startDate} AND ${closingDate}:`);
-if (!recorded.size) console.log('  none recorded in packing_txns');
-for (const m of matched) if (recorded.has(Number(m.id))) console.log(`  #${m.id} "${m.name}": -${recorded.get(Number(m.id))} ${m.unit || ''}`);
-
-// Also check recipe consumption for raw materials in same window
-const recordedRawRecipe = new Map();
-if (hasTable('packing_txns')) {
+console.log(`\nRECORDED CONSUMPTION BETWEEN ${startDate} AND ${closingDate} (INFO ONLY, NO DEDUCTION):`);
+if (hasTable('packing_txns') && hasCol('packing_txns','material_id')) {
   try {
     const rows = q(`SELECT material_id, SUM(COALESCE(qty,0)) qty FROM packing_txns WHERE txn_type IN ('CONSUMED','RECIPE') AND txn_date > ? AND txn_date <= ? GROUP BY material_id`, [startDate, closingDate]);
+    if (!rows.length) console.log('  none recorded');
     for (const r of rows) {
-      if (!recorded.has(Number(r.material_id))) recordedRawRecipe.set(Number(r.material_id), n(r.qty));
+      const mat = allMaterials.find(m => m.id === r.material_id);
+      console.log(`  #${r.material_id} ${mat ? mat.name : ''}: -${r.qty}`);
     }
-  } catch (_) {}
-}
-if (recordedRawRecipe.size) {
-  console.log(`\nRECORDED RAW/RECIPE CONSUMPTION (additional) BETWEEN ${startDate} AND ${closingDate}:`);
-  for (const m of matched) if (recordedRawRecipe.has(Number(m.id))) console.log(`  #${m.id} "${m.name}": -${recordedRawRecipe.get(Number(m.id))} ${m.unit || ''}`);
-  for (const [k,v] of recordedRawRecipe) recorded.set(k, (recorded.get(k)||0)+v);
+  } catch (e) { console.log(`  WARN: ${e.message}`); }
 }
 
-// ---------------------------------------------------------------------------
-// Proposed final balances — avoid double-deduction
-// ---------------------------------------------------------------------------
-console.log('\nPROPOSED FINAL BALANCES (physical count - deduction):');
-console.log('Rule: if recorded consumption exists for the window, it is authoritative (already deducted in ERP).');
-console.log('      Expected BOM consumption is used only when recorded is absent.');
-console.log('      If both exist and differ >0.001, we STOP to avoid double-deduction.\n');
+// Proposed finals — DIRECT UPDATE, NO DEDUCTION
+console.log('\nPROPOSED FINAL BALANCES (DIRECT UPDATE, NO DEDUCTION):');
+console.log('Rule: final stock = physical closing count as of 07/10/2026 (no subtraction).\n');
 
 const finalById = new Map();
 const grouped = new Map();
-for (const m of matched) {
-  if (m.sharedGroup) {
-    if (!grouped.has(m.sharedGroup)) grouped.set(m.sharedGroup, []);
-    grouped.get(m.sharedGroup).push(m);
-  }
+for (const m of matched) if (m.sharedGroup) {
+  if (!grouped.has(m.sharedGroup)) grouped.set(m.sharedGroup, []);
+  grouped.get(m.sharedGroup).push(m);
 }
 
-let hasMismatch = false;
-
-// Shared pools first
 for (const [group, rows] of grouped) {
   const desiredValues = new Set(rows.map(m => Number(m.desired)));
   if (desiredValues.size !== 1) {
-    console.error(`MISMATCH shared group ${group}: target values differ ${Array.from(desiredValues).join(', ')}; refusing to apply`);
+    console.error(`MISMATCH shared group ${group}: values differ ${Array.from(desiredValues).join(', ')}`);
     fatal = true;
     continue;
   }
-  const rec = rows.reduce((sum, m) => sum + (recorded.get(Number(m.id)) || 0), 0);
-  const exp = rows.reduce((sum, m) => sum + (expected.get(Number(m.id)) || 0), 0);
-  if (rec > 0 && exp > 0 && Math.abs(rec - exp) > 0.001) {
-    console.error(`MISMATCH shared group ${group}: recorded=${rec}, expected BOM=${exp}; refusing to apply until reviewed (would double-deduct)`);
-    hasMismatch = true;
-    fatal = true;
-  }
-  const deduction = rec > 0 ? rec : exp;
-  const finalStock = Number(rows[0].desired) - deduction;
-  console.log(`  SHARED ${group}: physical ${rows[0].desired} - deduction ${deduction} = FINAL ${finalStock} ${rows[0].unit || ''}`);
+  const finalStock = Number(rows[0].desired);
+  console.log(`  SHARED ${group}: physical ${rows[0].desired} = FINAL ${finalStock} ${rows[0].unit || ''} (NO DEDUCTION)`);
   for (const m of rows) {
     finalById.set(Number(m.id), finalStock);
-    console.log(`    #${m.id} "${m.name}": shared final=${finalStock} ${m.unit || ''} (current=${m.stock})`);
+    console.log(`    #${m.id} "${m.name}": final=${finalStock} ${m.unit || ''} (current=${m.stock})`);
   }
-  if (finalStock < 0) { console.error(`NEGATIVE RESULT for shared group ${group}: ${finalStock}; refusing to apply`); fatal = true; }
+  if (finalStock < 0) { console.error(`NEGATIVE for shared group ${group}`); fatal = true; }
 }
 
 for (const m of matched) {
   if (m.sharedGroup) continue;
-  const rec = recorded.get(Number(m.id)) || 0;
-  const exp = expected.get(Number(m.id)) || 0;
-  if (rec > 0 && exp > 0 && Math.abs(rec - exp) > 0.001) {
-    console.error(`MISMATCH "${m.name}": recorded=${rec}, expected BOM=${exp}; refusing to apply until reviewed (would double-deduct)`);
-    hasMismatch = true;
-    fatal = true;
-  }
-  const deduction = rec > 0 ? rec : exp;
-  const finalStock = Number(m.desired) - deduction;
+  const finalStock = Number(m.desired);
   finalById.set(Number(m.id), finalStock);
-  console.log(`  #${m.id} "${m.name}": physical ${m.desired} - deduction ${deduction} = FINAL ${finalStock} ${m.unit || ''} (current=${m.stock})`);
-  if (finalStock < 0) { console.error(`NEGATIVE RESULT for "${m.name}": ${finalStock}; refusing to apply`); fatal = true; }
-}
-
-if (hasMismatch) {
-  console.log('\nSTOPPED: recorded vs expected consumption mismatch detected. This prevents double-deduction.');
-  console.log('Action: review production and packing_txns between 05/10 and 07/10. If recorded already includes BOM consumption, keep recorded as authoritative.');
+  console.log(`  #${m.id} "${m.name}": physical ${m.desired} = FINAL ${finalStock} ${m.unit || ''} (current=${m.stock}) NO DEDUCTION`);
+  if (finalStock < 0) { console.error(`NEGATIVE for "${m.name}"`); fatal = true; }
 }
 
 if (!apply) {
   console.log('\n=== DRY RUN ONLY — no database rows changed ===');
-  console.log('Review the exact-name matches and proposed final balances above.');
-  console.log('If OK, rerun with --apply:');
-  console.log('  bash tools/ff-closing-stock-07102026.sh --apply');
-  console.log('\nAttachments: docs/reconciliation/07102026_closing_count.md contains the physical stock photos/list.');
+  console.log('Review exact-name matches and proposed finals above (NO DEDUCTION).');
+  console.log('If OK, rerun with --apply: bash tools/ff-closing-stock-07102026.sh --apply');
   db.close();
   process.exit(fatal ? 3 : 0);
 }
-if (fatal) {
-  console.log('\nSTOPPED — no database rows changed due to errors above.');
-  db.close();
-  process.exit(3);
-}
+if (fatal) { console.log('\nSTOPPED — errors above. No changes.'); db.close(); process.exit(3); }
 
-// ---------------------------------------------------------------------------
-// Apply: only update packing_materials.stock for targeted rows
-// ---------------------------------------------------------------------------
-console.log('\nAPPLYING: updating only targeted PM/RM stock rows (packing_materials.stock)...');
+console.log('\nAPPLYING: updating only targeted PM/RM stock rows (packing_materials.stock) to physical count directly...');
 try {
   db.exec('BEGIN');
-  const update = db.prepare('UPDATE packing_materials SET stock = ? WHERE id = ?');
+  const upd = db.prepare('UPDATE packing_materials SET stock = ? WHERE id = ?');
   for (const m of matched) {
     const finalStock = finalById.get(Number(m.id));
-    if (finalStock == null) throw new Error(`missing proposed balance for #${m.id} "${m.name}"`);
-    update.run(finalStock, m.id);
+    if (finalStock == null) throw new Error(`missing final for #${m.id}`);
+    upd.run(finalStock, m.id);
     console.log(`UPDATED #${m.id} "${m.name}": stock=${finalStock} ${m.unit || ''} (was ${m.stock})`);
   }
   db.exec('COMMIT');
-  console.log(`\nAPPLIED: ${matched.length} Product Master rows (${grouped.size} shared pools) updated to 07/10/2026 closing.`);
+  console.log(`\nAPPLIED: ${matched.length} rows (${grouped.size} shared pools) set to 07/10/2026 physical count directly. NO DEDUCTION.`);
   console.log(`Backup: ${process.env.FF_BACKUP_DIR || '/opt/flavorflow/backups'}/erp.db.bak-closing-07102026-${process.env.TS}`);
-  console.log('Note: production, BOMs, ledger history untouched — only stock column updated. Stock journal triggers will log SET_STOCK entries.');
 } catch (e) {
   try { db.exec('ROLLBACK'); } catch (_) {}
-  console.error('APPLY FAILED — transaction rolled back: ' + e.message);
+  console.error('APPLY FAILED — rolled back: ' + e.message);
   process.exit(4);
-} finally {
-  db.close();
-}
+} finally { db.close(); }
 JS
 
 if (( APPLY )); then
@@ -493,8 +344,8 @@ if (( APPLY )); then
     curl -sS -m 8 http://127.0.0.1:4000/api/health || true
     echo
   fi
-  echo "=== FF-CLOSING-STOCK-07102026 DONE ==="
+  echo "=== FF-CLOSING-STOCK-07102026 DONE (DIRECT UPDATE, NO DEDUCTION) ==="
 else
   echo ""
-  echo "Dry-run complete. No changes made."
+  echo "Dry-run complete. No changes made. NO DEDUCTION mode."
 fi
