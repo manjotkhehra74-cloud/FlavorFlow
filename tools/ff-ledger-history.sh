@@ -44,19 +44,27 @@ for (const key of ['packing-ledger', 'raw-material-ledger']) {
   const end = next < 0 ? src.length : next;
   let block = src.slice(start, end);
 
-  // The ledger must cover the first entry through the latest one. Remove a
-  // numeric SQL row limit if an older server route added one, then order by
-  // transaction date and use the entry id as a same-day tie-breaker.
-  const old = 'ORDER BY t.id DESC';
+  // The ledger must cover the first entry through the latest one. Normalize
+  // any existing ORDER BY expression (older route versions used different
+  // date/id forms), then remove a numeric SQL row limit if present.
   const modern = 'ORDER BY t.txn_date ASC, t.id ASC';
   let blockChanged = false;
-  if (block.includes(old)) {
-    block = block.replace(old, modern);
+  const order = block.match(/ORDER\s+BY[\s\S]*?(?=\s+LIMIT\b|\s*`)/i);
+  if (order) {
+    if (order[0] !== modern) {
+      block = block.replace(order[0], modern);
+      blockChanged = true;
+      console.log(`${key}: changed order to txn_date ASC, id ASC`);
+    }
+  } else {
+    const limitAt = block.search(/\s+LIMIT\s+\d+/i);
+    if (limitAt < 0) {
+      console.error(`FATAL: '${key}' has neither ORDER BY nor a safe insertion point`);
+      process.exit(3);
+    }
+    block = block.slice(0, limitAt) + ` ${modern}` + block.slice(limitAt);
     blockChanged = true;
-    console.log(`${key}: changed to txn_date ASC, id ASC`);
-  } else if (!block.includes(modern)) {
-    console.error(`FATAL: '${key}' does not have a recognized transaction order`);
-    process.exit(3);
+    console.log(`${key}: added order txn_date ASC, id ASC`);
   }
   const limits = block.match(/\s+LIMIT\s+\d+/gi) || [];
   if (limits.length) {
