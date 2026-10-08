@@ -1,4 +1,5 @@
 [
+<<<<<<< HEAD
   {"name": "Shrink Soya 740g", "count": 418903, "kind": "packing", "unit": "pcs"},
   {"name": "Shrink White Vinegar 610ml", "count": 436562, "kind": "packing", "unit": "pcs"},
   {"name": "Shrink Brown Vinegar 610ml", "count": 15265, "kind": "packing", "unit": "pcs"},
@@ -22,13 +23,43 @@
   {"name": "Jerry Can 4.7kg", "count": 8016, "kind": "packing", "unit": "pcs", "sharedGroup": "jerry-shared"},
   {"name": "Soyabean", "count": 446.30, "kind": "raw", "unit": "kg"},
   {"name": "Haldi Powder", "count": 35.50, "kind": "raw", "unit": "kg"},
+=======
+  {"name": "Shrink Sleeve 740", "count": 418903, "kind": "packing", "unit": "pcs", "oldName": "Shrink Soya 740g"},
+  {"name": "Shrink Sleeve White 610", "count": 436562, "kind": "packing", "unit": "pcs", "oldName": "Shrink White Vinegar 610ml"},
+  {"name": "Shrink Sleeve Brown 610", "count": 15265, "kind": "packing", "unit": "pcs", "oldName": "Shrink Brown Vinegar 610ml"},
+  {"name": "Label Soya 1.3", "count": 30155, "kind": "packing", "unit": "pcs", "oldName": "Label Soya 1.3kg"},
+  {"name": "Label White (180)", "count": 158172, "kind": "packing", "unit": "pcs", "oldName": "Label White Vinegar 180ml"},
+  {"name": "Hologram (180/220)", "count": 171038, "kind": "packing", "unit": "pcs", "sharedGroup": "hologram-180-220", "note": "shared Vinegar 180 / Dark Soya 220"},
+  {"name": "Label Front 4 Ltr", "count": 4092, "kind": "packing", "unit": "pcs", "oldName": "Label White Vinegar 4 Ltr"},
+  {"name": "Label Front 4.7", "count": 4200, "kind": "packing", "unit": "pcs", "oldName": "Label Dark Soya 4.7kg"},
+  {"name": "Dark S Label (250)", "count": 10023, "kind": "packing", "unit": "pcs", "oldName": "Label Dark Soya 220g"},
+  {"name": "Cap Orange (610)", "count": 1195479, "kind": "packing", "unit": "pcs", "oldName": "Cap Orange"},
+  {"name": "Cap Purple (740)", "count": 184785, "kind": "packing", "unit": "pcs", "oldName": "Cap Purple"},
+  {"name": "Red Cap (1.3 / 1 Ltr)", "count": 22518, "kind": "packing", "unit": "pcs", "oldName": "Cap Red 1.3kg"},
+  {"name": "Red Cap (180/220)", "count": 135615, "kind": "packing", "unit": "pcs", "oldName": "Cap Red Plastic 4gm"},
+  {"name": "Plug (180)", "count": 422444, "kind": "packing", "unit": "pcs", "oldName": "Plug No 9"},
+  {"name": "Crown (220)", "count": 113050, "kind": "packing", "unit": "pcs", "oldName": "Crown Cork"},
+  {"name": "Carton CB 180/220", "count": 5151, "kind": "packing", "unit": "pcs", "oldName": "CB 180ml / 220g"},
+  {"name": "Carton CB (610/740)", "count": 7812, "kind": "packing", "unit": "pcs", "oldName": "CB 610ml / 740gm"},
+  {"name": "Carton CB (1.3/1 Ltr)", "count": 695, "kind": "packing", "unit": "pcs", "oldName": "CB 1.3kg"},
+  {"name": "Jerry Can 4Ltr", "count": 8016, "kind": "packing", "unit": "pcs", "sharedGroup": "jerry-shared"},
+  {"name": "Jerry Can 4.7kg", "count": 8016, "kind": "packing", "unit": "pcs", "sharedGroup": "jerry-shared"},
+  {"name": "Soyabean", "count": 446.30, "kind": "raw", "unit": "kg"},
+>>>>>>> 7937e95 (MAN-5: Fix exact Product Master names from live DB screenshot)
   {"name": "Potassium Sorbate", "count": 277.46, "kind": "raw", "unit": "kg"},
   {"name": "Citric Acid", "count": 623.20, "kind": "raw", "unit": "kg"},
   {"name": "Ascorbic Acid", "count": 30.80, "kind": "raw", "unit": "kg"},
   {"name": "Sodium Benzoate", "count": 1.16, "kind": "raw", "unit": "kg"},
+<<<<<<< HEAD
   {"name": "Oleoresin Garlic", "count": 29.49, "kind": "raw", "unit": "kg"},
   {"name": "Oleoresin Cinnamon", "count": 28.48, "kind": "raw", "unit": "kg"},
   {"name": "Oleoresin Coriander", "count": 38.79, "kind": "raw", "unit": "kg"},
   {"name": "Caramel Colour E150A", "count": 4757.50, "kind": "raw", "unit": "kg"},
+=======
+  {"name": "Garlic Oleoresin", "count": 29.49, "kind": "raw", "unit": "kg", "oldName": "Oleoresin Garlic"},
+  {"name": "Cinnamon Oleoresin", "count": 28.48, "kind": "raw", "unit": "kg", "oldName": "Oleoresin Cinnamon"},
+  {"name": "Coriander Oleoresin", "count": 38.79, "kind": "raw", "unit": "kg", "oldName": "Oleoresin Coriander"},
+  {"name": "Caramel Colour (E150A)", "count": 4757.50, "kind": "raw", "unit": "kg", "oldName": "Caramel Colour E150A"},
+>>>>>>> 7937e95 (MAN-5: Fix exact Product Master names from live DB screenshot)
   {"name": "Black Salt", "count": 100, "kind": "raw", "unit": "kg"}
 ]
