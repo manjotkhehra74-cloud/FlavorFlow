@@ -35,9 +35,17 @@ if (src.includes('[packing] material update audit queued')) {
   process.exit(0);
 }
 
-// Match only the material PUT handler's UPDATE audit followed by its success
-// response. Refuse to edit if the live route differs, rather than guessing.
-const pattern = /(\n\s*)audit\(db,\s*req\.user,\s*'UPDATE',\s*'packing-material',\s*id,[\s\S]*?\);\s*\n\s*res\.json\(\{\s*ok:\s*true\s*\}\);/;
+// Locate only the material PUT handler's UPDATE audit and its success
+// response. The live route has had small formatting/string changes over time,
+// so use structural anchors rather than matching the entire message text.
+const auditStart = /audit\(\s*db\s*,\s*req\.user\s*,\s*['\"]UPDATE['\"]\s*,\s*['\"]packing-material['\"]\s*,\s*id\s*,/;
+const am = auditStart.exec(src);
+const responseRe = /res\.json\(\{\s*ok\s*:\s*true\s*\}\);/g;
+let responseMatch = null;
+if (am) {
+  responseRe.lastIndex = am.index;
+  responseMatch = responseRe.exec(src);
+}
 const replacement = [
   '  // Respond before notification fan-out so a stock edit cannot sit behind',
   '  // a slow SQLite/user-notification write until the mobile HTTP timeout.',
@@ -53,11 +61,11 @@ const replacement = [
   '  });',
 ].join('\n');
 
-if (!pattern.test(src)) {
-  console.error('FATAL: material PUT audit/response anchor not found; route was not changed');
+if (!am || !responseMatch || responseMatch.index <= am.index) {
+  console.error('FATAL: material PUT audit/response anchors not found; route was not changed');
   process.exit(2);
 }
-src = src.replace(pattern, replacement);
+src = src.slice(0, am.index) + replacement + src.slice(responseMatch.index + responseMatch[0].length);
 fs.writeFileSync(route, src);
 try {
   cp.execFileSync(process.execPath, ['--check', route], { stdio: 'inherit' });
