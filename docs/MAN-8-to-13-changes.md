@@ -19,3 +19,13 @@ Branch: `arena/fc479533-flavorflow`
 - A rejected entry (for example stock rule or a duplicate batch code) → "Needs review" with the server message; Retry works after the cause is fixed.
 - Settings → Daily entry reminder → pick a time 2–3 minutes ahead → notification arrives at that minute; change the time → only one reminder.
 - Phone notifications blocked → Settings shows OFF; tapping it opens the permission request or the phone's app settings.
+
+## Conflict policy (MAN-13)
+- Offline entries are **new records** (a dispatch, a receipt, a stock count, an adjustment request). A phone never edits an existing record offline, so it cannot overwrite another device's change.
+- A **stock count** is set-to-count (absolute quantity, no deduction). It is applied when it syncs; the stock ledger shows it like any other count.
+- If the server rejects an entry when it syncs (for example a duplicate batch code, a stock rule, or missing permission), it is kept as **Needs review** with the server message. Nothing is retried automatically after a rejection; the person decides Retry or Discard.
+- A repeated send of the same entry never creates a second record when `tools/ff-idempotency.sh` is installed.
+
+## Decision to confirm (MAN-9)
+- `docs/PRODUCTIVITY_LABOUR_API.md` says CB = sum of `produced_cb`. This change counts tray production as CB equivalents (`produced_trays × bottles_per_tray ÷ bottles_per_cb`), because MAN-9 asks that KG and CB match the pack configuration and trays are real production. If the API doc is the rule, the tray conversion must be reverted.
+- The conversion uses `bottles_per_tray` and `bottles_per_cb` from Products. Check those values for Soya Sauce 740gm before comparing totals.
