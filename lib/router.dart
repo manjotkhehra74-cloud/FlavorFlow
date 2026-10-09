@@ -17,6 +17,7 @@ import 'features/dispatch/dispatch_detail_page.dart';
 import 'features/dispatch/dispatch_page.dart';
 import 'features/inventory/inventory_page.dart';
 import 'features/notifications/notifications_page.dart';
+import 'features/sync/sync_page.dart';
 import 'features/packing/loss_page.dart';
 import 'features/packing/packing_page.dart';
 import 'features/production/production_detail_page.dart';
@@ -160,6 +161,7 @@ GoRouter buildRouter(AuthController auth) {
           GoRoute(path: '/users', builder: (c, s) => const UsersPage()),
           GoRoute(path: '/audit', builder: (c, s) => const AuditPage()),
           GoRoute(path: '/notifications', builder: (c, s) => const NotificationsPage()),
+          GoRoute(path: '/sync', builder: (c, s) => const SyncPage()), // MAN-13 offline entries
           GoRoute(path: '/settings', builder: (c, s) => const SettingsPage()),
           GoRoute(path: '/subscription', builder: (c, s) => const SubscriptionPage()),
         ],

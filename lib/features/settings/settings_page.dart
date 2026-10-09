@@ -2,20 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../core/app_settings.dart';
 import '../../core/biometric.dart';
 import '../../core/company.dart';
 import '../../core/format.dart';
-import '../../core/hrmate.dart';
 import '../../core/notifier.dart';
+import '../../core/offline_queue.dart';
 import '../../core/i18n.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
 import '../../ui/app_shell.dart' show LanguageDialog, CompanyProfileDialog;
 import '../../ui/widgets.dart';
-import '../hrmate/hrmate_widgets.dart';
 
 /// Settings — one place for every per-user option:
 /// language · biometric login · two-factor auth (authenticator app) ·
@@ -31,6 +31,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _bioEnabled = false;
   bool? _totpEnabled; // null = unknown/server not patched
   bool _totpBusy = false; // blocks duplicate setup/disable requests per account
+  bool? _notifOn; // phone notification permission (null = still checking)
 
   @override
   void initState() {
@@ -46,9 +47,9 @@ class _SettingsPageState extends State<SettingsPage> {
       final j = await context.read<AuthController>().api.get('/auth/totp/status');
       totp = (j as Map)['enabled'] == true;
     } catch (_) {/* server route optional until patched */}
-    if (mounted) HrMate.instance.syncCompany(context.read<AuthController>().api); // company HRMate link (optional route)
+    final notif = await PhoneNotifier.notificationsAllowed();
     if (!mounted) return;
-    setState(() { _bioAvailable = avail; _bioEnabled = enabled; _totpEnabled = totp; });
+    setState(() { _bioAvailable = avail; _bioEnabled = enabled; _totpEnabled = totp; _notifOn = notif; });
   }
 
   Future<void> _toggleBiometrics() async {
@@ -104,6 +105,70 @@ class _SettingsPageState extends State<SettingsPage> {
       if (mounted) setState(() => _totpBusy = false);
     }
     _refresh();
+  }
+
+  /// 12-hour label for the reminder time, e.g. 5:30 PM.
+  String _clock(int h, int m) {
+    final suffix = h >= 12 ? 'PM' : 'AM';
+    final hour12 = h % 12 == 0 ? 12 : h % 12;
+    return '$hour12:${m.toString().padLeft(2, '0')} $suffix';
+  }
+
+  Future<void> _toggleReminder(AppSettings settings, bool on) async {
+    if (!on) {
+      await settings.setDailyReminder(false, settings.dailyReminderHour, minute: settings.dailyReminderMinute);
+      await Reminders.disableAll();
+      if (mounted) showOk(context, 'Reminders off.');
+      return;
+    }
+    await _changeReminderTime(settings);
+  }
+
+  /// Hour + minute picker (MAN-10), then save and re-schedule the daily alarm.
+  Future<void> _changeReminderTime(AppSettings settings) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: settings.dailyReminderHour, minute: settings.dailyReminderMinute),
+      helpText: 'Reminder time',
+    );
+    if (picked == null) return;
+    await settings.setDailyReminder(true, picked.hour, minute: picked.minute);
+    await Reminders.enableDaily(picked.hour, picked.minute); // same id → replaces the old alarm
+    await Reminders.enableMonthEnd();
+    final allowed = await PhoneNotifier.notificationsAllowed();
+    if (!mounted) return;
+    if (!allowed) await _notificationGuidance();
+    if (!mounted) return;
+    setState(() => _notifOn = allowed);
+    showOk(context, 'Reminder set — roz ${_clock(picked.hour, picked.minute)} + month-end.');
+  }
+
+  /// MAN-12: explain what to do when the phone blocks notifications.
+  Future<void> _notificationGuidance() async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Notifications are off'),
+        content: const Text('FlavorFlow cannot show alerts or reminders until notifications are allowed. Open phone settings → Notifications → FlavorFlow and turn them on.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Later')),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              openAppSettings();
+            },
+            child: const Text('Open settings'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Ask for the notification permission; if the phone blocks it for good, open its settings.
+  Future<void> _enableNotifications() async {
+    final st = await Permission.notification.request();
+    if (st.isPermanentlyDenied) await openAppSettings();
+    await _refresh();
   }
 
   @override
@@ -205,37 +270,12 @@ class _SettingsPageState extends State<SettingsPage> {
         icon: Icons.alarm_rounded,
         title: 'Daily entry reminder',
         subtitle: settings.dailyReminder
-            ? 'ON — roz ${settings.dailyReminderHour > 12 ? settings.dailyReminderHour - 12 : settings.dailyReminderHour} ${settings.dailyReminderHour >= 12 ? 'PM' : 'AM'} vaje yaad karauga (+ month-end ${CompanyProfile.usesLossPct ? 'Loss% close' : 'stock closing'})'
+            ? 'ON — roz ${_clock(settings.dailyReminderHour, settings.dailyReminderMinute)} vaje yaad karauga (+ month-end ${CompanyProfile.usesLossPct ? 'Loss% close' : 'stock closing'}) · tap karke time badlo'
             : 'OFF — production/dispatch entry da roz da reminder',
+        onTap: settings.dailyReminder ? () => _changeReminderTime(settings) : null,
         trailing: Switch(
           value: settings.dailyReminder,
-          onChanged: (v) async {
-            if (v) {
-              final hour = await showDialog<int>(
-                context: context,
-                builder: (ctx) => SimpleDialog(
-                  title: Text(tr('Reminder time')),
-                  children: [
-                    for (final h in [9, 12, 17, 18, 20])
-                      SimpleDialogOption(
-                        onPressed: () => Navigator.pop(ctx, h),
-                        child: Text(h > 12 ? '${h - 12}:00 PM' : h == 12 ? '12:00 PM' : '$h:00 AM'),
-                      ),
-                  ],
-                ),
-              );
-              if (hour == null) return;
-              await settings.setDailyReminder(true, hour);
-              await Reminders.enableDaily(hour);
-              await Reminders.enableMonthEnd();
-              if (context.mounted) showOk(context, 'Reminder set — roz + month-end.');
-            } else {
-              await settings.setDailyReminder(false, settings.dailyReminderHour);
-              await Reminders.disableAll();
-              if (context.mounted) showOk(context, 'Reminders off.');
-            }
-            setState(() {});
-          },
+          onChanged: (v) => _toggleReminder(settings, v),
         ),
       ),
       _tile(
@@ -244,6 +284,17 @@ class _SettingsPageState extends State<SettingsPage> {
         subtitle: settings.showNotifBadge ? 'ON — unread count on the bell icon' : 'OFF — bell stays clean',
         trailing: Switch(value: settings.showNotifBadge, onChanged: (v) => settings.setShowNotifBadge(v)),
         onTap: () => settings.setShowNotifBadge(!settings.showNotifBadge),
+      ),
+
+      _tile(
+        icon: Icons.notifications_none_rounded,
+        title: 'Phone notifications',
+        subtitle: _notifOn == null
+            ? 'Checking…'
+            : _notifOn!
+                ? 'ON — alerts & reminders show on this phone'
+                : 'OFF — tap to allow (needed for alerts & reminders)',
+        onTap: _notifOn == false ? _enableNotifications : null,
       ),
 
       _section('SECURITY'),
@@ -302,49 +353,29 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ],
 
-      _section('HRMATE (ATTENDANCE)'),
-      Builder(builder: (context) {
-        final hr = context.watch<HrMate>();
-        final today = hr.cached();
-        final isAdmin = session != null && (session.role == 'super_admin' || session.role == 'admin');
-        final companyMode = hr.companySupported == true; // ERP server has the ff-hrmate patch
-        final canEdit = companyMode ? isAdmin : true; // device mode: anyone on this phone
-        final todayTxt = today == null || today.present == null
-            ? ''
-            : ' · ${tr('Present today')}: ${qtyInt(today.present)}${today.total == null ? '' : ' / ${qtyInt(today.total)}'}';
-        final String subtitle;
-        if (hr.viaCompany) {
-          subtitle = '${hr.host} · ${tr('Whole company')}${hr.companyUpdatedBy == null ? '' : ' · ${tr('set by')} ${hr.companyUpdatedBy}'}$todayTxt';
-        } else if (hr.configured) {
-          subtitle = '${hr.host} · ${tr('This device only')}$todayTxt';
-        } else if (companyMode && !isAdmin) {
-          subtitle = 'Not connected yet — ask your Admin to connect HRMate for the company';
-        } else {
-          subtitle = 'Attendance, leaves & punch-in app — shows today\'s head-count on the dashboard and per batch (read-only)';
-        }
-        return Column(children: [
-          _tile(
-            icon: Icons.badge_outlined,
-            title: hr.configured ? 'HRMate connected' : 'Connect HRMate',
-            subtitle: subtitle,
-            trailing: hr.configured
-                ? const Icon(Icons.check_circle_rounded, color: AppColors.green)
-                : canEdit
-                    ? const Icon(Icons.add_link_rounded)
-                    : null,
-            onTap: canEdit ? () => showDialog(context: context, builder: (_) => const HrMateConnectDialog()) : null,
-          ),
-          if (hr.configured)
-            _tile(
-              icon: Icons.open_in_new_rounded,
-              title: 'Open HRMate',
-              subtitle: 'Punch-in, leave requests, attendance registers',
-              onTap: () => openHrMate(context),
-            ),
-        ]);
-      }),
-
       _section('CONNECTION'),
+      ListenableBuilder(
+        listenable: OfflineQueue.instance,
+        builder: (context, _) {
+          final q = OfflineQueue.instance;
+          final String sub;
+          if (!q.online) {
+            sub = 'Offline — ${q.pendingCount} waiting on this phone';
+          } else if (q.failed.isNotEmpty) {
+            sub = '${q.failed.length} need review · ${q.pendingCount} waiting';
+          } else if (q.pendingCount > 0) {
+            sub = '${q.pendingCount} waiting to sync';
+          } else {
+            sub = 'Online · nothing waiting';
+          }
+          return _tile(
+            icon: Icons.cloud_sync_outlined,
+            title: 'Offline entries (sync)',
+            subtitle: sub,
+            onTap: () => context.push('/sync'),
+          );
+        },
+      ),
       _tile(
         icon: Icons.dns_outlined,
         title: 'ERP server',
@@ -500,224 +531,3 @@ class _TotpSetupDialogState extends State<_TotpSetupDialog> {
   }
 }
 
-
-/// Connect / test / disconnect the HRMate attendance bridge (per device).
-class HrMateConnectDialog extends StatefulWidget {
-  const HrMateConnectDialog({super.key});
-  @override
-  State<HrMateConnectDialog> createState() => _HrMateConnectDialogState();
-}
-
-class _HrMateConnectDialogState extends State<HrMateConnectDialog> {
-  late final TextEditingController _base;
-  late final TextEditingController _token;
-  late final TextEditingController _wage;
-  bool _busy = false;
-  bool _hideToken = true;
-  String? _result; // last test outcome (already translated)
-  bool _resultOk = false;
-
-  /// Company mode = the ERP server stores the link for every user (ff-hrmate
-  /// patch present); device mode = this phone only (unpatched server).
-  bool get _company => HrMate.instance.companySupported == true;
-
-  @override
-  void initState() {
-    super.initState();
-    final hr = HrMate.instance;
-    final base = _company ? hr.companyBase : hr.base;
-    final wage = _company ? hr.companyWage : hr.wage;
-    _base = TextEditingController(text: base.isNotEmpty ? base : HrMate.defaultBase);
-    _token = TextEditingController(text: _company ? '' : hr.token);
-    _wage = TextEditingController(text: wage > 0 ? wage.toStringAsFixed(wage % 1 == 0 ? 0 : 2) : '');
-  }
-
-  @override
-  void dispose() {
-    _base.dispose();
-    _token.dispose();
-    _wage.dispose();
-    super.dispose();
-  }
-
-  Future<void> _test() async {
-    setState(() { _busy = true; _result = null; });
-    // Company mode tests THROUGH the ERP server (stored key re-used when the
-    // field is left empty); device mode calls HRMate straight from the phone.
-    final r = _company
-        ? await HrMate.instance.testCompany(rawBase: _base.text, key: _token.text)
-        : await HrMate.fetch(_base.text, _token.text, todayYmd());
-    if (!mounted) return;
-    setState(() {
-      _busy = false;
-      _resultOk = r.summary != null;
-      if (r.summary != null) {
-        final s = r.summary!;
-        _result = '${tr('Connection OK')} · ${tr('Present today')}: ${qtyInt(s.present ?? 0)}'
-            '${s.total == null ? '' : ' / ${qtyInt(s.total)}'}'
-            '${(s.onLeave ?? 0) > 0 ? ' · ${tr('On leave')}: ${qtyInt(s.onLeave)}' : ''}';
-      } else {
-        _result = '${tr(r.error ?? 'Could not reach HRMate')}${r.detail == null ? '' : ' (${r.detail})'}';
-      }
-    });
-  }
-
-  Future<void> _save() async {
-    if (HrMate.normalizeBase(_base.text).isEmpty) {
-      showErr(context, tr('HRMate address missing'));
-      return;
-    }
-    final wage = double.tryParse(_wage.text.trim().replaceAll(',', '')) ?? 0;
-    if (_company) {
-      if (_token.text.trim().isEmpty && !HrMate.instance.companyHasKey) {
-        showErr(context, tr('API key missing'));
-        return;
-      }
-      setState(() => _busy = true);
-      final err = await HrMate.instance.saveCompany(rawBase: _base.text, key: _token.text, wage: wage, keepKey: true);
-      if (!mounted) return;
-      setState(() => _busy = false);
-      if (err != null) { showErr(context, err); return; }
-    } else {
-      await HrMate.instance.save(_base.text, _token.text, wage: wage);
-      if (!mounted) return;
-    }
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    Navigator.pop(context);
-    messenger?.showSnackBar(SnackBar(content: Text(_company ? tr('HRMate connected for the whole company') : tr('HRMate connected'))));
-  }
-
-  Future<void> _disconnect() async {
-    if (_company) {
-      setState(() => _busy = true);
-      final err = await HrMate.instance.disconnectCompany();
-      if (!mounted) return;
-      setState(() => _busy = false);
-      if (err != null) { showErr(context, err); return; }
-    } else {
-      await HrMate.instance.disconnect();
-      if (!mounted) return;
-    }
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    Navigator.pop(context);
-    messenger?.showSnackBar(SnackBar(content: Text(tr('HRMate disconnected'))));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final hr = HrMate.instance;
-    final connected = _company ? hr.viaCompany : hr.base.isNotEmpty;
-    final keyHint = _company && hr.companyHasKey ? tr('saved on the server — leave empty to keep') : tr('optional');
-    return AlertDialog(
-      title: Row(children: [
-        const Icon(Icons.badge_outlined, size: 22),
-        const SizedBox(width: 10),
-        Expanded(child: Text(tr(connected ? 'HRMate connected' : 'Connect HRMate'))),
-      ]),
-      content: SizedBox(
-        width: 420,
-        child: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(tr('FlavorFlow only READS the daily head-count from HRMate (present / absent / on leave). Nothing is written back. Leave the key empty if your HRMate does not need one.'),
-                style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
-            const SizedBox(height: 8),
-            Row(children: [
-              Icon(_company ? Icons.apartment_rounded : Icons.phone_android_rounded, size: 16, color: scheme.primary),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  _company
-                      ? tr('Whole company — saved on your ERP server; every user sees the numbers, the key never leaves the server')
-                      : tr('This device only — your ERP server is not updated for a company-wide link yet'),
-                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: scheme.primary),
-                ),
-              ),
-            ]),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _base,
-              keyboardType: TextInputType.url,
-              autocorrect: false,
-              decoration: InputDecoration(labelText: tr('HRMate address'), hintText: HrMate.defaultBase, prefixIcon: const Icon(Icons.link_rounded)),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _token,
-              obscureText: _hideToken,
-              autocorrect: false,
-              enableSuggestions: false,
-              decoration: InputDecoration(
-                labelText: '${tr('API key')} ($keyHint)',
-                prefixIcon: const Icon(Icons.vpn_key_outlined),
-                suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
-                  IconButton(
-                    tooltip: tr('Paste'),
-                    icon: const Icon(Icons.content_paste_rounded, size: 19),
-                    onPressed: () async {
-                      final d = await Clipboard.getData(Clipboard.kTextPlain);
-                      final v = d?.text?.trim() ?? '';
-                      if (v.isNotEmpty) setState(() => _token.text = v);
-                    },
-                  ),
-                  IconButton(
-                    icon: Icon(_hideToken ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20),
-                    onPressed: () => setState(() => _hideToken = !_hideToken),
-                  ),
-                ]),
-              ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _wage,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(
-                labelText: '${tr('Average daily wage per worker')} (₹, ${tr('optional')})',
-                prefixIcon: const Icon(Icons.currency_rupee_rounded),
-                helperText: U.ize(tr('Used only for the approximate labour cost per carton shown on a batch')),
-                helperMaxLines: 2,
-              ),
-            ),
-            if (_result != null) ...[
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
-                decoration: BoxDecoration(
-                  color: (_resultOk ? AppColors.green : scheme.error).withValues(alpha: 0.09),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(children: [
-                  Icon(_resultOk ? Icons.check_circle_rounded : Icons.error_outline_rounded, size: 18, color: _resultOk ? AppColors.green : scheme.error),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(_result!, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
-                ]),
-              ),
-            ],
-          ]),
-        ),
-      ),
-      actionsAlignment: MainAxisAlignment.spaceBetween,
-      actions: [
-        if (connected)
-          TextButton.icon(
-            onPressed: _busy ? null : _disconnect,
-            style: TextButton.styleFrom(foregroundColor: scheme.error),
-            icon: const Icon(Icons.link_off_rounded, size: 18),
-            label: Text(tr('Disconnect')),
-          )
-        else
-          TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('Cancel'))),
-        Wrap(spacing: 6, children: [
-          OutlinedButton.icon(
-            onPressed: _busy ? null : _test,
-            icon: _busy
-                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.network_check_rounded, size: 18),
-            label: Text(tr('Test connection')),
-          ),
-          FilledButton(onPressed: _busy ? null : _save, child: Text(tr('Save'))),
-        ]),
-      ],
-    );
-  }
-}

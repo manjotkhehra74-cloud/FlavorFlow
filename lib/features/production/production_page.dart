@@ -9,6 +9,7 @@ import '../../core/i18n.dart';
 import '../../core/item_code.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
+import '../../core/offline_queue.dart';
 import '../../ui/widgets.dart';
 
 /// The factory's shrink-tray sizes — a fixed list, the SAME for every
@@ -812,7 +813,15 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
                     if (editing) {
                       await context.read<AuthController>().api.put('/production/batches/${widget.batch!['id']}', body);
                     } else {
-                      await context.read<AuthController>().api.post('/production/batches', body);
+                      // MAN-13: no connection → kept on this phone and sent automatically later.
+                      final sent = await OfflineQueue.instance.submit(
+                        context.read<AuthController>(),
+                        method: 'POST',
+                        path: '/production/batches',
+                        label: 'Production batch',
+                        body: body,
+                      );
+                      if (mounted && sent.queued) showOk(context, 'Batch saved on this phone — it will sync when internet returns.');
                     }
                     if (mounted) Navigator.pop(context, true);
                   } catch (e) {

@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../core/app_settings.dart';
 import '../core/notifier.dart';
+import '../core/offline_queue.dart';
 import '../core/company.dart';
 import '../core/industry_pack.dart';
 import '../core/i18n.dart';
@@ -113,6 +114,58 @@ void reconcileNav(List<Map<String, dynamic>> nav, AuthController auth) {
   }
 }
 
+/// Status strip under the app bar (MAN-13): offline / waiting / needs-review
+/// state of entries kept on this phone. Tap opens "Offline entries".
+class _SyncBanner extends StatelessWidget {
+  const _SyncBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: OfflineQueue.instance,
+      builder: (context, _) {
+        final q = OfflineQueue.instance;
+        final waiting = q.pendingCount;
+        final review = q.failed.length;
+        if (q.online && waiting == 0 && review == 0) return const SizedBox.shrink();
+        final String text;
+        final Color color;
+        final IconData icon;
+        if (!q.online) {
+          text = waiting == 0
+              ? 'Offline — new entries will be saved on this phone and synced later'
+              : 'Offline — $waiting ${waiting == 1 ? 'entry' : 'entries'} saved on this phone, will sync when internet returns';
+          color = AppColors.amber;
+          icon = Icons.cloud_off_outlined;
+        } else if (review > 0) {
+          text = '$review ${review == 1 ? 'entry' : 'entries'} not accepted by the server — tap to review';
+          color = AppColors.red;
+          icon = Icons.error_outline_rounded;
+        } else {
+          text = '$waiting ${waiting == 1 ? 'entry' : 'entries'} waiting to sync…';
+          color = AppColors.blue;
+          icon = Icons.sync_rounded;
+        }
+        return Material(
+          color: color.withValues(alpha: 0.12),
+          child: InkWell(
+            onTap: () => context.push('/sync'),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              child: Row(children: [
+                Icon(icon, size: 17, color: color),
+                const SizedBox(width: 9),
+                Expanded(child: Text(text, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: color))),
+                Icon(Icons.chevron_right_rounded, size: 18, color: color),
+              ]),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 /// Authenticated shell: dark enterprise sidebar (desktop) / drawer (mobile),
 /// slim top bar with live notification badge and the user's role identity.
 class AppShell extends StatefulWidget {
@@ -123,7 +176,7 @@ class AppShell extends StatefulWidget {
   State<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> {
+class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   int _unread = 0;
   Timer? _timer;
   bool _polling = false; // in-flight guard — never stack polls
@@ -131,6 +184,9 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    final queueAuth = context.read<AuthController>();
+    OfflineQueue.instance.attach(queueAuth.api, queueAuth.session?.email);
     NotificationBadge.resetForAccount();
     _unread = NotificationBadge.count.value;
     NotificationBadge.count.addListener(_onBadgeChanged);
@@ -176,8 +232,19 @@ class _AppShellState extends State<AppShell> {
     }
   }
 
+  /// Back in the foreground: check alerts now and send waiting offline entries.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadUnread();
+      OfflineQueue.instance.flush();
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    OfflineQueue.instance.detach();
     _timer?.cancel();
     NotificationBadge.count.removeListener(_onBadgeChanged);
     CompanyProfile.rev.removeListener(_onCompanyChanged);
@@ -322,7 +389,12 @@ class _AppShellState extends State<AppShell> {
       drawer: phone
           ? _MobileModulesDrawer(nav: nav, selected: selected, session: session, onTap: goTo, onLogout: _logout)
           : Drawer(backgroundColor: Shell.bg, child: SafeArea(child: sidebar)),
-      body: RepaintBoundary(child: page),
+      body: RepaintBoundary(
+        child: Column(children: [
+          const _SyncBanner(),
+          Expanded(child: page),
+        ]),
+      ),
       bottomNavigationBar: phone
           ? _MobileBottomBar(
               currentPath: path,

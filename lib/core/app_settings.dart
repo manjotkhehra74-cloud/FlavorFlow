@@ -26,6 +26,7 @@ class AppSettings extends ChangeNotifier {
   bool showNotifBadge = true;
   bool dailyReminder = false;
   int dailyReminderHour = 17; // 5 PM
+  int dailyReminderMinute = 0;
 
   Timer? _autoTimer;
 
@@ -78,6 +79,7 @@ class AppSettings extends ChangeNotifier {
       showNotifBadge = p.getBool('set_notif_badge') ?? true;
       dailyReminder = p.getBool('set_daily_reminder') ?? false;
       dailyReminderHour = p.getInt('set_daily_reminder_hour') ?? 17;
+      dailyReminderMinute = p.getInt('set_daily_reminder_minute') ?? 0;
       _watch();
       notifyListeners();
     } catch (_) {}
@@ -112,14 +114,17 @@ class AppSettings extends ChangeNotifier {
     try { (await SharedPreferences.getInstance()).setBool('set_notif_badge', v); } catch (_) {}
   }
 
-  Future<void> setDailyReminder(bool v, int hour) async {
+  /// Save the daily reminder switch and time (MAN-10: hour AND minute).
+  Future<void> setDailyReminder(bool v, int hour, {int minute = 0}) async {
     dailyReminder = v;
     dailyReminderHour = hour;
+    dailyReminderMinute = minute;
     notifyListeners();
     try {
       final p = await SharedPreferences.getInstance();
       await p.setBool('set_daily_reminder', v);
       await p.setInt('set_daily_reminder_hour', hour);
+      await p.setInt('set_daily_reminder_minute', minute);
     } catch (_) {}
   }
 }

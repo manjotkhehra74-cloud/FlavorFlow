@@ -31,6 +31,23 @@ const _lineSkuRules = <String, Set<String>>{
 
 String _skuRuleKey(String value) => value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
 
+/// MAN-9 — CB and net KG of one completed batch, from the SKU's packing config.
+/// Trays are production too: 1 tray = bottles_per_tray bottles and 1 CB =
+/// bottles_per_cb bottles, so trays become CB equivalents and KG = CB × net kg
+/// per CB (the rule in docs/PRODUCTIVITY_LABOUR_API.md). The with-carton weight
+/// is never read here.
+({double cb, double kg}) _batchOutput(Map<String, dynamic> batch, Map<String, dynamic>? product) {
+  double num2(Object? v) => v is num ? v.toDouble() : (double.tryParse('${v ?? 0}') ?? 0.0);
+  final cartons = num2(batch['produced_cb'] ?? batch['producedCb']);
+  final trays = num2(batch['produced_trays'] ?? batch['producedTrays']);
+  final bottlesPerCb = num2(product?['bottles_per_cb'] ?? batch['bottles_per_cb'] ?? batch['bottlesPerCb']);
+  final bottlesPerTray = num2(product?['bottles_per_tray'] ?? batch['bottles_per_tray'] ?? batch['bottlesPerTray']);
+  final netPerCb = num2(product?['net_weight_per_cb'] ?? product?['weight_without_cb'] ?? product?['netWeightPerCb'] ?? batch['net_weight_per_cb'] ?? batch['weight_without_cb']);
+  final trayCb = (bottlesPerCb > 0 && bottlesPerTray > 0) ? trays * bottlesPerTray / bottlesPerCb : 0.0;
+  final cb = cartons + trayCb;
+  return (cb: cb, kg: cb * netPerCb);
+}
+
 String? _lineForSku(String sku) {
   final key = _skuRuleKey(sku).replaceAll(' ', '');
   // Production history sometimes stores the pack size as gm/ml/Ltr instead
@@ -407,12 +424,12 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
       final batchShift = '${batch['shift'] ?? ''}';
       if (_shiftFilter != 'Combined' && batchShift.isNotEmpty && batchShift.toLowerCase() != _shiftFilter.toLowerCase()) continue;
       final label = _productivityLabel(source);
-      final cb = _n(batch['produced_cb'] ?? batch['producedCb']).toDouble();
-      final net = _n(product?['net_weight_per_cb'] ?? product?['weight_without_cb'] ?? product?['netWeightPerCb'] ?? batch['net_weight_per_cb'] ?? batch['weight_without_cb']).toDouble();
+      final out = _batchOutput(batch, product); // MAN-9: trays count as CB
+      final cb = out.cb;
       final metricKey = '$label\u0000${lineLabel.toLowerCase()}';
       final row = metrics.putIfAbsent(metricKey, () => {'sku': label, 'line': lineLabel, 'cb': 0.0, 'kg': 0.0, 'labourCb': <String, double>{}});
       row['cb'] = _n(row['cb']) + cb;
-      row['kg'] = _n(row['kg']) + cb * net;
+      row['kg'] = _n(row['kg']) + out.kg;
       final runShift = batchShift.isEmpty ? '' : batchShift;
       final skuKeys = <String>{
         if (sourcePid.isNotEmpty) sourcePid,
@@ -532,9 +549,9 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
       if (!_skuAllowedForLine(line, sku)) continue;
       if (_lineFilter.text.trim().isNotEmpty && line.toLowerCase() != _lineFilter.text.trim().toLowerCase()) continue;
       final shift = '${batch['shift'] ?? ''}'.trim();
-      final cb = _n(batch['produced_cb'] ?? batch['producedCb']).toDouble();
+      final out = _batchOutput(batch, product); // MAN-9: trays count as CB
       final net = _analysisNetWeight(product, batch);
-      addToSections(shift, sku, cb: cb, kg: cb * net, net: net);
+      addToSections(shift, sku, cb: out.cb, kg: out.kg, net: net);
     }
 
     for (final entry in labour) {

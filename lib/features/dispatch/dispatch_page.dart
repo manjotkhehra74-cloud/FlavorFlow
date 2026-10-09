@@ -18,6 +18,7 @@ import '../../core/i18n.dart';
 import '../../core/item_code.dart';
 import '../../state/auth.dart';
 import '../../ui/scan_page.dart';
+import '../../core/offline_queue.dart';
 import '../../ui/widgets.dart';
 import 'dispatch_pdf.dart';
 
@@ -837,14 +838,31 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
     setState(() => saving = true);
     try {
       final loc = await _locationStamp();
-      final json = await context.read<AuthController>().api.post('/dispatch', {
-        'dispatchDate': ymd(date),
-        'destination': _destination,
-        'truckNumber': truck.text.trim(),
-        'remarks': ('${remarks.text.trim()} $loc').trim(),
-        'items': list,
-      });
+      // MAN-13: no connection → kept on this phone and sent automatically later.
+      final sent = await OfflineQueue.instance.submit(
+        context.read<AuthController>(),
+        method: 'POST',
+        path: '/dispatch',
+        label: 'Dispatch',
+        body: {
+          'dispatchDate': ymd(date),
+          'destination': _destination,
+          'truckNumber': truck.text.trim(),
+          'remarks': ('${remarks.text.trim()} $loc').trim(),
+          'items': list,
+        },
+      );
       if (!mounted) return;
+      if (sent.queued) {
+        rememberDest(_destination);
+        _clearDraft();
+        _hasDraft = false;
+        for (final l in lines) { l.cartons.clear(); l.trays.clear(); l.batchCode.clear(); l.batchId = null; }
+        remarks.clear();
+        showOk(context, 'Dispatch saved on this phone — it will sync automatically when internet returns.');
+        return;
+      }
+      final json = sent.json;
       final id = (json as Map)['id'];
       rememberDest(_destination); // company's own list grows automatically
       _clearDraft(); // success — draft is no longer needed (memory + disk)

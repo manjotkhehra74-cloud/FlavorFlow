@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -11,6 +12,8 @@ class ApiException implements Exception {
   bool get unauthenticated => status == 401;
   /// SaaS subscription ended / suspended / plan limit (gateway 402).
   bool get paymentRequired => status == 402;
+  /// No connection / timeout — the request may not have reached the server.
+  bool get isNetworkError => status == -1;
   @override
   String toString() => message;
 }
@@ -105,8 +108,12 @@ class ApiClient {
       };
 
   Future<dynamic> get(String path) => _send('GET', path);
-  Future<dynamic> post(String path, [Map<String, dynamic>? body]) => _send('POST', path, body);
-  Future<dynamic> put(String path, [Map<String, dynamic>? body]) => _send('PUT', path, body);
+  /// [idempotencyKey] (MAN-13): sent as `Idempotency-Key` so a server with the
+  /// ff-idempotency patch answers a repeated request with the first reply.
+  Future<dynamic> post(String path, [Map<String, dynamic>? body, String? idempotencyKey]) =>
+      _send('POST', path, body, idempotencyKey);
+  Future<dynamic> put(String path, [Map<String, dynamic>? body, String? idempotencyKey]) =>
+      _send('PUT', path, body, idempotencyKey);
   Future<dynamic> delete(String path) => _send('DELETE', path);
 
   /// Raw bytes (e.g. the Excel stock report).
@@ -123,7 +130,13 @@ class ApiClient {
     }
   }
 
-  Future<dynamic> _send(String method, String path, [Map<String, dynamic>? body]) async {
+  Map<String, String> _headersWith(String? idempotencyKey) => {
+        ..._headers,
+        // Native apps only: a custom header on web could need a CORS preflight change.
+        if (!kIsWeb && idempotencyKey != null && idempotencyKey.isNotEmpty) 'Idempotency-Key': idempotencyKey,
+      };
+
+  Future<dynamic> _send(String method, String path, [Map<String, dynamic>? body, String? idempotencyKey]) async {
     final base = baseUrl;
     if (base == null) {
       throw ApiException(-2, 'Server address is not set. Tap the gear icon on the login screen and enter your ERP address.');
@@ -135,9 +148,9 @@ class ApiClient {
     Future<http.Response> requestOnce() {
       switch (method) {
         case 'POST':
-          return http.post(uri, headers: _headers, body: jsonEncode(body ?? {}));
+          return http.post(uri, headers: _headersWith(idempotencyKey), body: jsonEncode(body ?? {}));
         case 'PUT':
-          return http.put(uri, headers: _headers, body: jsonEncode(body ?? {}));
+          return http.put(uri, headers: _headersWith(idempotencyKey), body: jsonEncode(body ?? {}));
         case 'DELETE':
           return http.delete(uri, headers: _headers);
         default:

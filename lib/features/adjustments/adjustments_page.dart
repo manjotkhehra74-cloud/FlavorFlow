@@ -9,6 +9,7 @@ import '../../core/format.dart';
 import '../../core/i18n.dart';
 import '../../core/item_code.dart';
 import '../../state/auth.dart';
+import '../../core/offline_queue.dart';
 import '../../ui/widgets.dart';
 
 /// Stock Adjustments — request corrections (IN/OUT) and track their status.
@@ -150,12 +151,20 @@ class _AdjustmentFormDialogState extends State<AdjustmentFormDialog> {
   Future<void> _save() async {
     setState(() => busy = true);
     try {
-      await context.read<AuthController>().api.post('/adjustments', {
-        'productId': productId,
-        'adjType': type,
-        'qtyCb': int.tryParse(cb.text) ?? 0,
-        'reason': reason.text.trim() + (photo != null ? ' [photo attached]' : ''),
-      });
+      // MAN-13: no connection → kept on this phone; the request still needs approval.
+      final sent = await OfflineQueue.instance.submit(
+        context.read<AuthController>(),
+        method: 'POST',
+        path: '/adjustments',
+        label: 'Stock adjustment request',
+        body: {
+          'productId': productId,
+          'adjType': type,
+          'qtyCb': int.tryParse(cb.text) ?? 0,
+          'reason': reason.text.trim() + (photo != null ? ' [photo attached]' : ''),
+        },
+      );
+      if (mounted && sent.queued) showOk(context, 'Request saved on this phone — it will sync when internet returns.');
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) showErr(context, e);
