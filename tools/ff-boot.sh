@@ -10,14 +10,15 @@
 #   → 2-3 min baad result browser vich:  https://flavorflow.co.in/download/boot-status.txt
 #   (poora log: VM → "Serial port 1 (console)" ya /var/log/ff-boot.log)
 #
-# Steps (arg naal chuno, default sab):  fixssh industry billing stockledger codes lossrestore hrmate dispatchfix batchfix2 delfix productfix batchrecon saasbilling demo web apk
+# Steps (arg naal chuno, default sab):  fixssh industry billing stockledger codes lossrestore dispatchfix batchfix2 delfix productfix batchrecon saasbilling demo web apk
 #   fixssh   — memory/OOM/swap snapshot, swap ensure, google-guest-agent + sshd restart
 #              (SSH-in-browser "Connection failed… retrying" aksar guest-agent/RAM karke)
 #   industry — tools/ff-saasindustry.sh (idempotent) + tenant /api/settings/company verify
 #   billing  — tools/ff-billing.sh: GST sales invoices module in the core (/api/billing)
 #   lossrestore — tools/ff-lossrestore.sh: Packing Loss % sheet back on the server menu (app gates it per industry / company)
-#   hrmate   — tools/ff-hrmate.sh: company-level HRMate attendance link in the core
-#              (/api/settings/hrmate admin-only + /api/hrmate/summary read-only proxy; key stays on the server)
+#   hrmate   — NOT in the default steps (MAN-11: HRMate integration dropped). Runs only if named
+#              explicitly: tools/ff-hrmate.sh re-adds the old /api/settings/hrmate + /api/hrmate/summary routes.
+#              To remove them use tools/ff-remove-hrmate.sh instead.
 #   dispatchfix — tools/ff-dispatchfix.sh: menu follows each user's OWN permissions (custom chips) +
 #              POST /api/dispatch/:id/void that works on the node:sqlite wrapper (SAVEPOINT; stock + batch back)
 #   batchrecon — tools/ff-batchrecon.sh: batch used_cb repaired from real dispatch lines (deleted/re-created
@@ -38,7 +39,7 @@ main() {
   WEB="${FF_WEB:-/opt/flavorflow-saas/web}"
   LOG=/var/log/ff-boot.log
   STATUS="$WEB/download/boot-status.txt"
-  STEPS="${*:-fixssh industry billing stockledger codes lossrestore hrmate dispatchfix batchfix2 delfix productfix batchrecon saasbilling demo web apk}"
+  STEPS="${*:-fixssh industry billing stockledger codes lossrestore dispatchfix batchfix2 delfix productfix batchrecon saasbilling demo web apk}"
   mkdir -p "$WEB/download"
   exec > >(tee -a "$LOG") 2>&1
   : > "$STATUS"; chmod 644 "$STATUS"

@@ -11,6 +11,7 @@ import '../../core/theme.dart';
 import '../../core/i18n.dart';
 import '../../core/item_code.dart';
 import '../../state/auth.dart';
+import '../../core/offline_queue.dart';
 import '../../ui/widgets.dart';
 import '../billing/item_history_page.dart' show showItemHistory;
 import '../reports/report_pdf.dart';
@@ -861,13 +862,21 @@ class _TxnDialogState extends State<_TxnDialog> {
     }
     setState(() => busy = true);
     try {
-      await context.read<AuthController>().api.post('/packing/${isReceive ? 'receive' : 'consume'}', {
-        'materialId': materialId,
-        if (!isReceive && productId != null) 'productId': productId,
-        'qty': num.tryParse(qty.text) ?? 0,
-        'reference': reference.text.trim(),
-        'remark': remark.text.trim(),
-      });
+      // MAN-13: no connection → kept on this phone and sent automatically later.
+      final sent = await OfflineQueue.instance.submit(
+        context.read<AuthController>(),
+        method: 'POST',
+        path: '/packing/${isReceive ? 'receive' : 'consume'}',
+        label: isReceive ? 'Packing receive' : 'Packing consume',
+        body: {
+          'materialId': materialId,
+          if (!isReceive && productId != null) 'productId': productId,
+          'qty': num.tryParse(qty.text) ?? 0,
+          'reference': reference.text.trim(),
+          'remark': remark.text.trim(),
+        },
+      );
+      if (mounted && sent.queued) showOk(context, 'Saved on this phone — it will sync when internet returns.');
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) showErr(context, e);

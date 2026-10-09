@@ -1,0 +1,36 @@
+# MAN-8 → MAN-13: what changed
+
+Branch: `arena/fc479533-flavorflow`
+
+| Issue | Status | What changed (app) | Needs on the server / by hand |
+|---|---|---|---|
+| MAN-8 Section-level permissions | In Review (server check pending) | Granular permission registry (`lib/core/app_permissions.dart`), grouped matrix in Users, router guards, client `can()` checks. Server side: `requirePerm` guards on routes and the granular key list in `rbac.js`. | Make sure `sudo bash tools/ff-permfix-granular.sh` has been run on the server (idempotent, backups first). Then test with a **non-Super-Admin** account: restricted pages and direct API calls must return 403. This test has not been done yet. |
+| MAN-9 Soya Sauce 740gm productivity | Code fixed, confirm on live data | `_batchOutput()` in `productivity_labour_page.dart`: trays (`produced_trays`) count as CB equivalents (`trays × bottles_per_tray ÷ bottles_per_cb`) and KG = CB × net kg per CB. The with-carton weight is never read. The Labour Analysis tab now uses the same batch calculation as the Productivity table; before, its Period Totals came from the server, which counts `produced_cb` only, so the two totals could differ. A red warning lists any SKU whose trays cannot be converted (bottles per tray or per CB is 0 in Products). | Check Soya Sauce 740gm in Products (bottles per tray, bottles per CB) first. Then the October totals must match on Productivity and Labour Analysis. The Excel export still comes from the server, which counts CB only (per the API doc). |
+| MAN-10 Daily reminder hour + minute | Done | Settings → Daily entry reminder opens a clock picker (hour and minute), shows the time, reschedules with the same alarm id (no duplicates), re-schedules on app start. `AppSettings.dailyReminderMinute`. | Nothing. |
+| MAN-11 Remove HRMate | Done in app | HRMate section, connect dialog, dashboard strip, batch labour row, provider and client code removed. Landing page footer link removed. `tools/ff-boot.sh` no longer runs the `hrmate` step by default, so a reboot does not re-add the routes. Android manifest comment no longer names HRMate. | Run `sudo bash tools/ff-remove-hrmate.sh` once on the server to remove the existing HRMate routes and the stored `hrmate` setting (backups first). `hrmate-mobile/` and `hrmate-mobile8/` are separate apps in this repo and were left untouched. `docs/HRMATE_APP_CONSTITUTION.md` and `docs/HRMATE_BRIDGE.md` are kept for now. |
+| MAN-12 Notifications | Partly (closed-app limit) | One phone notification per event: alerts are fingerprinted (title + body + route) and not shown twice within 24 h; the notification id comes from the fingerprint. Polling also runs when the app returns to the front. Settings shows the phone notification permission and opens phone settings when blocked. The client-side cause of the Dispatch repeats is not confirmed, so the dedupe covers identical alerts only. | Closed-app delivery needs a push service (FCM), which is not set up. Server duplicates (several writers) can still store extra rows; `tools/ff-notifdedup.sh` is the existing server cleanup. |
+| MAN-13 Offline entry + sync | Done for the listed entries | `lib/core/offline_queue.dart`: entries that cannot reach the server are kept in encrypted storage and sent once each with an `Idempotency-Key`; oldest first; retried every 20 s, on app resume and on "Sync now"; rejected entries show "Needs review" with Retry / Discard; each entry belongs to the account that captured it. Status banner under the app bar and the "Offline entries" page (Settings). | **Run `sudo bash tools/ff-idempotency.sh` on the server** before relying on offline entries (it makes a repeated key return the first saved reply). Covered: Dispatch, Production batch (create), Packing receive/consume, Stock receipt, Stock count (set-to-count), Stock adjustment request. Online-only by design: billing invoices/purchases/payments (GST numbering), products and packing master data, recipes, users/roles/2FA, approvals, cancel/void, batch start/complete/edit, loss sheet, labour sheet. |
+
+## Test checklist (manual)
+- Turn Wi-Fi and mobile data off → save a dispatch / receipt / stock count → banner says "Offline — … saved on this phone".
+- Close and reopen the app while still offline → entry is still listed under Settings → Offline entries.
+- Turn the network on → entry moves to "Synced" without re-entering it; the server has exactly one record.
+- Send the same entry again (Sync now) → still one record on the server.
+- A rejected entry (for example stock rule or a duplicate batch code) → "Needs review" with the server message; Retry works after the cause is fixed.
+- Settings → Daily entry reminder → pick a time 2–3 minutes ahead → notification arrives at that minute; change the time → only one reminder.
+- Phone notifications blocked → Settings shows OFF; tapping it opens the permission request or the phone's app settings.
+- MAN-8: log in as a non-Super-Admin user with only some permissions → hidden pages return to the dashboard, and direct API calls to other sections return 403.
+
+## Conflict policy (MAN-13)
+- Offline entries are **new records** (a dispatch, a receipt, a stock count, an adjustment request). A phone never edits an existing record offline, so it cannot overwrite another device's change.
+- A **stock count** is set-to-count (absolute quantity, no deduction). It is applied when it syncs; the stock ledger shows it like any other count.
+- If the server rejects an entry when it syncs (for example a duplicate batch code, a stock rule, or missing permission), it is kept as **Needs review** with the server message. Nothing is retried automatically after a rejection; the person decides Retry or Discard.
+- A repeated send of the same entry never creates a second record when `tools/ff-idempotency.sh` is installed.
+
+## Decision to confirm (MAN-9)
+- `docs/PRODUCTIVITY_LABOUR_API.md` says CB = sum of `produced_cb`. This change counts tray production as CB equivalents (`produced_trays × bottles_per_tray ÷ bottles_per_cb`), because MAN-9 asks that KG and CB match the pack configuration and trays are real production. If the API doc is the rule, the tray conversion must be reverted.
+- The conversion uses `bottles_per_tray` and `bottles_per_cb` from Products. Check those values for Soya Sauce 740gm before comparing totals.
+- The repo does not confirm the Soya 740gm tray value. `lib/core/industry_pack.dart` has "Tray 6 × 740gm" only as packing example text. The 18 bottles per CB comes from the worked example in `docs/PRODUCTIVITY_LABOUR_API.md`. Read both values from Products, not from these docs.
+- `tools/ff-batchrecon.sh` has a test fixture that stores 0 bottles per tray for Soya Sauce 740gm. If the live Products value is also 0, the tray conversion does nothing for this SKU and the October figures will not change.
+- Labour Analysis now follows the Productivity table: same batch numbers, manpower from the Daily Labour rows (hours ÷ `standardShiftHours` when the row has it), and net weight from the current Products value. Neither table uses the effective-date net weight history described in the API doc.
+- The Excel export is generated by the server, which the API doc defines as CB only. Until the server is updated, an export can differ from the screen for SKUs with trays.

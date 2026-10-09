@@ -5,13 +5,11 @@ import 'package:provider/provider.dart';
 
 import '../../core/company.dart';
 import '../../core/format.dart';
-import '../../core/hrmate.dart';
 import '../../core/theme.dart';
 import '../../core/i18n.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 import '../billing/subscription_banner.dart';
-import '../hrmate/hrmate_widgets.dart';
 
 /// Server-driven role dashboard: the API decides which KPIs, charts,
 /// tables, alerts and quick actions each profile sees.
@@ -77,7 +75,6 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   void _reload() {
-    HrMate.instance.summary(force: true); // pull-to-refresh → fresh HRMate numbers too (no-op unless connected; never throws)
     setState(() => _future = _load());
   }
 
@@ -167,9 +164,6 @@ class _DashboardPageState extends State<DashboardPage> {
                   ],
                 ],
                 const SubscriptionBanner(),
-                // HRMate head-count (read-only bridge) — renders nothing when
-                // HRMate is not connected on this device or is unreachable.
-                const HrPresenceStrip(),
               ],
             ),
           ),

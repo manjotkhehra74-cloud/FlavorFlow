@@ -11,6 +11,7 @@ import '../../core/theme.dart';
 import '../../core/i18n.dart';
 import '../../core/item_code.dart';
 import '../../state/auth.dart';
+import '../../core/offline_queue.dart';
 import '../../ui/widgets.dart';
 import '../billing/item_history_page.dart' show showItemHistory;
 import '../reports/report_pdf.dart';
@@ -628,13 +629,21 @@ class _SetStockDialogState extends State<SetStockDialog> {
   Future<void> _save() async {
     setState(() => busy = true);
     try {
-      await context.read<AuthController>().api.put('/inventory/stock', {
-        'productId': widget.item['product_id'],
-        'qtyCb': int.tryParse(cb.text) ?? 0,
-        'qtyTrays': _hasTray ? (int.tryParse(trays.text) ?? 0) : 0,
-        'note': note.text.trim(),
-        'reference': reference.text.trim(), // stock-ledger doc no (count sheet / memo)
-      });
+      // Set-to-count (absolute quantity, no deduction) — safe to send later.
+      final sent = await OfflineQueue.instance.submit(
+        context.read<AuthController>(),
+        method: 'PUT',
+        path: '/inventory/stock',
+        label: 'Stock count',
+        body: {
+          'productId': widget.item['product_id'],
+          'qtyCb': int.tryParse(cb.text) ?? 0,
+          'qtyTrays': _hasTray ? (int.tryParse(trays.text) ?? 0) : 0,
+          'note': note.text.trim(),
+          'reference': reference.text.trim(), // stock-ledger doc no (count sheet / memo)
+        },
+      );
+      if (mounted && sent.queued) showOk(context, 'Stock count saved on this phone — it will sync when internet returns.');
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) showErr(context, e);
@@ -719,14 +728,22 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
   Future<void> _save() async {
     setState(() => busy = true);
     try {
-      await context.read<AuthController>().api.post('/inventory/receipt', {
-        'productId': productId,
-        'qtyCb': int.tryParse(cb.text) ?? 0,
-        if (_hasTray) 'qtyTrays': int.tryParse(trays.text) ?? 0,
-        'note': note.text.trim(),
-        'reference': reference.text.trim(), // stock-ledger doc no (GRN / challan / return memo)
-        'party': party.text.trim(),
-      });
+      // MAN-13: no connection → kept on this phone and sent automatically later.
+      final sent = await OfflineQueue.instance.submit(
+        context.read<AuthController>(),
+        method: 'POST',
+        path: '/inventory/receipt',
+        label: 'Stock receipt',
+        body: {
+          'productId': productId,
+          'qtyCb': int.tryParse(cb.text) ?? 0,
+          if (_hasTray) 'qtyTrays': int.tryParse(trays.text) ?? 0,
+          'note': note.text.trim(),
+          'reference': reference.text.trim(), // stock-ledger doc no (GRN / challan / return memo)
+          'party': party.text.trim(),
+        },
+      );
+      if (mounted && sent.queued) showOk(context, 'Receipt saved on this phone — it will sync when internet returns.');
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) showErr(context, e);
