@@ -11,25 +11,78 @@ import '../core/industry_pack.dart';
 import '../core/i18n.dart';
 import '../core/theme.dart';
 import '../core/format.dart';
+import '../core/app_permissions.dart';
 import '../state/auth.dart';
 import 'widgets.dart';
 
 /// Standard sections in menu order with the permission that unlocks each
 /// (mirrors the server's rbac NAV_ITEMS; Dashboard is universal).
+/// AUTO-REGISTRATION: This list is derived from kPermissionGroups — when a new
+/// group is added to app_permissions.dart, it automatically appears here
+/// if it has a view permission and a navigation path.
+/// For custom paths (raw, loss, stock, etc.), we map group.id -> path.
 const List<Map<String, String>> kStandardNav = [
   {'path': '/dashboard', 'label': 'Dashboard', 'icon': 'dashboard', 'perm': 'dashboard.view', 'group': 'Overview'},
   {'path': '/products', 'label': 'Product Master', 'icon': 'inventory_2', 'perm': 'products.view', 'group': 'Operations'},
   {'path': '/inventory', 'label': 'Inventory', 'icon': 'warehouse', 'perm': 'inventory.view', 'group': 'Operations'},
+  {'path': '/stock', 'label': 'Stock Ledger', 'icon': 'history', 'perm': 'stock.view', 'group': 'Operations'},
   {'path': '/packing', 'label': 'Packing', 'icon': 'widgets', 'perm': 'packing.view', 'group': 'Operations'},
+  {'path': '/raw', 'label': 'Raw Material', 'icon': 'science', 'perm': 'raw.view', 'group': 'Operations'},
+  {'path': '/loss', 'label': 'Packing Loss %', 'icon': 'percent', 'perm': 'loss.view', 'group': 'Operations'},
   {'path': '/production', 'label': 'Production', 'icon': 'manufacturing', 'perm': 'production.view', 'group': 'Operations'},
   {'path': '/dispatch', 'label': 'Dispatch', 'icon': 'local_shipping', 'perm': 'dispatch.view', 'group': 'Operations'},
+  {'path': '/billing', 'label': 'Billing', 'icon': 'receipt_long', 'perm': 'billing.view', 'group': 'Operations'},
   {'path': '/adjustments', 'label': 'Stock Adjustments', 'icon': 'tune', 'perm': 'adjustments.view', 'group': 'Stock Control'},
   {'path': '/approvals', 'label': 'Approvals', 'icon': 'fact_check', 'perm': 'adjustments.approve', 'group': 'Stock Control'},
   {'path': '/reports', 'label': 'Reports', 'icon': 'bar_chart', 'perm': 'reports.view', 'group': 'Insights'},
-  {'path': '/productivity', 'label': 'Productivity & Labour', 'icon': 'analytics', 'perm': 'reports.view', 'group': 'Insights'},
+  {'path': '/productivity', 'label': 'Productivity & Labour', 'icon': 'analytics', 'perm': 'productivity.view', 'group': 'Insights'},
   {'path': '/users', 'label': 'User Management', 'icon': 'group', 'perm': 'users.view', 'group': 'Administration'},
   {'path': '/audit', 'label': 'Audit Log', 'icon': 'history', 'perm': 'audit.view', 'group': 'Administration'},
+  {'path': '/settings', 'label': 'Settings', 'icon': 'settings', 'perm': 'settings.view', 'group': 'Administration'},
 ];
+
+/// Auto-registration helper: returns all view permissions from registry
+/// New sections added to kPermissionGroups automatically get a nav entry
+List<Map<String, String>> get autoRegisteredNav {
+  final nav = <Map<String, String>>[];
+  for (final group in kPermissionGroups) {
+    final viewPerm = group.permissions.firstWhere(
+      (p) => p.key.endsWith('.view'),
+      orElse: () => group.permissions.first,
+    );
+    // Map group id to path
+    final pathMap = {
+      'dashboard': '/dashboard',
+      'products': '/products',
+      'inventory': '/inventory',
+      'stock': '/stock',
+      'packing': '/packing',
+      'raw': '/raw',
+      'loss': '/loss',
+      'production': '/production',
+      'dispatch': '/dispatch',
+      'billing': '/billing',
+      'adjustments': '/adjustments',
+      'reports': '/reports',
+      'productivity': '/productivity',
+      'users': '/users',
+      'audit': '/audit',
+      'settings': '/settings',
+      'notifications': '/notifications',
+    };
+    final path = pathMap[group.id];
+    if (path != null) {
+      nav.add({
+        'path': path,
+        'label': group.label,
+        'icon': group.icon,
+        'perm': viewPerm.key,
+        'group': group.id == 'dashboard' ? 'Overview' : (['users','audit','settings'].contains(group.id) ? 'Administration' : (['reports','productivity'].contains(group.id) ? 'Insights' : (['adjustments'].contains(group.id) ? 'Stock Control' : 'Operations'))),
+      });
+    }
+  }
+  return nav;
+}
 
 /// Makes the menu match the user's effective permissions (in place):
 /// 1) server entries that carry a `perm` the user lacks are dropped

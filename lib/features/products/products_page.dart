@@ -46,11 +46,53 @@ class _ProductsPageState extends State<ProductsPage> {
   }
 
   Future<List<Map<String, dynamic>>> _load() async {
-    final json = await context.read<AuthController>().api.get('/products');
-    return ((json as Map)['products'] as List)
+    final api = context.read<AuthController>().api;
+    final json = await api.get('/products');
+    final products = ((json as Map)['products'] as List)
         .cast<Map<String, dynamic>>()
         .where((p) => (p['active'] as num? ?? 1) != 0)
         .toList();
+
+    // Load BOM mapping from /packing/bom to correctly show Linked status
+    // The /products endpoint does not include BOM data, so we merge it here
+    try {
+      final bomJson = await api.get('/packing/bom');
+      final bomList = ((bomJson as Map)['bom'] as List).cast<Map<String, dynamic>>();
+      final bomProductIds = <int>{};
+      final bomCounts = <int, int>{};
+      for (final entry in bomList) {
+        final prod = entry['product'] as Map?;
+        final items = entry['items'] as List?;
+        if (prod != null && prod['id'] is int) {
+          final pid = prod['id'] as int;
+          final count = items?.length ?? 0;
+          if (count > 0) {
+            bomProductIds.add(pid);
+            bomCounts[pid] = count;
+          }
+        } else if (entry['product_id'] is int) {
+          final pid = entry['product_id'] as int;
+          final count = (entry['items'] as List?)?.length ?? (entry['count'] as int? ?? 0);
+          if (count > 0) {
+            bomProductIds.add(pid);
+            bomCounts[pid] = count;
+          }
+        }
+      }
+      // Merge BOM info into products
+      for (final p in products) {
+        final pid = p['id'] as int?;
+        if (pid != null && bomProductIds.contains(pid)) {
+          p['has_bom'] = true;
+          p['bom_count'] = bomCounts[pid] ?? 1;
+          p['bom'] = List.filled(bomCounts[pid] ?? 1, {});
+        }
+      }
+    } catch (_) {
+      // If BOM fetch fails, keep products as is — will show Not linked (graceful)
+    }
+
+    return products;
   }
 
   void _reload() => setState(() => _future = _load());

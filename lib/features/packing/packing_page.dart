@@ -425,7 +425,7 @@ class _StockTabState extends State<_StockTab> {
           SectionCard(
             title: widget.rawOnly
                 ? (_lowOnly ? 'Low Stock Raw Material' : 'Raw Material Stock')
-                : (_lowOnly ? 'Low Stock Packing Material' : 'FlavorFlow Packing Material Stock'),
+                : (_lowOnly ? 'Low Stock Packing Material' : 'Packing Material Stock'),
             child: rows.isEmpty
                 ? EmptyState(_lowOnly
                     ? 'Nothing running low 🎉'

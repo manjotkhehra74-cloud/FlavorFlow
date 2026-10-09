@@ -29,7 +29,36 @@ class UserSession {
         nav = (json['nav'] as List).cast<Map<String, dynamic>>(),
         currency = (json['currency'] as Map).cast<String, dynamic>();
 
-  bool can(String perm) => permissions.contains(perm);
+  bool can(String perm) {
+    // Super Admin wildcard
+    if (permissions.contains('*')) return true;
+    if (permissions.contains(perm)) return true;
+    // Granular fallback: create/edit/delete/view -> manage
+    // Ensures old roles with manage still work before granular migration
+    final parts = perm.split('.');
+    if (parts.length >= 2) {
+      final base = parts[0];
+      final manageKey = '$base.manage';
+      if (permissions.contains(manageKey)) return true;
+      // Special cases: bom.view -> packing.manage, etc.
+      if (perm == 'packing.bom.view' && (permissions.contains('packing.view') || permissions.contains('packing.manage'))) return true;
+      if (perm == 'packing.bom.manage' && permissions.contains('packing.manage')) return true;
+      if (perm.startsWith('packing.') && permissions.contains('packing.manage')) return true;
+      if (perm.startsWith('raw.') && permissions.contains('raw.manage')) return true;
+      if (perm.startsWith('inventory.') && permissions.contains('inventory.manage')) return true;
+      if (perm.startsWith('production.') && permissions.contains('production.manage')) return true;
+      if (perm.startsWith('dispatch.') && permissions.contains('dispatch.manage')) return true;
+      if (perm.startsWith('billing.') && permissions.contains('billing.manage')) return true;
+      if (perm.startsWith('users.') && permissions.contains('users.manage')) return true;
+    }
+    return false;
+  }
+
+  /// Check if user has ANY permission for a module (for auto-registration)
+  bool canAny(String module) {
+    if (permissions.contains('*')) return true;
+    return permissions.any((p) => p.startsWith('$module.'));
+  }
 }
 
 class AuthController extends ChangeNotifier {
@@ -56,9 +85,27 @@ class AuthController extends ChangeNotifier {
   bool get hasSplitPerms =>
       session?.permissions.any((p) => p.startsWith('raw.') || p.startsWith('loss.')) ?? false;
 
+  /// True once server has granular permissions (ff-permfix-granular applied)
+  bool get hasGranularPerms =>
+      session?.permissions.any((p) => p.contains('.create') || p.contains('.edit') || p.contains('.delete')) ?? false;
+
   /// Permission check with a legacy fallback: before ff-permfix runs on the
   /// server, the old umbrella permission (packing.*) keeps everything working.
   bool canOr(String perm, String legacy) => can(perm) || (!hasSplitPerms && can(legacy));
+
+  /// Granular permission check with manage fallback
+  /// e.g., canGranular('products.create') checks create, then manage, then legacy view
+  bool canGranular(String perm, {String? legacyManage, String? legacyView}) {
+    if (can(perm)) return true;
+    final parts = perm.split('.');
+    if (parts.length >= 2) {
+      final manageKey = '${parts[0]}.manage';
+      if (can(manageKey)) return true;
+    }
+    if (legacyManage != null && can(legacyManage)) return true;
+    if (legacyView != null && can(legacyView)) return true;
+    return false;
+  }
 
   /// True once the server carries the billing.* permissions (ff-billing applied).
   bool get hasBillingPerms => session?.permissions.any((p) => p.startsWith('billing.')) ?? false;
@@ -67,6 +114,9 @@ class AuthController extends ChangeNotifier {
   /// are not yet updated (the server still enforces its own guard).
   bool get canViewBilling => can('billing.view') || (!hasBillingPerms && can('dispatch.view'));
   bool get canManageBilling => can('billing.manage') || (!hasBillingPerms && can('dispatch.manage'));
+
+  /// Super Admin check — has wildcard or super_admin role
+  bool get isSuperAdmin => session?.role == 'super_admin' || (session?.permissions.contains('*') ?? false);
 
   /// Resolved API base (may be null on native until the user sets it).
   String? get serverBase => api.baseUrl;

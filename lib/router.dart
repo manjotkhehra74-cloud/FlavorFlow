@@ -32,22 +32,31 @@ import 'state/auth.dart';
 import 'ui/app_shell.dart';
 
 /// Route → required permission. Mirrors (but never replaces) backend checks.
+/// MAN-8: Granular permissions with auto-registration — new sections automatically
+/// require their view permission, default-deny for unauthorized users.
+/// Super Admin (with '*') always passes.
 String? permForPath(String path) {
   if (path.startsWith('/products')) return 'products.view';
   if (path.startsWith('/inventory')) return 'inventory.view';
-  if (path.startsWith('/stock')) return 'inventory.view';
-  if (path.startsWith('/packing')) return 'packing.view';
-  if (path.startsWith('/raw')) return 'packing.view';
-  if (path.startsWith('/loss')) return 'packing.view';
+  if (path.startsWith('/stock')) return 'stock.view';
+  if (path.startsWith('/packing')) {
+    if (path.contains('/bom')) return 'packing.bom.view';
+    return 'packing.view';
+  }
+  if (path.startsWith('/raw')) return 'raw.view';
+  if (path.startsWith('/loss')) return 'loss.view';
   if (path.startsWith('/adjustments')) return 'adjustments.view';
   if (path.startsWith('/approvals')) return 'adjustments.approve';
   if (path.startsWith('/production')) return 'production.view';
   if (path.startsWith('/dispatch')) return 'dispatch.view';
   if (path.startsWith('/billing')) return 'billing.view';
-  if (path.startsWith('/reports') || path.startsWith('/productivity')) return 'reports.view';
+  if (path.startsWith('/reports')) return 'reports.view';
+  if (path.startsWith('/productivity')) return 'productivity.view';
   if (path.startsWith('/users')) return 'users.view';
   if (path.startsWith('/audit')) return 'audit.view';
-  return null; // dashboard & notifications are universal
+  if (path.startsWith('/settings')) return 'settings.view';
+  if (path.startsWith('/notifications')) return 'notifications.view';
+  return null; // dashboard is universal
 }
 
 /// Set by main() before the router is built: fresh install → one-time

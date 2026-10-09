@@ -5,6 +5,7 @@ import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../core/i18n.dart';
+import '../../core/app_permissions.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 
@@ -178,14 +179,60 @@ class _UsersPageState extends State<UsersPage> {
           const SizedBox(height: 16),
           SectionCard(
             title: 'Role Permission Matrix',
-            child: AppDataTable(
-              columns: const ['Role', 'Permissions'],
-              rows: [
-                for (final r in roles)
-                  [
-                    _RoleChip(role: r),
-                    Text((r['permissions'] as List).where((p) => CompanyProfile.usesLossPct || !'$p'.startsWith('loss.')).join(' · ')),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Grouped by module for better readability — auto-registers new permissions
+                for (final group in kPermissionGroups) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 12, 4, 6),
+                    child: Row(children: [
+                      Icon(_iconForGroup(group.icon), size: 16, color: AppColors.slate),
+                      const SizedBox(width: 6),
+                      Text(group.label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+                      const SizedBox(width: 8),
+                      Text('(${group.permissions.length} perms)', style: TextStyle(fontSize: 11, color: AppColors.slate)),
+                    ]),
+                  ),
+                  AppDataTable(
+                    columns: const ['Role', 'Permissions'],
+                    rows: [
+                      for (final r in roles)
+                        [
+                          _RoleChip(role: r),
+                          Builder(builder: (_) {
+                            final rolePerms = (r['permissions'] as List).map((e) => e.toString()).toSet();
+                            final groupPerms = group.permissions.where((p) => rolePerms.contains(p.key)).map((p) => p.key).toList();
+                            if (groupPerms.isEmpty) return Text('—', style: TextStyle(color: AppColors.slate));
+                            return Wrap(
+                              spacing: 4,
+                              runSpacing: 2,
+                              children: groupPerms.map((k) => Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(color: AppColors.green.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(4)),
+                                child: Text(k.split('.').last, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
+                              )).toList(),
+                            );
+                          }),
+                        ],
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                const Divider(),
+                const SizedBox(height: 8),
+                Text('All Permissions (flat):', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.slate)),
+                const SizedBox(height: 4),
+                AppDataTable(
+                  columns: const ['Role', 'Permissions'],
+                  rows: [
+                    for (final r in roles)
+                      [
+                        _RoleChip(role: r),
+                        Text((r['permissions'] as List).where((p) => CompanyProfile.usesLossPct || !'$p'.startsWith('loss.')).join(' · ')),
+                      ],
                   ],
+                ),
               ],
             ),
           ),
@@ -302,16 +349,11 @@ class _UserFormDialogState extends State<UserFormDialog> {
             },
           ),
           const SizedBox(height: 8),
-          // Permissions — role defaults + tap chips to toggle (customize)
+          // Permissions — grouped by module, auto-registers new permissions from kPermissionGroups
+          // Super Admin gets all, others default-deny for new perms until explicitly granted
           Builder(
             builder: (ctx) {
               final r = widget.roles.firstWhere((x) => x['id'] == role, orElse: () => <String, dynamic>{});
-              final allPerms = <String>{};
-              for (final ro in widget.roles) {
-                allPerms.addAll(List<String>.from((ro['permissions'] as List?) ?? const []));
-              }
-              // loss.* only matters when the company runs the Packing Loss % sheet.
-              final permsList = (allPerms.where((p) => CompanyProfile.usesLossPct || !p.startsWith('loss.')).toList())..sort();
               final color = hexColor(r['color'] as String? ?? '#4f46e5');
               return Container(
                 width: double.infinity,
@@ -328,7 +370,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
                       _RoleChip(role: r),
                       const SizedBox(width: 8),
                       const Expanded(child: Text(
-                        'permissions (tap to toggle):',
+                        'permissions (tap to toggle, grouped by module):',
                         style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
                         softWrap: true,
                       )),
@@ -342,27 +384,52 @@ class _UserFormDialogState extends State<UserFormDialog> {
                         child: const Text('Reset', style: TextStyle(fontSize: 11)),
                       ),
                     ]),
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 5,
-                      runSpacing: 4,
-                      children: [
-                        for (final p in permsList)
-                          FilterChip(
-                            label: Text(p, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600)),
-                            selected: customPerms.contains(p),
-                            onSelected: (v) => setState(() {
-                              if (v) { customPerms.add(p); } else { customPerms.remove(p); }
-                            }),
-                            selectedColor: color.withValues(alpha: 0.25),
-                            checkmarkColor: color,
-                            labelStyle: TextStyle(color: customPerms.contains(p) ? color : Colors.grey[700], fontSize: 10.5, fontWeight: FontWeight.w600),
-                            visualDensity: VisualDensity.compact,
-                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
-                          ),
-                      ],
-                    ),
+                    const SizedBox(height: 10),
+                    // Grouped by module — auto-registers new sections
+                    for (final group in kPermissionGroups) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(top: 10, bottom: 4),
+                        child: Row(children: [
+                          Icon(_iconForGroup(group.icon), size: 14, color: color),
+                          const SizedBox(width: 5),
+                          Text(group.label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: color)),
+                          const SizedBox(width: 6),
+                          Text('(${group.permissions.length})', style: TextStyle(fontSize: 10, color: Colors.grey[600])),
+                          if (group.id == 'super_admin' || role == 'super_admin')
+                            Padding(
+                              padding: const EdgeInsets.only(left: 6),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                decoration: BoxDecoration(color: AppColors.green.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(3)),
+                                child: const Text('ALL', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w700, color: AppColors.green)),
+                              ),
+                            ),
+                        ]),
+                      ),
+                      Wrap(
+                        spacing: 5,
+                        runSpacing: 4,
+                        children: [
+                          for (final perm in group.permissions.where((p) => CompanyProfile.usesLossPct || !p.key.startsWith('loss.')))
+                            FilterChip(
+                              label: Tooltip(
+                                message: perm.description,
+                                child: Text(perm.key.split('.').last, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600)),
+                              ),
+                              selected: customPerms.contains(perm.key),
+                              onSelected: (v) => setState(() {
+                                if (v) { customPerms.add(perm.key); } else { customPerms.remove(perm.key); }
+                              }),
+                              selectedColor: color.withValues(alpha: 0.25),
+                              checkmarkColor: color,
+                              labelStyle: TextStyle(color: customPerms.contains(perm.key) ? color : Colors.grey[700], fontSize: 10.5, fontWeight: FontWeight.w600),
+                              visualDensity: VisualDensity.compact,
+                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                            ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               );
@@ -392,5 +459,28 @@ class _UserFormDialogState extends State<UserFormDialog> {
         FilledButton(onPressed: busy ? null : _save, child: Text(busy ? 'Saving…' : 'Save')),
       ],
     );
+  }
+}
+
+IconData _iconForGroup(String name) {
+  switch (name) {
+    case 'dashboard': return Icons.dashboard_outlined;
+    case 'inventory_2': return Icons.inventory_2_outlined;
+    case 'warehouse': return Icons.warehouse_outlined;
+    case 'history': return Icons.history_outlined;
+    case 'widgets': return Icons.widgets_outlined;
+    case 'science': return Icons.science_outlined;
+    case 'percent': return Icons.percent_rounded;
+    case 'manufacturing': return Icons.precision_manufacturing_outlined;
+    case 'local_shipping': return Icons.local_shipping_outlined;
+    case 'tune': return Icons.tune_outlined;
+    case 'fact_check': return Icons.fact_check_outlined;
+    case 'bar_chart': return Icons.bar_chart_rounded;
+    case 'analytics': return Icons.analytics_outlined;
+    case 'receipt_long': return Icons.receipt_long_outlined;
+    case 'group': return Icons.group_outlined;
+    case 'settings': return Icons.settings_outlined;
+    case 'notifications': return Icons.notifications_outlined;
+    default: return Icons.widgets_outlined;
   }
 }
