@@ -35,17 +35,26 @@ String _skuRuleKey(String value) => value.trim().toLowerCase().replaceAll(RegExp
 /// Trays are production too: 1 tray = bottles_per_tray bottles and 1 CB =
 /// bottles_per_cb bottles, so trays become CB equivalents and KG = CB × net kg
 /// per CB (the rule in docs/PRODUCTIVITY_LABOUR_API.md). The with-carton weight
-/// is never read here.
-({double cb, double kg}) _batchOutput(Map<String, dynamic> batch, Map<String, dynamic>? product) {
+/// is never read here. Trays that cannot be converted (no bottles per tray or per
+/// CB in Products) are returned as unconvertedTrays so the screen can warn instead
+/// of dropping them silently.
+({double cb, double kg, double unconvertedTrays}) _batchOutput(Map<String, dynamic> batch, Map<String, dynamic>? product) {
   double num2(Object? v) => v is num ? v.toDouble() : (double.tryParse('${v ?? 0}') ?? 0.0);
   final cartons = num2(batch['produced_cb'] ?? batch['producedCb']);
   final trays = num2(batch['produced_trays'] ?? batch['producedTrays']);
   final bottlesPerCb = num2(product?['bottles_per_cb'] ?? batch['bottles_per_cb'] ?? batch['bottlesPerCb']);
   final bottlesPerTray = num2(product?['bottles_per_tray'] ?? batch['bottles_per_tray'] ?? batch['bottlesPerTray']);
   final netPerCb = num2(product?['net_weight_per_cb'] ?? product?['weight_without_cb'] ?? product?['netWeightPerCb'] ?? batch['net_weight_per_cb'] ?? batch['weight_without_cb']);
-  final trayCb = (bottlesPerCb > 0 && bottlesPerTray > 0) ? trays * bottlesPerTray / bottlesPerCb : 0.0;
+  final canConvertTrays = bottlesPerCb > 0 && bottlesPerTray > 0;
+  final trayCb = canConvertTrays ? trays * bottlesPerTray / bottlesPerCb : 0.0;
   final cb = cartons + trayCb;
-  return (cb: cb, kg: cb * netPerCb);
+  return (cb: cb, kg: cb * netPerCb, unconvertedTrays: canConvertTrays ? 0.0 : trays);
+}
+
+/// Reconciliation text for trays that were left out of CB/KG.
+String _trayGapWarning(Map<String, double> gaps) {
+  final parts = [for (final e in gaps.entries) '${e.key}: ${e.value.round()} trays'];
+  return 'Trays are NOT counted in CB/KG for ${parts.join(', ')}. Set "bottles per tray" and "bottles per CB" for these products in Products, then refresh.';
 }
 
 String? _lineForSku(String sku) {
@@ -351,6 +360,7 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
 
     final seenIds = <String>{};
     final metrics = <String, Map<String, dynamic>>{};
+    final trayGaps = <String, double>{}; // trays left out of CB (no bottles per tray/CB)
     final labourBySku = <String, double>{};
     final assignmentManpower = <String, double>{};
     String labourKey(String date, String line, String shift, String skuKey) =>
@@ -426,6 +436,7 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
       final label = _productivityLabel(source);
       final out = _batchOutput(batch, product); // MAN-9: trays count as CB
       final cb = out.cb;
+      if (out.unconvertedTrays > 0) trayGaps[source] = (trayGaps[source] ?? 0.0) + out.unconvertedTrays;
       final metricKey = '$label\u0000${lineLabel.toLowerCase()}';
       final row = metrics.putIfAbsent(metricKey, () => {'sku': label, 'line': lineLabel, 'cb': 0.0, 'kg': 0.0, 'labourCb': <String, double>{}});
       row['cb'] = _n(row['cb']) + cb;
@@ -471,6 +482,7 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
     return {
       'columns': const ['SKU', 'LINE', 'MANPOWER', 'PROD. IN KG', 'PROD. IN CB', 'PRODUCTIVITY IN KG/HEAD', 'PRODUCTIVITY IN CB/HEAD'],
       'rows': rows,
+      if (trayGaps.isNotEmpty) 'reconciliationWarning': _trayGapWarning(trayGaps),
       'totals': {
         'cb': totalCb,
         'producedCb': totalCb,
@@ -507,6 +519,7 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
     } catch (_) {}
     final labour = await _loadLabourRows(api, _query());
     final stats = <String, Map<String, dynamic>>{};
+    final trayGaps = <String, double>{};
 
     bool selectedSku(String id, String name) =>
         _skuFilter == null || id == _skuFilter || (filterName.isNotEmpty && _skuRuleKey(name) == filterName);
@@ -551,6 +564,7 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
       final shift = '${batch['shift'] ?? ''}'.trim();
       final out = _batchOutput(batch, product); // MAN-9: trays count as CB
       final net = _analysisNetWeight(product, batch);
+      if (out.unconvertedTrays > 0) trayGaps[sku] = (trayGaps[sku] ?? 0.0) + out.unconvertedTrays;
       addToSections(shift, sku, cb: out.cb, kg: out.kg, net: net);
     }
 
@@ -598,6 +612,7 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
     final totalKg = combined.fold<double>(0, (sum, v) => sum + _n(v['kg']).toDouble());
     final totalManpower = combined.fold<double>(0, (sum, v) => sum + _n(v['manpower']).toDouble());
     return {
+      if (trayGaps.isNotEmpty) 'reconciliationWarning': _trayGapWarning(trayGaps),
       'sections': {
         'day': section('day'),
         'night': section('night'),
@@ -626,18 +641,18 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
   }
 
   Future<Map<String, dynamic>> _loadAnalysis() async {
+    // MAN-9: the Analysis tab uses the same batch-based numbers as the
+    // Productivity table, so trays count the same way on both. The server
+    // analysis counts produced_cb only, so it is used only when the batch
+    // calculation has no rows.
     try {
-      final response = (await context.read<AuthController>().api.get('/reports/productivity/analysis?${_query()}') as Map).cast<String, dynamic>();
-      if (_analysisHasRows(response)) return response;
-      final fallback = await _legacyAnalysis();
-      if (_analysisHasRows(fallback)) return fallback;
-      return response;
+      final local = await _legacyAnalysis();
+      if (_analysisHasRows(local)) return local;
+    } catch (_) {}
+    try {
+      return (await context.read<AuthController>().api.get('/reports/productivity/analysis?${_query()}') as Map).cast<String, dynamic>();
     } catch (_) {
-      try {
-        return await _legacyAnalysis();
-      } catch (_) {
-        return {'rows': const []};
-      }
+      return {'rows': const []};
     }
   }
 
@@ -900,6 +915,7 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
         final totals = (data['periodTotals'] as Map?)?.cast<String, dynamic>() ?? (data['totals'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
         final sections = _analysisSections(data);
         return ListView(padding: const EdgeInsets.all(18), children: [
+          _reconciliationBanner(context, data),
           _dateFilters(context),
           const SizedBox(height: 12),
           Text('Labour Analysis keeps White Vinegar 610 and Brown Vinegar 610 separate. Only the Productivity summary groups them as Vinegar 610.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w600)),
