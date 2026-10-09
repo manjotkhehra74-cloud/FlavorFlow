@@ -194,7 +194,14 @@ class OfflineQueue extends ChangeNotifier {
   }
 
   Future<void> _tick() async {
-    if (!online) await _probe();
+    final wasOffline = !online;
+    if (wasOffline) await _probe();
+    if (wasOffline && online) {
+      // Connection is back: send what is waiting now, not after the backoff.
+      for (final e in _items) {
+        if (e.state == SyncState.pending) e.nextAttemptAt = null;
+      }
+    }
     await flush();
   }
 
@@ -293,13 +300,19 @@ class OfflineQueue extends ChangeNotifier {
           e.lastError = err.message;
           changed = true;
           if (err.unauthenticated) break; // session ended — wait for the next login
-          final temporary = err.isNetworkError || err.status >= 500 || err.status == 409 || err.status == 429;
-          if (temporary) {
-            if (err.isNetworkError) online = false;
+          if (err.isNetworkError) {
+            // No connection: keep it waiting (never "needs review" just because we are offline).
+            online = false;
             e.nextAttemptAt = DateTime.now().add(_backoff(e.attempts));
-            break; // server or network is down — keep the order, try later
+            break; // keep the order, try again later
           }
-          // A real rejection (validation, permission, stock rule) needs a person.
+          final serverBusy = err.status == 429 || err.status >= 500;
+          if (serverBusy && e.attempts < 6) {
+            e.nextAttemptAt = DateTime.now().add(_backoff(e.attempts));
+            break; // server is busy/down — keep the order, try later
+          }
+          // A real rejection (validation, permission, stock rule, conflict), or a
+          // server error that kept repeating, needs a person. Later entries go on.
           e.state = SyncState.failed;
           e.nextAttemptAt = null;
         } catch (err) {
