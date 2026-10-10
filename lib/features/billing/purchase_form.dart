@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../core/i18n.dart';
+import '../../core/offline_queue.dart';
 import '../../core/item_code.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
@@ -199,7 +200,7 @@ class _PurchaseFormPageState extends State<PurchaseFormPage> {
     }
     setState(() => busy = true);
     try {
-      final j = await context.read<AuthController>().api.post('/billing/purchases', {
+      final body = <String, dynamic>{
         'billNo': billNo.text.trim().toUpperCase(),
         'billDate': ymd(billDate),
         'receivedDate': ymd(receivedDate),
@@ -211,9 +212,22 @@ class _PurchaseFormPageState extends State<PurchaseFormPage> {
         if (creditDays.text.trim().isNotEmpty) 'creditDays': int.tryParse(creditDays.text.trim()) ?? 0,
         'remarks': remarks.text.trim(),
         'items': [for (final l in active) l.toJson()],
-      });
+      };
+      final sent = await OfflineQueue.instance.submit(
+        context.read<AuthController>(),
+        method: 'POST',
+        path: '/billing/purchases',
+        label: 'Supplier purchase',
+        body: body,
+      );
       if (!mounted) return;
-      showOk(context, '${tr('Purchase')} ${(j as Map)['number']} ${tr('saved')} · ${inr(j['total'])}${addStock ? ' · ${tr('stock updated')}' : ''}');
+      if (sent.queued) {
+        showOk(context, 'Purchase saved on this phone — it will sync when internet returns.');
+        context.pop(true);
+        return;
+      }
+      final j = (sent.json as Map).cast<String, dynamic>();
+      showOk(context, '${tr('Purchase')} ${j['number']} ${tr('saved')} · ${inr(j['total'])}${addStock ? ' · ${tr('stock updated')}' : ''}');
       context.pushReplacement('/billing/purchases/${j['id']}');
     } catch (e) {
       if (mounted) showErr(context, e);
