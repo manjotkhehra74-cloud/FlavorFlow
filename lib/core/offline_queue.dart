@@ -136,6 +136,14 @@ class OfflineQueue extends ChangeNotifier {
 
   int get pendingCount => pending.length;
 
+  /// Set the connection flag from outside (e.g. the app was just opened offline
+  /// via the saved-session unlock) and refresh the status banner.
+  void setOnline(bool value) {
+    if (online == value) return;
+    online = value;
+    notifyListeners();
+  }
+
   String _newId() {
     final t = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
     final r1 = _rng.nextInt(1 << 31).toRadixString(36);

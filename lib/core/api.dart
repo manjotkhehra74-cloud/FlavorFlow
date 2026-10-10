@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -107,7 +108,83 @@ class ApiClient {
         if (token != null) 'authorization': 'Bearer $token',
       };
 
-  Future<dynamic> get(String path) => _send('GET', path);
+  /// GET with an offline read cache (MAN-13): the last good reply of every GET
+  /// is kept on the phone; when the server cannot be reached the cached reply
+  /// is served, so screens and entry-form dropdowns stay usable offline.
+  /// Auth-critical calls (the `/health` probe, `/auth/me` validation) are never
+  /// cached — a cached copy must not fake a successful online check.
+  Future<dynamic> get(String path) async {
+    try {
+      final json = await _send('GET', path);
+      if (json != null && !_readCacheSkip(path)) unawaited(_cacheRead(path, json));
+      return json;
+    } on ApiException catch (e) {
+      final unreachable = e.isNetworkError || e.status == 502 || e.status == 503 || e.status == 504;
+      if (unreachable) {
+        final cached = await _readCacheGet(path);
+        if (cached != null) return cached; // offline: last known good data
+      }
+      rethrow;
+    }
+  }
+
+  static bool _readCacheSkip(String path) => path.startsWith('/health') || path.startsWith('/auth/me');
+
+  // ---- Offline read cache (MAN-13) --------------------------------------
+  static const _rcPrefix = 'ff_read_cache_v1:';
+  static const _rcIndexKey = 'ff_read_cache_v1:index';
+  static const _rcMaxEntries = 120;
+  static const _rcMaxEntryBytes = 512 * 1024; // skip huge report payloads
+
+  Future<void> _cacheRead(String path, dynamic json) async {
+    try {
+      final encoded = jsonEncode({'at': DateTime.now().millisecondsSinceEpoch, 'body': json});
+      if (encoded.length > _rcMaxEntryBytes) return;
+      final prefs = await SharedPreferences.getInstance();
+      final key = '$_rcPrefix$path';
+      await prefs.setString(key, encoded);
+      final index = _rcIndex(prefs.getString(_rcIndexKey));
+      index.remove(key);
+      index.add(key);
+      while (index.length > _rcMaxEntries) {
+        await prefs.remove(index.removeAt(0)); // oldest first
+      }
+      await prefs.setString(_rcIndexKey, jsonEncode(index));
+    } catch (_) {/* the cache is best-effort */}
+  }
+
+  Future<dynamic> _readCacheGet(String path) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('$_rcPrefix$path');
+      if (raw == null) return null;
+      final j = jsonDecode(raw);
+      if (j is Map && j['body'] != null) return j['body'];
+    } catch (_) {}
+    return null;
+  }
+
+  static List<String> _rcIndex(String? raw) {
+    if (raw == null) return <String>[];
+    try {
+      final l = jsonDecode(raw);
+      if (l is List) return l.whereType<String>().toList();
+    } catch (_) {}
+    return <String>[];
+  }
+
+  /// Drop every cached GET reply — called on login/logout so one account's
+  /// cached reads are never shown to another account on the same phone.
+  Future<void> clearReadCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final keys = prefs.getKeys().where((k) => k.startsWith(_rcPrefix) || k == _rcIndexKey).toList();
+      for (final k in keys) {
+        await prefs.remove(k);
+      }
+    } catch (_) {}
+  }
+
   /// [idempotencyKey] (MAN-13): sent as `Idempotency-Key` so a server with the
   /// ff-idempotency patch answers a repeated request with the first reply.
   Future<dynamic> post(String path, [Map<String, dynamic>? body, String? idempotencyKey]) =>

@@ -43,6 +43,19 @@ class BiometricAuth {
     }
   }
 
+  /// The device can show the OS unlock prompt — fingerprint/face OR the device
+  /// PIN/pattern/password (local_auth allows device credentials when
+  /// `biometricOnly` is false). Needed for the MAN-13 offline unlock on phones
+  /// where biometric login was never registered. Web: never.
+  static Future<bool> deviceLockAvailable() async {
+    if (kIsWeb) return false;
+    try {
+      return await _auth.isDeviceSupported();
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Quick login is set up on this device.
   static Future<bool> enabled() async {
     if (kIsWeb) return false;

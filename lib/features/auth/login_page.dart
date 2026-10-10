@@ -24,6 +24,7 @@ class _LoginPageState extends State<LoginPage> {
   String? _error;
   bool _bioAvailable = false; // device supports fingerprint/face/PIN
   bool _bioEnabled = false; // quick login already set up on this device
+  bool _deviceLock = false; // OS unlock prompt available (for offline open)
 
   @override
   void initState() {
@@ -39,8 +40,9 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _checkBio() async {
     final avail = await BiometricAuth.available();
     final enabled = await BiometricAuth.enabled();
+    final lock = await BiometricAuth.deviceLockAvailable();
     if (!mounted) return;
-    setState(() { _bioAvailable = avail; _bioEnabled = enabled; });
+    setState(() { _bioAvailable = avail; _bioEnabled = enabled; _deviceLock = lock; });
     // Prefill the saved email for convenience.
     if (enabled && _email.text.isEmpty) {
       final saved = await BiometricAuth.savedEmail();
@@ -99,7 +101,7 @@ class _LoginPageState extends State<LoginPage> {
     final err = await _loginWith2fa(email, password);
     if (!mounted) return;
     if (err != null) {
-      setState(() => _error = err);
+      setState(() => _error = _withOfflineHint(err));
       return;
     }
     BiometricAuth.rememberSession(email, password);
@@ -167,7 +169,7 @@ class _LoginPageState extends State<LoginPage> {
     final err = await _loginWith2fa(email, password);
     if (!mounted) return;
     if (err != null) {
-      setState(() => _error = err);
+      setState(() => _error = _withOfflineHint(err));
       return;
     }
     BiometricAuth.rememberSession(email, password);
@@ -179,15 +181,57 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _bioLogin() async {
     final creds = await BiometricAuth.authenticate();
     if (creds == null || !mounted) return;
+    final auth = context.read<AuthController>();
     final err = await _loginWith2fa(creds.email, creds.password);
     if (!mounted) return;
     if (err != null) {
+      // Offline: the server could not be reached. Keep biometrics registered
+      // and open the session saved on this phone instead of resetting it.
+      if (auth.lastLoginNetworkError) {
+        final uerr = await auth.unlockSavedSession();
+        if (uerr == null) {
+          context.go('/dashboard');
+          return;
+        }
+        if (mounted) setState(() => _error = uerr);
+        return;
+      }
       // Password likely changed on the server — drop the stale credentials.
       await BiometricAuth.disable();
       setState(() {
         _bioEnabled = false;
         _error = '$err\nBiometric login was reset — sign in with your password once to re-enable it.';
       });
+    } else {
+      context.go('/dashboard');
+    }
+  }
+
+  /// When a login fails because the server is unreachable and this phone holds
+  /// a saved session, point the user at the offline unlock (the password form
+  /// can never work without internet — the server must verify the password).
+  String _withOfflineHint(String err) {
+    final auth = context.read<AuthController>();
+    if (!auth.lastLoginNetworkError || !auth.hasSavedSession) return err;
+    if (_bioEnabled) {
+      return '$err\n\nNo internet? Use "Login with biometrics" — your fingerprint / device PIN.';
+    }
+    if (_deviceLock) {
+      return '$err\n\nNo internet? Use "Open without internet" below — your fingerprint / device PIN.';
+    }
+    return err;
+  }
+
+  /// MAN-13 "Open without internet": OS fingerprint/PIN prompt → the session
+  /// saved on this phone (encrypted keystore) opens. Screens show the last
+  /// synced data; new entries are queued and sent when the network returns.
+  Future<void> _offlineUnlock() async {
+    final ok = await BiometricAuth.verifyOnly('Unlock FlavorFlow');
+    if (!ok || !mounted) return;
+    final err = await context.read<AuthController>().unlockSavedSession();
+    if (!mounted) return;
+    if (err != null) {
+      setState(() => _error = err);
     } else {
       context.go('/dashboard');
     }
@@ -383,6 +427,18 @@ class _LoginPageState extends State<LoginPage> {
                   onPressed: busy ? null : _registerBiometrics,
                   icon: const Icon(Icons.fingerprint_rounded, size: 20),
                   label: Text(tr('Register biometric login')),
+                ),
+              ],
+              // MAN-13: a session saved on this phone can be opened without
+              // internet — after the OS fingerprint/PIN prompt. With biometrics
+              // registered, the automatic prompt above already covers this path.
+              if (auth.hasSavedSession && !_bioEnabled && _deviceLock) ...[
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: busy ? null : _offlineUnlock,
+                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 13)),
+                  icon: const Icon(Icons.phonelink_lock_rounded, size: 20),
+                  label: Text(tr('Open without internet')),
                 ),
               ],
               const SizedBox(height: 26),
