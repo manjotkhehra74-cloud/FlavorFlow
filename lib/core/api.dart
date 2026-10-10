@@ -54,12 +54,16 @@ class ApiClient {
   }
 
   String? _savedBase;
+  bool _warmingOfflineCache = false;
+  int _readCacheEpoch = 0;
+  Future<void> _cacheWriteTail = Future<void>.value();
 
   static const _prefsKey = 'api_base_override';
 
   Future<void> loadSavedBase() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      _readCacheEpoch = prefs.getInt(_rcEpochKey) ?? 0;
       final v = prefs.getString(_prefsKey);
       _savedBase = (v != null && v.isNotEmpty) ? v : null;
     } catch (_) {/* storage unavailable */}
@@ -113,15 +117,21 @@ class ApiClient {
   /// is served, so screens and entry-form dropdowns stay usable offline.
   /// Auth-critical calls (the `/health` probe, `/auth/me` validation) are never
   /// cached — a cached copy must not fake a successful online check.
-  Future<dynamic> get(String path) async {
+  Future<dynamic> get(String path, {Duration? timeout}) async {
+    final cacheEpoch = _readCacheEpoch;
     try {
-      final json = await _send('GET', path);
-      if (json != null && !_readCacheSkip(path)) unawaited(_cacheRead(path, json));
+      final json = await _send('GET', path, null, null, timeout);
+      // Finish writing before returning the live result. Fire-and-forget writes
+      // could still be in flight when Android suspends the app or the user
+      // switches the phone offline, leaving the next offline open with no cache.
+      // The account epoch prevents an old login's late response from being
+      // visible in the next account's cache.
+      if (json != null && !_readCacheSkip(path)) await _cacheRead(path, json, cacheEpoch);
       return json;
     } on ApiException catch (e) {
       final unreachable = e.isNetworkError || e.status == 502 || e.status == 503 || e.status == 504;
       if (unreachable) {
-        final cached = await _readCacheGet(path);
+        final cached = await _readCacheGet(path, cacheEpoch);
         if (cached != null) return cached; // offline: last known good data
       }
       rethrow;
@@ -132,31 +142,43 @@ class ApiClient {
 
   // ---- Offline read cache (MAN-13) --------------------------------------
   static const _rcPrefix = 'ff_read_cache_v1:';
-  static const _rcIndexKey = 'ff_read_cache_v1:index';
+  static const _rcEpochKey = 'ff_read_cache_v1:epoch';
   static const _rcMaxEntries = 120;
   static const _rcMaxEntryBytes = 512 * 1024; // skip huge report payloads
 
-  Future<void> _cacheRead(String path, dynamic json) async {
-    try {
-      final encoded = jsonEncode({'at': DateTime.now().millisecondsSinceEpoch, 'body': json});
-      if (encoded.length > _rcMaxEntryBytes) return;
-      final prefs = await SharedPreferences.getInstance();
-      final key = '$_rcPrefix$path';
-      await prefs.setString(key, encoded);
-      final index = _rcIndex(prefs.getString(_rcIndexKey));
-      index.remove(key);
-      index.add(key);
-      while (index.length > _rcMaxEntries) {
-        await prefs.remove(index.removeAt(0)); // oldest first
-      }
-      await prefs.setString(_rcIndexKey, jsonEncode(index));
-    } catch (_) {/* the cache is best-effort */}
+  String _rcKey(String path, int epoch) => '$_rcPrefix$epoch:$path';
+  String _rcIndexKeyFor(int epoch) => '$_rcPrefix$epoch:index';
+
+  Future<void> _cacheRead(String path, dynamic json, int epoch) {
+    // Serialize read/modify/write of the LRU index; warm-up intentionally
+    // fetches several routes at once, and concurrent index writes could drop
+    // entries from the index (leaving stale cache keys behind).
+    final write = _cacheWriteTail.then((_) async {
+      try {
+        final encoded = jsonEncode({'at': DateTime.now().millisecondsSinceEpoch, 'body': json});
+        if (encoded.length > _rcMaxEntryBytes) return;
+        final prefs = await SharedPreferences.getInstance();
+        final key = _rcKey(path, epoch);
+        await prefs.setString(key, encoded);
+        final indexKey = _rcIndexKeyFor(epoch);
+        final index = _rcIndex(prefs.getString(indexKey));
+        index.remove(key);
+        index.add(key);
+        while (index.length > _rcMaxEntries) {
+          await prefs.remove(index.removeAt(0)); // oldest first
+        }
+        await prefs.setString(indexKey, jsonEncode(index));
+      } catch (_) {/* the cache is best-effort */}
+    });
+    _cacheWriteTail = write;
+    return write;
   }
 
-  Future<dynamic> _readCacheGet(String path) async {
+  Future<dynamic> _readCacheGet(String path, int epoch) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString('$_rcPrefix$path');
+      final raw = prefs.getString(_rcKey(path, epoch)) ??
+          (epoch == 0 ? prefs.getString('$_rcPrefix$path') : null); // migrate caches from the previous app build
       if (raw == null) return null;
       final j = jsonDecode(raw);
       if (j is Map && j['body'] != null) return j['body'];
@@ -176,13 +198,97 @@ class ApiClient {
   /// Drop every cached GET reply — called on login/logout so one account's
   /// cached reads are never shown to another account on the same phone.
   Future<void> clearReadCache() async {
+    // Switch namespace synchronously: any in-flight response from the previous
+    // account can only write under its old epoch, never into the new account's
+    // cache, even if its request finishes after this cleanup.
+    final epoch = ++_readCacheEpoch;
     try {
       final prefs = await SharedPreferences.getInstance();
-      final keys = prefs.getKeys().where((k) => k.startsWith(_rcPrefix) || k == _rcIndexKey).toList();
+      final keys = prefs.getKeys().where((k) => k.startsWith(_rcPrefix) && k != _rcEpochKey).toList();
       for (final k in keys) {
         await prefs.remove(k);
       }
+      await prefs.setInt(_rcEpochKey, epoch);
     } catch (_) {}
+  }
+
+  /// Warm the small reference lists that entry forms need before the user goes
+  /// offline. The normal read-through cache only remembers screens the user has
+  /// already visited; without these lists, offline entry forms can open with an
+  /// empty product/material dropdown and cannot save anything.
+  Future<void> warmOfflineCache() async {
+    final now = DateTime.now();
+    String ymd(DateTime d) =>
+        '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    final from = ymd(DateTime(now.year, now.month, 1));
+    final to = ymd(DateTime(now.year, now.month + 1, 0));
+    final labourRange = Uri(queryParameters: {'from': from, 'to': to}).query;
+    final periodRange = Uri(queryParameters: {'from': from, 'to': ymd(now)}).query;
+    final paths = <String>[
+      // Master data used by forms / pickers.
+      '/products',
+      '/inventory',
+      '/packing/materials',
+      '/packing/bom',
+      '/packing/recipes',
+      '/billing/products',
+      '/billing/items',
+      '/billing/parties',
+      '/billing/parties?kind=supplier',
+      '/billing/settings',
+      // Operational views and lists users commonly need offline.
+      '/dashboard',
+      '/notifications',
+      '/users',
+      '/audit',
+      '/reports',
+      '/reports/batch-stock',
+      '/adjustments/pending',
+      '/adjustments/history',
+      '/production/batches',
+      '/production/batches?status=COMPLETED',
+      '/production/next-code',
+      '/dispatch',
+      '/dispatch/trucks',
+      '/packing/ledger',
+      '/packing/loss',
+      '/stock/register?$periodRange',
+      '/stock/balances?$periodRange',
+      '/stock/documents?$periodRange',
+      '/billing/invoices',
+      '/billing/summary',
+      '/billing/receivables',
+      '/billing/purchases',
+      '/billing/purchase-summary',
+      '/billing/payables',
+      '/billing/register?$periodRange',
+      '/labour/daily?$labourRange',
+      '/reports/productivity?$labourRange',
+      '/reports/productivity/analysis?$labourRange',
+      '/billing/next-number?date=${ymd(now)}',
+      '/billing/purchases/next-number?date=${ymd(now)}',
+    ];
+    if (_warmingOfflineCache) return;
+    _warmingOfflineCache = true;
+    var nextPath = 0;
+    Future<void> worker() async {
+      while (nextPath < paths.length) {
+        final path = paths[nextPath++];
+        try {
+          // Short timeouts keep a stale ERP host from leaving warm-up requests
+          // alive for minutes in the background.
+          await get(path, timeout: const Duration(seconds: 8));
+        } catch (_) {
+          // A route may not exist on an older server or the network may have
+          // gone away; warm-up is best-effort and must not block sign-in.
+        }
+      }
+    }
+    try {
+      await Future.wait(List.generate(6, (_) => worker()));
+    } finally {
+      _warmingOfflineCache = false;
+    }
   }
 
   /// [idempotencyKey] (MAN-13): sent as `Idempotency-Key` so a server with the
@@ -213,14 +319,20 @@ class ApiClient {
         if (!kIsWeb && idempotencyKey != null && idempotencyKey.isNotEmpty) 'Idempotency-Key': idempotencyKey,
       };
 
-  Future<dynamic> _send(String method, String path, [Map<String, dynamic>? body, String? idempotencyKey]) async {
+  Future<dynamic> _send(
+    String method,
+    String path, [
+    Map<String, dynamic>? body,
+    String? idempotencyKey,
+    Duration? timeoutOverride,
+  ]) async {
     final base = baseUrl;
     if (base == null) {
       throw ApiException(-2, 'Server address is not set. Tap the gear icon on the login screen and enter your ERP address.');
     }
     final uri = Uri.parse('$base$path');
     http.Response res;
-    final requestTimeout = method == 'POST' ? const Duration(seconds: 30) : const Duration(seconds: 45);
+    final requestTimeout = timeoutOverride ?? (method == 'POST' ? const Duration(seconds: 30) : const Duration(seconds: 45));
 
     Future<http.Response> requestOnce() {
       switch (method) {

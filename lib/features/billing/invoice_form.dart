@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../core/i18n.dart';
+import '../../core/offline_queue.dart';
 import '../../core/item_code.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
@@ -185,7 +186,7 @@ class _InvoiceFormPageState extends State<InvoiceFormPage> {
     }
     setState(() => busy = true);
     try {
-      final j = await context.read<AuthController>().api.post('/billing/invoices', {
+      final body = <String, dynamic>{
         'invoiceDate': ymd(date),
         'partyId': partyId == 0 ? null : partyId,
         'partyName': walkInName.text.trim(),
@@ -195,9 +196,22 @@ class _InvoiceFormPageState extends State<InvoiceFormPage> {
         'deductStock': widget.dispatchId == null && deductStock,
         'remarks': remarks.text.trim(),
         'items': [for (final l in active) l.toJson()],
-      });
+      };
+      final sent = await OfflineQueue.instance.submit(
+        context.read<AuthController>(),
+        method: 'POST',
+        path: '/billing/invoices',
+        label: 'Sales invoice',
+        body: body,
+      );
       if (!mounted) return;
-      showOk(context, '${tr('Invoice')} ${(j as Map)['number']} ${tr('created')} · ${inr(j['total'])}');
+      if (sent.queued) {
+        showOk(context, 'Invoice saved on this phone — it will sync when internet returns.');
+        context.pop(true);
+        return;
+      }
+      final j = (sent.json as Map).cast<String, dynamic>();
+      showOk(context, '${tr('Invoice')} ${j['number']} ${tr('created')} · ${inr(j['total'])}');
       context.pushReplacement('/billing/${j['id']}');
     } catch (e) {
       if (mounted) showErr(context, e);

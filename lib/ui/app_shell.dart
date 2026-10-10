@@ -187,6 +187,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     final queueAuth = context.read<AuthController>();
     OfflineQueue.instance.attach(queueAuth.api, queueAuth.session?.email);
+    if (OfflineQueue.instance.online) unawaited(queueAuth.api.warmOfflineCache());
     NotificationBadge.resetForAccount();
     _unread = NotificationBadge.count.value;
     NotificationBadge.count.addListener(_onBadgeChanged);

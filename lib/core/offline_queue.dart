@@ -20,7 +20,7 @@ class QueuedEntry {
   final String label;
   final String method;
   final String path;
-  final Map<String, dynamic> body;
+  Map<String, dynamic> body;
   final DateTime createdAt;
   SyncState state;
   int attempts;
@@ -47,7 +47,7 @@ class QueuedEntry {
 
   /// Short hint for the list: the code / destination / product the user typed.
   String get summary {
-    for (final k in const ['code', 'destination', 'productName', 'reference', 'remark', 'note']) {
+    for (final k in const ['code', 'billNo', 'truckNumber', 'destination', 'productName', 'sku', 'partyName', 'reference', 'remark', 'note']) {
       final v = body[k];
       if (v != null && '$v'.trim().isNotEmpty) return '$v';
     }
@@ -126,6 +126,11 @@ class OfflineQueue extends ChangeNotifier {
   bool online = true;
 
   List<QueuedEntry> get entries => List.unmodifiable(_items);
+  List<QueuedEntry> get currentAccountEntries {
+    final owner = _owner;
+    if (owner == null) return const <QueuedEntry>[];
+    return List.unmodifiable(_items.where((e) => e.owner == owner));
+  }
   List<QueuedEntry> get pending => _items.where((e) => e.state == SyncState.pending).toList();
   List<QueuedEntry> get failed => _items.where((e) => e.state == SyncState.failed).toList();
   List<QueuedEntry> get synced {
@@ -169,11 +174,14 @@ class OfflineQueue extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _persist() async {
-    if (_readOnly) return;
+  Future<bool> _persist() async {
+    if (_readOnly) return false;
     try {
       await _storage.write(key: _storageKey, value: jsonEncode([for (final e in _items) e.toJson()]));
-    } catch (_) {/* storage unavailable — entries stay in memory */}
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Keep every waiting/failed entry, but only the latest synced ones.
@@ -209,6 +217,8 @@ class OfflineQueue extends ChangeNotifier {
       for (final e in _items) {
         if (e.state == SyncState.pending) e.nextAttemptAt = null;
       }
+      final api = _api;
+      if (api != null) unawaited(api.warmOfflineCache());
     }
     await flush();
   }
@@ -245,7 +255,10 @@ class OfflineQueue extends ChangeNotifier {
     final id = _newId();
     try {
       final json = method == 'PUT' ? await api.put(path, body, id) : await api.post(path, body, id);
-      online = true;
+      if (!online) {
+        online = true;
+        notifyListeners();
+      }
       return SubmitResult(json: json, queued: false, id: id);
     } on ApiException catch (e) {
       final unreachable = e.isNetworkError || e.status == 502 || e.status == 503 || e.status == 504;
@@ -261,7 +274,10 @@ class OfflineQueue extends ChangeNotifier {
         createdAt: DateTime.now(),
       )..nextAttemptAt = DateTime.now().add(const Duration(seconds: 20));
       _items.add(entry);
-      await _persist();
+      if (!await _persist()) {
+        _items.remove(entry);
+        throw ApiException(-3, 'This entry could not be saved securely on this phone. Keep the app open and try again when storage is available.');
+      }
       notifyListeners();
       return SubmitResult(json: null, queued: true, id: id);
     }
@@ -274,8 +290,15 @@ class OfflineQueue extends ChangeNotifier {
 
   String? _refOf(dynamic json) {
     if (json is! Map) return null;
-    final v = json['code'] ?? json['challan'] ?? json['batchCode'] ?? json['id'];
-    return v?.toString();
+    // Prefer database id (needed to edit a synced offline row), then readable
+    // document numbers for the other queue types.
+    final v = json['id'] ?? json['code'] ?? json['challan'] ?? json['batchCode'];
+    if (v != null) return v.toString();
+    for (final key in const ['data', 'row', 'labour', 'entry']) {
+      final nested = _refOf(json[key]);
+      if (nested != null) return nested;
+    }
+    return null;
   }
 
   /// Sends every due entry of the signed-in account, oldest first. Stops at the
@@ -348,6 +371,46 @@ class OfflineQueue extends ChangeNotifier {
       if (e.state == SyncState.pending) e.nextAttemptAt = null;
     }
     await flush();
+  }
+
+  /// Replace the payload of a still-waiting entry (for example, an offline
+  /// labour row the user edited before it synced). A synced entry must not be
+  /// rewritten as a new POST, or it could create a duplicate on the server.
+  Future<bool> updatePendingBody(String id, Map<String, dynamic> body) async {
+    final owner = _owner;
+    if (owner == null || _flushing) return false;
+    QueuedEntry? entry;
+    for (final e in _items) {
+      if (e.id == id && e.owner == owner) {
+        entry = e;
+        break;
+      }
+    }
+    if (entry == null || entry.state == SyncState.synced) return false;
+
+    final oldBody = entry.body;
+    final oldState = entry.state;
+    final oldAttempts = entry.attempts;
+    final oldNextAttemptAt = entry.nextAttemptAt;
+    final oldError = entry.lastError;
+    entry
+      ..body = Map<String, dynamic>.from(body)
+      ..state = SyncState.pending
+      ..attempts = 0
+      ..nextAttemptAt = null
+      ..lastError = null;
+    if (!await _persist()) {
+      entry
+        ..body = oldBody
+        ..state = oldState
+        ..attempts = oldAttempts
+        ..nextAttemptAt = oldNextAttemptAt
+        ..lastError = oldError;
+      return false;
+    }
+    notifyListeners();
+    unawaited(flush());
+    return true;
   }
 
   /// Re-queue a rejected entry (after the user fixed the cause) and send it now.

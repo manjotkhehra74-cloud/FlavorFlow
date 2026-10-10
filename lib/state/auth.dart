@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -200,6 +202,9 @@ class AuthController extends ChangeNotifier {
       // company shows mill units the moment a rice mill signs in.
       try { await CompanyProfile.load(api); } catch (_) {/* server route optional */}
       subscription.refresh(api); // fire-and-forget (cloud tenants only)
+      // Store entry-form lists locally while the server is reachable, so a later
+      // offline unlock still has products/materials to choose from.
+      unawaited(api.warmOfflineCache());
       return null;
     } on ApiException catch (e) {
       lastLoginNetworkError = e.isNetworkError || e.status == 502 || e.status == 503 || e.status == 504;
@@ -232,6 +237,7 @@ class AuthController extends ChangeNotifier {
         await OfflineSession.save(api.token!, (json as Map).cast<String, dynamic>());
         try { await CompanyProfile.load(api); } catch (_) {/* server route optional */}
         subscription.refresh(api); // fire-and-forget (cloud tenants only)
+        unawaited(api.warmOfflineCache());
         return null;
       } on ApiException catch (e) {
         if (e.status == 401 || e.status == 403) {

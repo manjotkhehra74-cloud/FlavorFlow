@@ -7,11 +7,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/api.dart';
 import '../../core/download.dart';
 import '../../core/format.dart';
+import '../../core/offline_queue.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 
 const _localLabourKey = 'flavorflow_productivity_local_labour';
+const _manualSkuChoice = '__manual_sku__';
 
 const _lineSkuRules = <String, Set<String>>{
   'line 2': {
@@ -127,9 +129,10 @@ Future<void> _writeLocalLabour(Map<String, dynamic> row) async {
   await prefs.setString(_localLabourKey, jsonEncode(rows));
 }
 
-/// Lets the test build keep manual entries editable when the older server has
-/// not received /labour/daily yet. Server rows remain authoritative once the
-/// endpoint is available; local rows are only an offline/test fallback.
+/// Server rows are shown with any labour requests still on this phone. Queue
+/// records (encrypted) are the source of truth for offline-created labour rows;
+/// old local-only rows are still merged for builds where the server endpoint
+/// did not exist yet.
 Future<List<Map<String, dynamic>>> _loadLabourRows(ApiClient api, String query) async {
   List<Map<String, dynamic>> server = [];
   try {
@@ -137,7 +140,7 @@ Future<List<Map<String, dynamic>>> _loadLabourRows(ApiClient api, String query) 
     server = ((json as Map)['rows'] as List? ?? const []).cast<Map<String, dynamic>>();
   } catch (_) {}
   final params = Uri.splitQueryString(query);
-  final local = (await _readLocalLabour()).where((r) {
+  bool matches(Map<String, dynamic> r) {
     final date = '${r['date'] ?? ''}'.split(RegExp(r'[T ]')).first;
     final shift = '${r['shift'] ?? ''}';
     final line = '${r['line'] ?? ''}';
@@ -147,27 +150,47 @@ Future<List<Map<String, dynamic>>> _loadLabourRows(ApiClient api, String query) 
         (params['sku'] == null || sku == params['sku'] || _skuRuleKey(sku) == _skuRuleKey(params['sku']!)) &&
         (params['shift'] == null || shift.toLowerCase() == params['shift']!.toLowerCase()) &&
         (params['line'] == null || line.toLowerCase() == params['line']!.toLowerCase());
-  }).toList();
-  final byId = <String, Map<String, dynamic>>{for (final r in server) if (r['id'] != null) '${r['id']}': r};
-  for (final r in local) {
-    final id = r['id'];
-    if (id == null) {
-      server.add(r);
-    } else {
-      byId['$id'] = r;
+  }
+
+  final queuedRows = <Map<String, dynamic>>[];
+  final serverKeys = server.map(_labourIdentity).toSet();
+  for (final e in OfflineQueue.instance.currentAccountEntries) {
+    if (e.path != '/labour/daily' && !e.path.startsWith('/labour/daily/')) continue;
+    final row = <String, dynamic>{
+      ...e.body,
+      'id': e.serverRef ?? 'local-${e.id}',
+      'queuedId': e.id,
+      'localOnly': e.state != SyncState.synced || e.serverRef == null,
+    };
+    // Once the server returns the accepted row, use that copy instead of
+    // drawing a duplicate from the retained (synced) queue history.
+    if (e.state == SyncState.synced && serverKeys.contains(_labourIdentity(row))) continue;
+    if (matches(row)) queuedRows.add(row);
+  }
+  final localRows = (await _readLocalLabour()).where(matches).toList();
+  final merged = <Map<String, dynamic>>[];
+  final indexByIdentity = <String, int>{};
+  void addOrReplace(Map<String, dynamic> row, {required bool localWins}) {
+    final identity = _labourIdentity(row);
+    final index = indexByIdentity[identity];
+    if (index == null) {
+      indexByIdentity[identity] = merged.length;
+      merged.add(row);
+    } else if (localWins) {
+      merged[index] = row;
     }
   }
-  final result = <Map<String, dynamic>>[];
-  final seen = <String>{};
-  for (final r in [...server, ...local]) {
-    final id = r['id'];
-    if (id == null) {
-      result.add(r);
-    } else if (seen.add('$id')) {
-      result.add(byId['$id'] ?? r);
-    }
+
+  for (final row in server) {
+    if (matches(row)) addOrReplace(row, localWins: false);
   }
-  return result;
+  for (final row in localRows) {
+    addOrReplace(row, localWins: true);
+  }
+  for (final row in queuedRows) {
+    addOrReplace(row, localWins: true);
+  }
+  return merged;
 }
 
 /// Production productivity + daily labour register.
@@ -777,6 +800,10 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
 
   Future<void> _export(String kind) async {
     if (_exporting) return;
+    if (!OfflineQueue.instance.online) {
+      showErr(context, 'Excel export needs internet. You can still add Labour entries offline; they will sync when internet returns.');
+      return;
+    }
     setState(() => _exporting = true);
     try {
       final path = kind == 'labour' ? '/labour/daily.xlsx' : '/reports/productivity.xlsx';
@@ -1006,6 +1033,7 @@ class _DailyLabourDialog extends StatefulWidget {
 
 class _DailyLabourDialogState extends State<_DailyLabourDialog> {
   final line = TextEditingController();
+  final manualSku = TextEditingController();
   final workers = TextEditingController();
   final hours = TextEditingController();
   final supervisor = TextEditingController();
@@ -1028,8 +1056,10 @@ class _DailyLabourDialogState extends State<_DailyLabourDialog> {
       hours.text = '${e['actualHours'] ?? e['hours'] ?? ''}';
       supervisor.text = '${e['supervisor'] ?? ''}';
       remarks.text = '${e['remarks'] ?? ''}';
-      final rawProduct = e['productId'] ?? e['product_id'] ?? e['sku'] ?? e['product'] ?? e['productName'] ?? e['product_name'];
+      final rawProduct = e['productId'] ?? e['product_id'] ?? e['product'] ?? e['productName'] ?? e['product_name'] ?? e['sku'];
+      final rawSku = e['sku'] ?? e['productName'] ?? e['product_name'] ?? e['product'];
       if (rawProduct != null) product = '$rawProduct';
+      if (rawSku != null) manualSku.text = '$rawSku';
     }
     context.read<AuthController>().api.get('/products').then((json) {
       if (!mounted) return;
@@ -1037,11 +1067,28 @@ class _DailyLabourDialogState extends State<_DailyLabourDialog> {
       setState(() {
         products = loaded;
         if (product != null && !loaded.any((p) => '${p['id']}' == product)) {
-          final match = loaded.where((p) => _skuRuleKey('${p['name']}') == _skuRuleKey(product!)).toList();
-          if (match.isNotEmpty) product = '${match.first['id']}';
+          final wantedName = manualSku.text.trim().isNotEmpty ? manualSku.text.trim() : product!;
+          final match = loaded.where((p) => _skuRuleKey('${p['name']}') == _skuRuleKey(wantedName)).toList();
+          if (match.isNotEmpty) {
+            product = '${match.first['id']}';
+            manualSku.text = '${match.first['name']}';
+          } else if (manualSku.text.trim().isEmpty && int.tryParse(product!) == null) {
+            manualSku.text = product!;
+            product = _manualSkuChoice;
+          } else if (manualSku.text.trim().isNotEmpty) {
+            product = _manualSkuChoice;
+          }
+        } else if (product == null && manualSku.text.trim().isNotEmpty) {
+          final match = loaded.where((p) => _skuRuleKey('${p['name']}') == _skuRuleKey(manualSku.text)).toList();
+          if (match.isNotEmpty) {
+            product = '${match.first['id']}';
+          } else {
+            product = _manualSkuChoice;
+          }
         }
         final selected = loaded.where((p) => '${p['id']}' == product).toList();
-        final inferred = selected.isEmpty ? null : _lineForSku('${selected.first['name']}');
+        final inferredName = selected.isEmpty ? manualSku.text.trim() : '${selected.first['name']}';
+        final inferred = _lineForSku(inferredName);
         if (_isUnassignedLine(line.text) && inferred != null) line.text = inferred;
       });
     }).catchError((_) {});
@@ -1049,7 +1096,7 @@ class _DailyLabourDialogState extends State<_DailyLabourDialog> {
 
   @override
   void dispose() {
-    for (final c in [line, workers, hours, supervisor, remarks]) c.dispose();
+    for (final c in [line, manualSku, workers, hours, supervisor, remarks]) c.dispose();
     super.dispose();
   }
 
@@ -1057,8 +1104,8 @@ class _DailyLabourDialogState extends State<_DailyLabourDialog> {
     final w = double.tryParse(workers.text.trim());
     final h = double.tryParse(hours.text.trim());
     final selected = products.where((p) => '${p['id']}' == product).toList();
-    final selectedName = selected.isEmpty ? '' : '${selected.first['name']}';
-    if (line.text.trim().isEmpty || product == null || selectedName.isEmpty || w == null || h == null || w <= 0 || h <= 0) {
+    final selectedName = selected.isEmpty ? manualSku.text.trim() : '${selected.first['name']}';
+    if (line.text.trim().isEmpty || selectedName.isEmpty || w == null || h == null || w <= 0 || h <= 0) {
       showErr(context, 'SKU, line, workers and actual hours are required.');
       return;
     }
@@ -1073,7 +1120,10 @@ class _DailyLabourDialogState extends State<_DailyLabourDialog> {
         'date': _ymd(date),
         'shift': shift,
         'line': line.text.trim(),
-        'productId': int.tryParse(product!) ?? product,
+        if (selected.isNotEmpty)
+          'productId': int.tryParse('${selected.first['id']}') ?? selected.first['id']
+        else if (product != null && product != _manualSkuChoice && int.tryParse(product!) != null)
+          'productId': int.parse(product!),
         'sku': selectedName,
         'productName': selectedName,
         'workerCount': w,
@@ -1084,19 +1134,39 @@ class _DailyLabourDialogState extends State<_DailyLabourDialog> {
         'remarks': remarks.text.trim(),
       };
       final id = widget.entry?['id'];
-      final localBody = {...body};
+      final queuedId = widget.entry?['queuedId']?.toString();
       if (widget.entry?['localOnly'] == true) {
-        await _writeLocalLabour({...localBody, 'id': id});
+        if (queuedId != null) {
+          final updated = await OfflineQueue.instance.updatePendingBody(queuedId, body);
+          if (!updated) {
+            throw ApiException(-3, 'This offline entry is already syncing. Wait a moment, then edit it again.');
+          }
+          if (mounted) showOk(context, 'Offline labour entry updated on this phone.');
+        } else {
+          // Older server build without /labour/daily: preserve the historical
+          // local-only fallback. It is clearly separate from syncable entries.
+          await _writeLocalLabour({...body, if (id != null) 'id': id});
+          if (mounted) showOk(context, 'Saved on this phone only; this server cannot sync Labour entries yet.');
+        }
       } else {
         try {
-          if (id == null) {
-            await context.read<AuthController>().api.post('/labour/daily', body);
-          } else {
-            await context.read<AuthController>().api.put('/labour/daily/$id', body);
+          // MAN-13: no connection → kept in encrypted local storage and sent
+          // automatically later.
+          final sent = await OfflineQueue.instance.submit(
+            context.read<AuthController>(),
+            method: id == null ? 'POST' : 'PUT',
+            path: id == null ? '/labour/daily' : '/labour/daily/$id',
+            label: 'Labour entry',
+            body: body,
+          );
+          if (sent.queued && mounted) {
+            showOk(context, 'Labour entry saved on this phone — it will sync when internet returns.');
           }
-        } catch (_) {
-          // Older test servers can still be used; persist an editable local row.
-          await _writeLocalLabour({...localBody, if (id != null) 'id': id});
+        } on ApiException catch (e) {
+          if (e.status != 404) rethrow;
+          // An older server may not have received the labour API patch yet.
+          await _writeLocalLabour({...body, if (id != null) 'id': id});
+          if (mounted) showOk(context, 'Saved on this phone only; this server cannot sync Labour entries yet.');
         }
       }
       if (mounted) Navigator.pop(context, true);
@@ -1124,20 +1194,41 @@ class _DailyLabourDialogState extends State<_DailyLabourDialog> {
           const SizedBox(height: 10),
           TextField(controller: line, decoration: const InputDecoration(labelText: 'Production line *', hintText: 'e.g. Line 1')),
           const SizedBox(height: 10),
-          DropdownButtonFormField<String>(
-            value: products.any((p) => '${p['id']}' == product) ? product : null,
+          if (products.isNotEmpty) DropdownButtonFormField<String>(
+            value: product == _manualSkuChoice || products.any((p) => '${p['id']}' == product) ? product : null,
             isExpanded: true,
             decoration: const InputDecoration(labelText: 'SKU / Product *'),
-            items: [for (final p in products) DropdownMenuItem(value: '${p['id']}', child: Text('${p['name']}'))],
+            items: [
+              for (final p in products) DropdownMenuItem(value: '${p['id']}', child: Text('${p['name']}')),
+              const DropdownMenuItem(value: _manualSkuChoice, child: Text('Type SKU / product manually')),
+            ],
             onChanged: (v) {
               final selected = products.where((p) => '${p['id']}' == v).toList();
-              final inferred = selected.isEmpty ? null : _lineForSku('${selected.first['name']}');
+              final inferredName = selected.isNotEmpty ? '${selected.first['name']}' : manualSku.text.trim();
+              final inferred = _lineForSku(inferredName);
               setState(() {
                 product = v;
+                if (selected.isNotEmpty) manualSku.text = inferredName;
                 if (_isUnassignedLine(line.text) && inferred != null) line.text = inferred;
               });
             },
           ),
+          if (products.isEmpty || product == _manualSkuChoice) ...[
+            if (products.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text('Product list is not available offline. Type the exact existing SKU/product name; it will be checked when synced.', style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+              ),
+            TextField(
+              controller: manualSku,
+              textCapitalization: TextCapitalization.words,
+              decoration: InputDecoration(labelText: 'SKU / Product *', hintText: 'e.g. White Vinegar 610'),
+              onChanged: (value) {
+                final inferred = _lineForSku(value);
+                if (_isUnassignedLine(line.text) && inferred != null) line.text = inferred;
+              },
+            ),
+          ],
           const SizedBox(height: 10),
           Row(children: [Expanded(child: TextField(controller: workers, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Workers *'))), const SizedBox(width: 10), Expanded(child: TextField(controller: hours, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Actual hours *')))]),
           const SizedBox(height: 10),
