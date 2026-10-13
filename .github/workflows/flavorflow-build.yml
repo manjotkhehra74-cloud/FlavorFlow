@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - arena/01a0dc70-flavorflow
+      - arena/02900f8a-flavorflow
   workflow_dispatch:
 
 permissions:
@@ -15,7 +16,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build web and Android APK
+    name: Analyze, test and build web + Android APK/AAB
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -38,6 +39,49 @@ jobs:
       - name: Install packages
         run: flutter pub get
 
+      - name: Analyze Flutter app
+        run: flutter analyze lib test
+
+      - name: Run Flutter tests
+        run: flutter test
+
+      - name: Configure Android upload signing (when credentials are available)
+        id: signing
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$ANDROID_KEYSTORE_BASE64" ]]; then
+            if [[ -n "$ANDROID_KEYSTORE_PASSWORD$ANDROID_KEY_ALIAS$ANDROID_KEY_PASSWORD" ]]; then
+              echo "Upload-key secrets are incomplete; refusing to build a misleading release." >&2
+              exit 1
+            fi
+            echo "No upload key configured: build outputs will be debug-signed test packages, not Play Store upload packages."
+            echo "artifact_name=FlavorFlow-Android-test-debug-signed" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          : "${ANDROID_KEYSTORE_PASSWORD:?Missing ANDROID_KEYSTORE_PASSWORD}"
+          : "${ANDROID_KEY_ALIAS:?Missing ANDROID_KEY_ALIAS}"
+          : "${ANDROID_KEY_PASSWORD:?Missing ANDROID_KEY_PASSWORD}"
+          KEYSTORE_FILE="$RUNNER_TEMP/flavorflow-upload-key"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '\r\n ' | base64 --decode > "$KEYSTORE_FILE"
+          chmod 600 "$KEYSTORE_FILE"
+          if keytool -list -keystore "$KEYSTORE_FILE" -storepass "$ANDROID_KEYSTORE_PASSWORD" -storetype JKS >/dev/null 2>&1; then
+            STORE_TYPE=jks
+          elif keytool -list -keystore "$KEYSTORE_FILE" -storepass "$ANDROID_KEYSTORE_PASSWORD" -storetype PKCS12 >/dev/null 2>&1; then
+            STORE_TYPE=pkcs12
+          else
+            echo "Android upload keystore/password invalid or unsupported." >&2
+            exit 1
+          fi
+          printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\nstoreType=%s\n' \
+            "$KEYSTORE_FILE" "$ANDROID_KEYSTORE_PASSWORD" "$ANDROID_KEY_ALIAS" "$ANDROID_KEY_PASSWORD" "$STORE_TYPE" > android/key.properties
+          echo "artifact_name=FlavorFlow-Android-signed-release" >> "$GITHUB_OUTPUT"
+
       - name: Build web
         run: flutter build web --release --no-tree-shake-icons --dart-define=API_BASE=https://flavorflow.duckdns.org/api
 
@@ -52,10 +96,28 @@ jobs:
       - name: Build Android APK
         run: flutter build apk --release --dart-define=API_BASE=https://flavorflow.duckdns.org/api
 
-      - name: Upload Android APK
+      - name: Build Play Store Android App Bundle
+        run: flutter build appbundle --release --dart-define=API_BASE=https://flavorflow.duckdns.org/api
+
+      - name: Verify Android release packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          AAB=build/app/outputs/bundle/release/app-release.aab
+          test -s "$APK"
+          test -s "$AAB"
+          unzip -tq "$APK"
+          jarsigner -verify "$AAB" >/dev/null
+          echo "APK and AAB are present and pass archive/signature checks."
+          ls -lh "$APK" "$AAB"
+
+      - name: Upload Android release artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: flavorflow-android-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: ${{ steps.signing.outputs.artifact_name }}
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/bundle/release/app-release.aab
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 14

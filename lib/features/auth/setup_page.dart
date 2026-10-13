@@ -39,8 +39,8 @@ class _SetupPageState extends State<SetupPage> {
     ));
     await CompanyProfile.markSetupDone();
     kNeedsFirstRunSetup = false;
-    // Ask ALL app permissions in one flow right after setup (like big apps).
-    await AppPermissions.requestAllOnce();
+    // Ask for notification permission after setup; other access is contextual.
+    await AppPermissions.requestNotificationOnce();
     if (!mounted) return;
     context.go('/login');
   }

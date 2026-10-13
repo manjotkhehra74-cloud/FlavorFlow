@@ -29,7 +29,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void initState() {
     super.initState();
-    AppPermissions.requestAllOnce(); // one-time upfront permissions
+    AppPermissions.requestNotificationOnce(); // ask for alerts once; other access is contextual
     _checkBio();
     // Prefill company code from the saved SaaS server URL.
     final base = context.read<AuthController>().serverBase ?? '';
