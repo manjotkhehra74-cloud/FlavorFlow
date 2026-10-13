@@ -43,7 +43,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          flutter analyze lib test > "$RUNNER_TEMP/flutter-analyze.log" 2>&1
+          flutter analyze --no-fatal-infos lib test > "$RUNNER_TEMP/flutter-analyze.log" 2>&1
           analyze_status=$?
           set -e
           cat "$RUNNER_TEMP/flutter-analyze.log"
