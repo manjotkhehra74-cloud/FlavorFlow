@@ -52,11 +52,38 @@ jobs:
           import pathlib
           import sys
 
+          def escape_data(value):
+              return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+          def escape_property(value):
+              return escape_data(value).replace(":", "%3A").replace(",", "%2C")
+
           text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
-          if not text.strip():
-              text = "flutter analyze failed without producing output."
-          text = text[:12000].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-          print(f"::error title=Flutter analyzer output::{text}")
+          found = 0
+          for raw_line in text.splitlines():
+              parts = [part.strip() for part in raw_line.strip().split(" • ")]
+              if len(parts) < 4 or parts[0] not in {"error", "warning"}:
+                  continue
+              severity, message = parts[0], parts[1]
+              location, rule = parts[-2], parts[-1]
+              try:
+                  file_path, line, column = location.rsplit(":", 2)
+              except ValueError:
+                  file_path, line, column = location, "", ""
+              level = "error" if severity == "error" else "warning"
+              properties = [f"file={escape_property(file_path)}"]
+              if line.isdigit():
+                  properties.append(f"line={line}")
+              if column.isdigit():
+                  properties.append(f"col={column}")
+              properties.append(f"title={escape_property(rule)}")
+              print(f"::{level} {','.join(properties)}::{escape_data(message)}")
+              found += 1
+
+          if found == 0:
+              text = text.strip() or "flutter analyze failed without producing output."
+              text = escape_data(text[:12000])
+              print(f"::error title=Flutter analyzer output::{text}")
           PY
           fi
           exit "$analyze_status"
