@@ -29,7 +29,7 @@ void main() {
         find.byWidgetPredicate(
           (widget) =>
               widget is TextField &&
-              widget.decoration.hintText == 'Enter customer, company or destination',
+              widget.decoration?.hintText == 'Enter customer, company or destination',
         ),
         findsOneWidget,
       );
