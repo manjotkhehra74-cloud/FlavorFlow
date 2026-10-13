@@ -43,50 +43,22 @@ jobs:
         shell: bash
         run: |
           set +e
-          flutter analyze --machine lib test > "$RUNNER_TEMP/flutter-analyze.log" 2>&1
+          flutter analyze lib test > "$RUNNER_TEMP/flutter-analyze.log" 2>&1
           analyze_status=$?
           set -e
           cat "$RUNNER_TEMP/flutter-analyze.log"
-          python3 - "$RUNNER_TEMP/flutter-analyze.log" <<'PY'
-          import os
+          if [[ "$analyze_status" -ne 0 ]]; then
+            python3 - "$RUNNER_TEMP/flutter-analyze.log" <<'PY'
           import pathlib
           import sys
-          from urllib.parse import unquote, urlparse
 
-          root = pathlib.Path(os.environ["GITHUB_WORKSPACE"]).resolve()
-
-          def escape_data(value):
-              return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-
-          def escape_property(value):
-              return escape_data(value).replace(":", "%3A").replace(",", "%2C")
-
-          with open(sys.argv[1], encoding="utf-8", errors="replace") as log:
-              for raw_line in log:
-                  fields = raw_line.rstrip("\r\n").split("|", 7)
-                  if len(fields) != 8 or fields[0] not in {"ERROR", "WARNING", "INFO"}:
-                      continue
-
-                  severity, code, _category, file_path, line, column, _length, message = fields
-                  if file_path.startswith("file://"):
-                      file_path = unquote(urlparse(file_path).path)
-                  path = pathlib.Path(file_path)
-                  if path.is_absolute():
-                      try:
-                          file_path = str(path.resolve().relative_to(root))
-                      except ValueError:
-                          file_path = str(path)
-
-                  level = {"ERROR": "error", "WARNING": "warning", "INFO": "notice"}[severity]
-                  properties = [f"file={escape_property(file_path)}"]
-                  if line.isdigit():
-                      properties.append(f"line={line}")
-                  if column.isdigit():
-                      properties.append(f"col={column}")
-                  if code:
-                      properties.append(f"title={escape_property(code)}")
-                  print(f"::{level} {','.join(properties)}::{escape_data(message)}")
+          text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
+          if not text.strip():
+              text = "flutter analyze failed without producing output."
+          text = text[:12000].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Flutter analyzer output::{text}")
           PY
+          fi
           exit "$analyze_status"
 
       - name: Run Flutter tests
