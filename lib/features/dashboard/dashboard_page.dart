@@ -535,39 +535,6 @@ class _DashboardKpiTile extends StatelessWidget {
   }
 }
 
-class _KpiGrid extends StatelessWidget {
-  final List<Map<String, dynamic>> items;
-  const _KpiGrid({required this.items});
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, c) {
-      // The Play Store mobile layout uses compact 2-column metric tiles,
-      // matching the module-card rhythm while retaining 3/4 columns on web.
-      final cols = c.maxWidth > 1300 ? 4 : c.maxWidth > 900 ? 3 : c.maxWidth < 340 ? 1 : 2;
-      final ratio = ((c.maxWidth - (cols - 1) * 12) / cols / 100).clamp(1.38, 4.5);
-      return GridView.count(
-        crossAxisCount: cols,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        mainAxisSpacing: 12, crossAxisSpacing: 12,
-        childAspectRatio: ratio,
-        children: [
-          for (final it in items)
-            KpiCard(
-              // Server labels are written for the default industry (CB/Trays/
-              // Bottles) — swap in the active industry's unit names.
-              label: _unitize(it['label'] as String),
-              value: (it['money'] == true) ? inr(it['value']) : qtyInt(it['value']),
-              icon: iconFor(it['icon'] as String?),
-              tint: hexColor(it['tint'] as String?),
-            ),
-        ],
-      );
-    });
-  }
-}
-
 class _Line extends StatelessWidget {
   final Map<String, dynamic> w;
   const _Line(this.w);

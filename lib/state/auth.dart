@@ -233,8 +233,9 @@ class AuthController extends ChangeNotifier {
       // a hanging connection) falls through to the offline path below.
       try {
         final json = await api.get('/auth/me').timeout(const Duration(seconds: 8));
-        session = UserSession.fromJson((json as Map).cast<String, dynamic>());
-        await OfflineSession.save(api.token!, (json as Map).cast<String, dynamic>());
+        final profile = (json as Map).cast<String, dynamic>();
+        session = UserSession.fromJson(profile);
+        await OfflineSession.save(api.token!, profile);
         try { await CompanyProfile.load(api); } catch (_) {/* server route optional */}
         subscription.refresh(api); // fire-and-forget (cloud tenants only)
         unawaited(api.warmOfflineCache());

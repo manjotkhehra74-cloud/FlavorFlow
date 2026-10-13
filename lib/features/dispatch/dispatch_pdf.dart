@@ -116,7 +116,6 @@ class DispatchPdf {
   /// Tray columns only for industries that use the secondary unit.
   static bool get _trays => CompanyProfile.usesTrays;
   static List<String> get _headers => ['#', tr('Product'), tr(U.carton), if (_trays) tr(U.tray), tr(U.piece), '${U.cb} ${tr('Wt')}', if (_trays) '${tr(U.tray)} ${tr('Wt')}', tr('Gross Wt')];
-  static List<String> get _headersWithBatch => _hdrs(batch: true);
   static List<String> _hdrs({bool code = false, bool batch = false}) => ['#', tr('Product'), if (code) tr('Item Code'), if (batch) tr('Batch'), tr(U.carton), if (_trays) tr(U.tray), tr(U.piece), '${U.cb} ${tr('Wt')}', if (_trays) '${tr(U.tray)} ${tr('Wt')}', tr('Gross Wt')];
 
   static pw.Page _page({

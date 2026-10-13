@@ -645,12 +645,12 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
       ],
     };
     // survive app restarts too (fire-and-forget)
-    SharedPreferences.getInstance().then((p) => p.setString(_draftKey, jsonEncode(_draft))).catchError((_) {});
+    SharedPreferences.getInstance().then((p) => p.setString(_draftKey, jsonEncode(_draft))).catchError((_) => false);
   }
 
   void _clearDraft() {
     _draft = null;
-    SharedPreferences.getInstance().then((p) => p.remove(_draftKey)).catchError((_) {});
+    SharedPreferences.getInstance().then((p) => p.remove(_draftKey)).catchError((_) => false);
   }
 
   /// Wipe the form fields AND the saved draft (Delete draft button).

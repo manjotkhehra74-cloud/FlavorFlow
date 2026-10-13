@@ -25,7 +25,14 @@ void main() {
       ));
 
       expect(controller.text, isEmpty, reason: 'a new dispatch must not pick a destination for the user');
-      expect(find.byHintText('Enter customer, company or destination'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              widget.decoration.hintText == 'Enter customer, company or destination',
+        ),
+        findsOneWidget,
+      );
 
       await tester.enterText(find.byType(TextField), 'North Star Foods');
       expect(controller.text, 'North Star Foods');
