@@ -43,7 +43,7 @@ class _LoginPageState extends State<LoginPage> {
     final lock = await BiometricAuth.deviceLockAvailable();
     if (!mounted) return;
     setState(() { _bioAvailable = avail; _bioEnabled = enabled; _deviceLock = lock; });
-    // Prefill the saved email for convenience.
+    // Prefill the saved login ID for convenience.
     if (enabled && _email.text.isEmpty) {
       final saved = await BiometricAuth.savedEmail();
       if (saved != null && mounted) setState(() => _email.text = saved);
@@ -60,7 +60,7 @@ class _LoginPageState extends State<LoginPage> {
     final email = _email.text.trim();
     final password = _password.text;
     if (email.isEmpty || password.isEmpty) {
-      setState(() => _error = 'Enter your email and password.');
+      setState(() => _error = 'Enter your login ID and password.');
       return;
     }
 
@@ -388,8 +388,8 @@ class _LoginPageState extends State<LoginPage> {
               TextField(
                 controller: _email,
                 keyboardType: TextInputType.emailAddress,
-                autofillHints: const [AutofillHints.email],
-                decoration: InputDecoration(labelText: tr('Email'), prefixIcon: const Icon(Icons.alternate_email_rounded, size: 19)),
+                autofillHints: const [AutofillHints.username],
+                decoration: InputDecoration(labelText: tr('Login ID'), prefixIcon: const Icon(Icons.alternate_email_rounded, size: 19)),
                 onSubmitted: (_) => _submit(),
               ),
               const SizedBox(height: 13),

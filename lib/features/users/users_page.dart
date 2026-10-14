@@ -6,6 +6,7 @@ import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../core/i18n.dart';
 import '../../core/app_permissions.dart';
+import '../../core/login_id.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 
@@ -144,7 +145,7 @@ class _UsersPageState extends State<UsersPage> {
           SectionCard(
             title: 'Users & Roles',
             child: AppDataTable(
-              columns: ['User', 'Email', 'Role', 'Status', 'Created', 'Permissions', if (canManage) ''],
+              columns: ['User', 'User ID', 'Role', 'Status', 'Created', 'Permissions', if (canManage) ''],
               rows: [
                 for (final u in users)
                   [
@@ -298,7 +299,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
       if (widget.user == null) {
         await api.post('/users', {
           'name': name.text.trim(),
-          'email': email.text.trim(),
+          'email': canonicalizeLoginId(email.text),
           'password': password.text,
           'role': role,
           'permissions': customPerms.toList(),
@@ -331,7 +332,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
           child: Column(mainAxisSize: MainAxisSize.min, children: [
           TextField(controller: name, decoration: InputDecoration(labelText: tr('Full name *'))),
           const SizedBox(height: 12),
-          TextField(controller: email, enabled: !editing, keyboardType: TextInputType.emailAddress, decoration: InputDecoration(labelText: tr('Email *'))),
+          TextField(controller: email, enabled: !editing, keyboardType: TextInputType.emailAddress, decoration: InputDecoration(labelText: tr('Login ID *'))),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             initialValue: role,
