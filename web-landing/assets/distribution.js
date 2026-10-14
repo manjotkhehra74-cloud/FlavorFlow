@@ -58,7 +58,7 @@
         el.removeAttribute('href');
         el.setAttribute('aria-disabled', 'true');
         el.classList.add('is-pending');
-        if (text) text.textContent = 'Windows — in development';
+        if (text) text.textContent = 'Download for Windows — coming soon';
       }
     });
   }

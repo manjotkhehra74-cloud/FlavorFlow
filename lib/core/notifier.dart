@@ -9,7 +9,6 @@ import 'package:timezone/timezone.dart' as tz;
 
 import 'app_settings.dart';
 import 'company.dart';
-import 'platform_capabilities.dart';
 
 /// Shared unread badge state. Server polling remains authoritative, while local
 /// read actions update this immediately instead of waiting up to 20 seconds.
@@ -83,7 +82,7 @@ class PhoneNotifier {
   );
 
   static Future<void> init() async {
-    if (!PlatformCapabilities.mobileNotifications || _ready) return;
+    if (kIsWeb || _ready) return;
     try {
       const android = AndroidInitializationSettings('@mipmap/ic_launcher');
       const ios = DarwinInitializationSettings();
@@ -103,7 +102,7 @@ class PhoneNotifier {
 
   /// True when the phone currently allows FlavorFlow notifications.
   static Future<bool> notificationsAllowed() async {
-    if (!PlatformCapabilities.mobileNotifications) return true;
+    if (kIsWeb) return true;
     try {
       return await Permission.notification.isGranted;
     } catch (_) {
@@ -146,7 +145,7 @@ class PhoneNotifier {
   /// Show phone notifications for notifications newer than the last seen id.
   /// [items] = server list (each: id, title, body, is_read).
   static Future<void> showNew(List<Map<String, dynamic>> items) async {
-    if (!PlatformCapabilities.mobileNotifications || !_ready) return;
+    if (kIsWeb || !_ready) return;
     if (_showing) return; // overlapping poll — the running call handles it
     _showing = true;
     try {
@@ -211,7 +210,7 @@ class Reminders {
   /// Daily reminder at [hour]:[minute] (local time). Scheduling uses the same
   /// id every time, so changing the time replaces the alarm — no duplicates.
   static Future<void> enableDaily(int hour, [int minute = 0]) async {
-    if (!PlatformCapabilities.mobileNotifications) return;
+    if (kIsWeb) return;
     try {
       await PhoneNotifier.init();
       await _init();
@@ -238,7 +237,7 @@ class Reminders {
   }
 
   static Future<void> enableMonthEnd() async {
-    if (!PlatformCapabilities.mobileNotifications) return;
+    if (kIsWeb) return;
     try {
       await PhoneNotifier.init();
       await _init();
@@ -271,7 +270,7 @@ class Reminders {
   /// App start: re-create the reminders the user switched on (alarms can be
   /// lost after a reboot, an app update or a force-stop).
   static Future<void> rescheduleIfEnabled() async {
-    if (!PlatformCapabilities.mobileNotifications) return;
+    if (kIsWeb) return;
     final s = AppSettings.instance;
     if (!s.dailyReminder) return;
     await enableDaily(s.dailyReminderHour, s.dailyReminderMinute);
@@ -279,7 +278,7 @@ class Reminders {
   }
 
   static Future<void> disableAll() async {
-    if (!PlatformCapabilities.mobileNotifications) return;
+    if (kIsWeb) return;
     try {
       final plugin = FlutterLocalNotificationsPlugin();
       await plugin.cancel(_idDaily);

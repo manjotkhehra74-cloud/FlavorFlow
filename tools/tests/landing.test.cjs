@@ -14,6 +14,8 @@ assert.equal(await page.locator('[data-play-store]').first().getAttribute('aria-
 assert.equal(await page.locator('[data-play-store]').first().getAttribute('href'),null);
 assert.equal(await page.locator('[data-play-qr] svg').count(),0);
 assert.equal(await page.locator('[data-windows-store]').getAttribute('aria-disabled'),'true');
+assert((await page.locator('[data-windows-store]').innerText()).includes('Download for Windows'));
+assert.equal(await page.locator('[data-windows-store]').getAttribute('href'),null);
 assert.equal(await page.locator('a[href$=".apk"]').count(),0);
 const playURL='https://play.google.com/store/apps/details?id=in.flavorflow.flavorflow_erp';
 // Simulate an approved listing locally; production config remains blank/pending.

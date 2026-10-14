@@ -4,7 +4,6 @@ import 'scan_page_native.dart' if (dart.library.html) 'scan_page_web.dart' as im
 
 /// Cross-platform QR/barcode scan entry point.
 /// - Android/iOS: system camera photo + Google ML Kit (works on Xiaomi/MIUI).
-/// - Windows/desktop: manual entry or USB keyboard-wedge barcode scanner.
 /// - Web: not supported — shows a hint to type the code instead.
 class ScanPage {
   /// Opens the scanner; resolves to the scanned code or null.

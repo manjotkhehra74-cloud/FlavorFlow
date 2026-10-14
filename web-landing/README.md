@@ -49,4 +49,4 @@ Cashfree is deferred by the owner (not approved or enabled). See `docs/CASHFREE_
 
 ## Store-first distribution and Windows
 
-See `docs/STORE_AND_WINDOWS_LAUNCH.md`. Both store URLs remain blank in `assets/distribution-config.js` while publication is pending. Set the exact approved Play URL to activate the Play button and its local QR; there is no public APK fallback. Windows uses the shared Flutter app and has a Windows CI preview-build path, not a released desktop installer.
+See `docs/STORE_DISTRIBUTION.md`. Both store URLs remain blank in `assets/distribution-config.js` while publication is pending. Set the exact approved Play URL to activate the Play button and its local QR; there is no public APK fallback. The Windows download option remains a coming-soon placeholder. Windows app development is handled separately in another chat; no Windows app code or build workflow is maintained here.

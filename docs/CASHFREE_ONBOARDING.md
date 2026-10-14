@@ -2,7 +2,7 @@
 
 Decision recorded: 13 October 2026.
 
-**Owner decision: defer Cashfree onboarding/integration. Keep it pending while Android store distribution and Windows development are prioritised.**
+**Owner decision: defer Cashfree onboarding/integration. Keep it pending while Android store distribution is prioritised. Windows app development is handled separately in another chat.**
 
 ## Status
 
