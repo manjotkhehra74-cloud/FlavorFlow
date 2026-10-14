@@ -212,7 +212,17 @@ jobs:
           Set-Content -Path $mainFile -Value $mainSource -Encoding utf8
 
       - name: Build Windows release
-        run: flutter build windows --release --dart-define=API_BASE=https://app.flavorflow.co.in/api
+        shell: pwsh
+        run: |
+          $buildOutput = & flutter build windows --release --dart-define=API_BASE=https://app.flavorflow.co.in/api 2>&1
+          $buildExitCode = $LASTEXITCODE
+          $buildOutput | ForEach-Object { Write-Host $_ }
+          if ($buildExitCode -ne 0) {
+            $tail = ($buildOutput | Select-Object -Last 60 | ForEach-Object { "$_" }) -join "`n"
+            $escaped = $tail.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Output "::error title=Flutter Windows build::$escaped"
+            exit $buildExitCode
+          }
 
       - name: Package and verify portable x64 build
         shell: pwsh
