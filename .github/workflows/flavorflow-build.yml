@@ -189,27 +189,12 @@ jobs:
       - name: Install packages
         run: flutter pub get
 
-      - name: Create native Windows runner when not checked in
+      - name: Create and configure native Windows runner
         shell: pwsh
-        run: |
-          if (-not (Test-Path 'windows/runner/main.cpp')) {
-            flutter create --platforms=windows --org in.flavorflow --project-name flavorflow_erp .
-          }
+        run: .\tools\configure-windows.ps1
 
       - name: Generate Windows application icon
         run: dart run flutter_launcher_icons -f windows_launcher_icons.yaml
-
-      - name: Set desktop window title
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $mainFile = 'windows/runner/main.cpp'
-          $mainSource = Get-Content $mainFile -Raw
-          if ($mainSource -notmatch 'window\.Create\(L"[^"]+"') {
-            throw 'Could not locate the generated Windows window title in runner/main.cpp.'
-          }
-          $mainSource = [regex]::Replace($mainSource, 'window\.Create\(L"[^"]+"', 'window.Create(L"FlavorFlow ERP"')
-          Set-Content -Path $mainFile -Value $mainSource -Encoding utf8
 
       - name: Build Windows release
         shell: pwsh

@@ -30,14 +30,16 @@ From the repository root in PowerShell (with Flutter and Visual Studio's
 
 ```powershell
 flutter config --enable-windows-desktop
-flutter create --platforms=windows --org in.flavorflow --project-name flavorflow_erp .
+.\tools\configure-windows.ps1
 flutter pub get
 dart run flutter_launcher_icons -f windows_launcher_icons.yaml
 flutter build windows --release --dart-define=API_BASE=https://app.flavorflow.co.in/api
 ```
 
-The executable and its runtime files are written to
-`build/windows/x64/runner/Release/`.
+The helper creates the Windows runner if it is missing, sets the app title,
+and adds a temporary MSVC compatibility define required by the current Windows
+authentication and permission plugins on Visual Studio 18. The executable and
+its runtime files are written to `build/windows/x64/runner/Release/`.
 
 ## Desktop behavior
 
