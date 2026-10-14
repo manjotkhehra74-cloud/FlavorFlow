@@ -10,6 +10,12 @@ import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 import '../reports/report_pdf.dart';
 
+num _lossNumber(Object? value) => value is num ? value : num.tryParse('${value ?? ''}') ?? 0;
+
+num _lossClosingTotal(List<Map<String, dynamic>> top) => top
+    .where((row) => row['productId'] != 0)
+    .fold<num>(0, (sum, row) => sum + _lossNumber(row['closing']));
+
 /// Packing LOSS% — factory sheet:
 ///  Top: Product · Projection · Opening · Actual · Opening+Actual ·
 ///       %Adherence · Closing   (per month)
@@ -76,8 +82,13 @@ class _LossPageState extends State<LossPage> {
       final ym = data['ym'];
       final columns = ['Product / Material', 'Projection·${U.cb}', 'Opening·Extra', 'Actual·Total', 'Op+Act·Loss%', '%Adh', 'Closing'];
       final rows = <List<dynamic>>[];
-      for (final t in (data['top'] as List).cast<Map<String, dynamic>>()) {
-        rows.add([t['name'], t['projection'], t['opening'], t['actual'], t['openingActual'], ((t['adherence'] as num?) ?? 0).toStringAsFixed(1), t['closing']]);
+      final top = (data['top'] as List).cast<Map<String, dynamic>>();
+      final closingTotal = _lossClosingTotal(top);
+      for (final t in top) {
+        final closing = t['productId'] == 0
+            ? (num.tryParse('${t['closing']}') ?? closingTotal)
+            : t['closing'];
+        rows.add([t['name'], t['projection'], t['opening'], t['actual'], t['openingActual'], ((t['adherence'] as num?) ?? 0).toStringAsFixed(1), closing]);
       }
       // Per-product material blocks as proper PDF sections: heading stays with
       // its rows across page breaks, and pages pack fully (no half-empty pages).
@@ -146,6 +157,7 @@ class _LossPageState extends State<LossPage> {
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
         final data = snap.data!;
         final top = (data['top'] as List).cast<Map<String, dynamic>>();
+        final closingTotal = _lossClosingTotal(top);
         final sections = (data['sections'] as List).cast<Map<String, dynamic>>();
         final archives = ((data['archives'] as List?) ?? const []).cast<String>();
         final scheme = Theme.of(context).colorScheme;
@@ -211,7 +223,9 @@ class _LossPageState extends State<LossPage> {
                     t['name'] == 'Total' ? qtyInt(t['actual']) : edit('act:${t['productId']}', (t['actual'] as num?) ?? 0, '${t['name']} — Actual production (month total)'),
                     qtyInt(t['openingActual']),
                     ((t['adherence'] as num?) ?? 0).toStringAsFixed(1),
-                    t['name'] == 'Total' ? '' : edit('close:${t['productId']}', num.tryParse('${t['closing']}') ?? 0, '${t['name']} — Closing'),
+                    t['name'] == 'Total'
+                        ? qtyInt(num.tryParse('${t['closing']}') ?? closingTotal)
+                        : edit('close:${t['productId']}', num.tryParse('${t['closing']}') ?? 0, '${t['name']} — Closing'),
                   ],
               ],
             ),
@@ -241,7 +255,7 @@ class _LossPageState extends State<LossPage> {
             const SizedBox(height: 12),
           ],
           Text(
-            '${U.cb} = BOM × month production (sare batch codes da jod) · Extra = manual Extra Consumption entries · Loss% = Extra ÷ ${U.cb}. Har number edit ho sakda (product name nahi). Close month: export pehla, fer closing → next month opening.',
+            '${U.cb} = BOM × displayed Actual production (manual override included; tray use stays per recorded trays) · Extra = manual Extra Consumption entries · Loss% = Extra ÷ ${U.cb}. Har number edit ho sakda (product name nahi). Close month: export pehla, fer closing → next month opening.',
             style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
           ),
         ]);
