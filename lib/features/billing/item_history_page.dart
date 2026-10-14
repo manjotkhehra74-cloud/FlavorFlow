@@ -143,7 +143,7 @@ class _ItemHistoryViewState extends State<ItemHistoryView> {
     setState(() => _exporting = true);
     try {
       final bytes = await context.read<AuthController>().api.getBytes('/stock/ledger.csv?type=${widget.type}&id=${widget.id}');
-      downloadBytes('stock-ledger-${widget.name.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-')}.csv', bytes, 'text/csv');
+      await downloadBytes('stock-ledger-${widget.name.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-')}.csv', bytes, 'text/csv');
       if (mounted) showOk(context, tr('Ledger exported (CSV) — open in Excel or share.'));
     } catch (e) {
       if (mounted) showErr(context, e);

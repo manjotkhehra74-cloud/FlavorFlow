@@ -115,7 +115,7 @@ void reconcileNav(List<Map<String, dynamic>> nav, AuthController auth) {
 }
 
 /// Status strip under the app bar (MAN-13): offline / waiting / needs-review
-/// state of entries kept on this phone. Tap opens "Offline entries".
+/// state of entries kept on this device. Tap opens "Offline entries".
 class _SyncBanner extends StatelessWidget {
   const _SyncBanner();
 
@@ -133,8 +133,8 @@ class _SyncBanner extends StatelessWidget {
         final IconData icon;
         if (!q.online) {
           text = waiting == 0
-              ? 'Offline — new entries will be saved on this phone and synced later'
-              : 'Offline — $waiting ${waiting == 1 ? 'entry' : 'entries'} saved on this phone, will sync when internet returns';
+              ? 'Offline — new entries will be saved on this device and synced later'
+              : 'Offline — $waiting ${waiting == 1 ? 'entry' : 'entries'} saved on this device, will sync when internet returns';
           color = AppColors.amber;
           icon = Icons.cloud_off_outlined;
         } else if (review > 0) {

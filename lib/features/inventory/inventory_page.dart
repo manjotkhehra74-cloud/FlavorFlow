@@ -61,7 +61,7 @@ class _InventoryPageState extends State<InventoryPage> {
     setState(() => _exporting = true);
     try {
       final bytes = await context.read<AuthController>().api.getBytes('/inventory/stock.xlsx');
-      downloadBytes('flavorflow-stock-${todayYmd()}.xlsx', bytes,
+      await downloadBytes('flavorflow-stock-${todayYmd()}.xlsx', bytes,
           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     } catch (e) {
       if (mounted) showErr(context, e);
@@ -374,7 +374,7 @@ class _BatchStockSectionState extends State<_BatchStockSection> {
         await Printing.sharePdf(bytes: bytes, filename: 'flavorflow-batch-stock-$date.pdf');
       } else {
         final bytes = await context.read<AuthController>().api.getBytes('/reports/batch-stock.xlsx');
-        downloadBytes('flavorflow-batch-stock-$date.xlsx', bytes,
+        await downloadBytes('flavorflow-batch-stock-$date.xlsx', bytes,
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         if (mounted) showOk(context, 'Excel file downloaded.');
       }

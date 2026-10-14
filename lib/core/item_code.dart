@@ -1,8 +1,8 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'i18n.dart';
+import 'platform_support.dart';
 import '../ui/scan_page.dart';
 
 /// SAP-style item codes (material numbers) — client helpers.
@@ -92,7 +92,7 @@ class ItemCode {
   }
 
   /// Camera scan → matching item (or null after a "not found" snackbar).
-  /// Phone only — on web the scan page itself explains typing is needed.
+  /// Desktop operators use the code-entry dialog; there is no desktop camera flow.
   static Future<Map<String, dynamic>?> scanPick(BuildContext context, Iterable<Map<String, dynamic>> rows, {String? title}) async {
     final v = await ScanPage.scan(context, title: title ?? tr('Scan item code'));
     if (v == null) return null;
@@ -113,23 +113,84 @@ class ItemCode {
       ];
 }
 
-/// Suffix icon for a picker: opens the camera and returns the matched item.
+/// Suffix affordance for a product/material picker. Phones scan with the
+/// camera; desktop opens a text field that also works with USB keyboard-wedge
+/// barcode scanners.
 class ScanPickButton extends StatelessWidget {
   final Iterable<Map<String, dynamic>> rows;
   final void Function(Map<String, dynamic> item) onPicked;
   final String? tooltip;
   const ScanPickButton({super.key, required this.rows, required this.onPicked, this.tooltip});
 
+  Future<void> _enterCode(BuildContext context) async {
+    final controller = TextEditingController();
+    try {
+      final value = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(tr('Enter or scan item code')),
+          content: SizedBox(
+            width: 420,
+            child: TextField(
+              controller: controller,
+              autofocus: true,
+              textCapitalization: TextCapitalization.characters,
+              textInputAction: TextInputAction.done,
+              decoration: InputDecoration(
+                labelText: tr('Item code'),
+                hintText: 'Type or scan with a USB barcode scanner',
+              ),
+              onSubmitted: (code) => Navigator.pop(dialogContext, code),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(tr('Cancel')),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, controller.text),
+              child: Text(tr('Use code')),
+            ),
+          ],
+        ),
+      );
+      if (value == null || value.trim().isEmpty || !context.mounted) return;
+      final hit = ItemCode.resolve(rows, value);
+      if (hit == null) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(
+            content: Text(
+              '${tr('No item with code')} "${value.length > 40 ? '${value.substring(0, 40)}…' : value}"',
+            ),
+          ));
+        return;
+      }
+      onPicked(hit);
+    } finally {
+      controller.dispose();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (kIsWeb || rows.isEmpty) return const SizedBox.shrink();
+    if ((!isPhonePlatform && !isDesktopPlatform) || rows.isEmpty) {
+      return const SizedBox.shrink();
+    }
     return IconButton(
-      tooltip: tooltip ?? tr('Scan item code'),
-      icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
-      onPressed: () async {
-        final hit = await ItemCode.scanPick(context, rows);
-        if (hit != null) onPicked(hit);
-      },
+      tooltip: tooltip ??
+          (isPhonePlatform ? tr('Scan item code') : tr('Enter or scan item code')),
+      icon: Icon(
+        isPhonePlatform ? Icons.qr_code_scanner_rounded : Icons.keyboard_outlined,
+        size: 20,
+      ),
+      onPressed: isPhonePlatform
+          ? () async {
+              final hit = await ItemCode.scanPick(context, rows);
+              if (hit != null) onPicked(hit);
+            }
+          : () => _enterCode(context),
     );
   }
 }

@@ -209,7 +209,7 @@ class _StockTabState extends State<_StockTab> {
         await Printing.sharePdf(bytes: bytes, filename: 'flavorflow-raw-material-$date.pdf');
       } else {
         final bytes = await context.read<AuthController>().api.getBytes('/reports/raw-material-stock.xlsx');
-        downloadBytes('flavorflow-raw-material-$date.xlsx', bytes,
+        await downloadBytes('flavorflow-raw-material-$date.xlsx', bytes,
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         if (mounted) showOk(context, 'Excel file downloaded.');
       }

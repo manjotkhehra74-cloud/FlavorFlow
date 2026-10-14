@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
@@ -16,6 +16,7 @@ import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../core/i18n.dart';
 import '../../core/item_code.dart';
+import '../../core/platform_support.dart';
 import '../../state/auth.dart';
 import '../../ui/scan_page.dart';
 import '../../core/offline_queue.dart';
@@ -190,7 +191,8 @@ class _LinesEditor extends StatelessWidget {
                   batches: batchOptions[lines[i].productId] ?? const [],
                   loading: lines[i].productId != null && batchLoading.contains(lines[i].productId),
                   onChanged: (value) {
-                    lines[i].batchCode.text = '${value?['code'] ?? ''}'.toUpperCase();
+                    final code = '${value?['code'] ?? ''}'.toUpperCase();
+                    if (lines[i].batchCode.text != code) lines[i].batchCode.text = code;
                     lines[i].batchId = value?['id'] as int?;
                     onChanged();
                   },
@@ -257,26 +259,36 @@ class _BatchField extends StatelessWidget {
         ),
       );
     }
+    final codeFormatters = <TextInputFormatter>[
+      TextInputFormatter.withFunction(
+        (oldValue, newValue) => newValue.copyWith(text: newValue.text.toUpperCase()),
+      ),
+    ];
+    Widget cameraButton() => IconButton(
+          tooltip: U.ize('Scan batch code'),
+          icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
+          onPressed: () async {
+            final value = await ScanPage.scan(context, title: U.ize('Scan batch code'));
+            if (value != null) onChanged({'code': value.toUpperCase()});
+          },
+        );
+
     if (batches.isEmpty) {
-      // Opening stock / old servers can legitimately have no production batch.
-      // Keep manual entry available, while all new production stock uses the
-      // controlled selector above.
+      // Opening stock / older servers can legitimately have no production
+      // batch list. Keep manual entry available on every platform.
       return TextField(
         controller: line.batchCode,
+        inputFormatters: codeFormatters,
         textCapitalization: TextCapitalization.characters,
+        textInputAction: TextInputAction.done,
         decoration: InputDecoration(
           labelText: U.ize('Batch code · date · available stock'),
-          hintText: 'No batch stock — enter code if known',
-          helperText: U.ize('Stock deducts batch-wise'),
-          helperMaxLines: 1,
-          suffixIcon: IconButton(
-            tooltip: U.ize('Scan batch code'),
-            icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
-            onPressed: () async {
-              final value = await ScanPage.scan(context, title: U.ize('Scan batch code'));
-              if (value != null) onChanged({'code': value.toUpperCase()});
-            },
-          ),
+          hintText: 'No batch list — enter code if known',
+          helperText: isDesktopPlatform
+              ? 'Type a code or scan it with a USB barcode scanner.'
+              : U.ize('Stock deducts batch-wise'),
+          helperMaxLines: 2,
+          suffixIcon: isPhonePlatform ? cameraButton() : null,
         ),
         onChanged: (_) => onChanged({'code': line.batchCode.text}),
       );
@@ -286,22 +298,18 @@ class _BatchField extends StatelessWidget {
             ? batches.firstWhere((b) => b['id'] == line.batchId)
             : batches.firstWhere((b) => '${b['code'] ?? ''}'.trim().toUpperCase() == selected))
         : null;
-    return DropdownButtonFormField<int>(
-      key: ValueKey('batch-${line.productId}-${batches.map((b) => '${b['id']}:${b['code']}:${b['planned_date'] ?? b['plannedDate']}').join('|')}'),
+    final optionsKey = batches
+        .map((b) => '${b['id']}:${b['code']}:${b['planned_date'] ?? b['plannedDate']}')
+        .join('|');
+    final dropdown = DropdownButtonFormField<int>(
+      key: ValueKey('batch-${line.productId}-${selectedBatch?['id'] ?? 'none'}-$optionsKey'),
       initialValue: hasSelected ? selectedBatch!['id'] as int : null,
       isExpanded: true,
       decoration: InputDecoration(
         labelText: U.ize('Batch code · date · available stock'),
         helperText: selectedBatch == null ? U.ize('Select batch to deduct stock') : 'Available: ${_batchAvailability(selectedBatch)}',
         helperMaxLines: 1,
-        suffixIcon: IconButton(
-          tooltip: U.ize('Scan batch code'),
-          icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
-          onPressed: () async {
-            final value = await ScanPage.scan(context, title: U.ize('Scan batch code'));
-            if (value != null) onChanged({'code': value.toUpperCase()});
-          },
-        ),
+        suffixIcon: isPhonePlatform ? cameraButton() : null,
       ),
       items: [
         for (final batch in batches)
@@ -315,6 +323,44 @@ class _BatchField extends StatelessWidget {
       ],
       onChanged: (id) => onChanged(id == null ? null : batches.firstWhere((b) => b['id'] == id)),
     );
+    if (!isDesktopPlatform) return dropdown;
+
+    Map<String, dynamic>? matchingBatch(String code) {
+      final normalized = code.trim().toUpperCase();
+      for (final batch in batches) {
+        if ('${batch['code'] ?? ''}'.trim().toUpperCase() == normalized) return batch;
+      }
+      return null;
+    }
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      dropdown,
+      const SizedBox(height: 8),
+      TextField(
+        controller: line.batchCode,
+        inputFormatters: codeFormatters,
+        textCapitalization: TextCapitalization.characters,
+        textInputAction: TextInputAction.done,
+        decoration: InputDecoration(
+          labelText: U.ize('Enter batch code'),
+          hintText: 'Type or scan with a USB barcode scanner',
+          helperText: line.batchCode.text.trim().isEmpty
+              ? 'Use the dropdown or enter the exact code printed on the batch label.'
+              : matchingBatch(line.batchCode.text) == null
+                  ? 'No available batch exactly matches this code.'
+                  : 'Available: ${_batchAvailability(matchingBatch(line.batchCode.text)!)}',
+          helperMaxLines: 2,
+        ),
+        onChanged: (raw) {
+          final code = raw.trim().toUpperCase();
+          if (code.isEmpty) {
+            onChanged(null);
+          } else {
+            onChanged(matchingBatch(code) ?? {'code': code});
+          }
+        },
+      ),
+    ]);
   }
 }
 
@@ -569,7 +615,7 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
   List<Map<String, dynamic>> _trucks = [];
 
   /// Suggestions from the company's truck master + destinations typed before
-  /// on this phone (persisted). They never preselect a destination.
+  /// on this device (persisted). They never preselect a destination.
   static List<String> _savedDests = [];
   List<String> get _destOptions {
     final set = <String>{};
@@ -754,7 +800,7 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
 
   /// Best-effort GPS stamp (lat,long) — never blocks the dispatch.
   Future<String> _locationStamp() async {
-    if (kIsWeb) return '';
+    if (!isPhonePlatform) return '';
     try {
       var perm = await Geolocator.checkPermission();
       if (perm == LocationPermission.denied) {
@@ -789,15 +835,26 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
         showErr(context, 'Batch stock is still loading. Please select a batch and try again.');
         return;
       }
-      if ((batchOptions[pid]?.isNotEmpty ?? false) && (item['batchCode'] as String?) == null) {
-        showErr(context, 'Select a batch code for every product line before dispatch.');
-        return;
+      final availableBatches = batchOptions[pid] ?? const <Map<String, dynamic>>[];
+      if (availableBatches.isNotEmpty) {
+        final code = (item['batchCode'] as String?)?.trim().toUpperCase();
+        if (code == null || code.isEmpty) {
+          showErr(context, 'Select or enter a batch code for every product line before dispatch.');
+          return;
+        }
+        final matchesAvailableBatch = availableBatches.any(
+          (batch) => '${batch['code'] ?? ''}'.trim().toUpperCase() == code,
+        );
+        if (!matchesAvailableBatch) {
+          showErr(context, 'No available batch matches "$code". Choose a batch with remaining stock.');
+          return;
+        }
       }
     }
     setState(() => saving = true);
     try {
       final loc = await _locationStamp();
-      // MAN-13: no connection → kept on this phone and sent automatically later.
+      // MAN-13: no connection → kept on this device and sent automatically later.
       final sent = await OfflineQueue.instance.submit(
         context.read<AuthController>(),
         method: 'POST',
@@ -819,7 +876,7 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
         for (final l in lines) { l.cartons.clear(); l.trays.clear(); l.batchCode.clear(); l.batchId = null; }
         destination.clear();
         remarks.clear();
-        showOk(context, 'Dispatch saved on this phone — it will sync automatically when internet returns.');
+        showOk(context, 'Dispatch saved on this device — it will sync automatically when internet returns.');
         return;
       }
       final json = sent.json;

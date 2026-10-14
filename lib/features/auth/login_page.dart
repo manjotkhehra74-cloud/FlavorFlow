@@ -75,7 +75,7 @@ class _LoginPageState extends State<LoginPage> {
             builder: (ctx) => AlertDialog(
               title: Text(tr('Register biometric login?')),
               content: const Text(
-                  'Sign in next time with just your fingerprint / face / device PIN — no password typing.\n\nStored only in this phone\'s encrypted keystore.'),
+                  'Sign in next time with just your fingerprint / face / device PIN — no password typing.\n\nStored only in this device\'s secure storage.'),
               actions: [
                 TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Later')),
                 FilledButton.icon(
@@ -186,7 +186,7 @@ class _LoginPageState extends State<LoginPage> {
     if (!mounted) return;
     if (err != null) {
       // Offline: the server could not be reached. Keep biometrics registered
-      // and open the session saved on this phone instead of resetting it.
+      // and open the session saved on this device instead of resetting it.
       if (auth.lastLoginNetworkError) {
         final uerr = await auth.unlockSavedSession();
         if (uerr == null) {
@@ -207,7 +207,7 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  /// When a login fails because the server is unreachable and this phone holds
+  /// When a login fails because the server is unreachable and this device holds
   /// a saved session, point the user at the offline unlock (the password form
   /// can never work without internet — the server must verify the password).
   String _withOfflineHint(String err) {
@@ -223,7 +223,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   /// MAN-13 "Open without internet": OS fingerprint/PIN prompt → the session
-  /// saved on this phone (encrypted keystore) opens. Screens show the last
+  /// saved on this device (secure storage) opens. Screens show the last
   /// synced data; new entries are queued and sent when the network returns.
   Future<void> _offlineUnlock() async {
     final ok = await BiometricAuth.verifyOnly('Unlock FlavorFlow');
@@ -432,7 +432,7 @@ class _LoginPageState extends State<LoginPage> {
                   label: Text(tr('Register biometric login')),
                 ),
               ],
-              // MAN-13: a session saved on this phone can be opened without
+              // MAN-13: a session saved on this device can be opened without
               // internet — after the OS fingerprint/PIN prompt. With biometrics
               // registered, the automatic prompt above already covers this path.
               if (auth.hasSavedSession && !_bioEnabled && _deviceLock) ...[

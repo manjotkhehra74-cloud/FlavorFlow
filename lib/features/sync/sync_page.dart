@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/offline_queue.dart';
 import '../../core/theme.dart';
 
-/// Offline entries kept on this phone (MAN-13): what is waiting to sync, what
+/// Offline entries kept on this device (MAN-13): what is waiting to sync, what
 /// the server did not accept (needs review), and what already synced.
 /// Opened from the status banner or from Settings → Offline entries.
 class SyncPage extends StatelessWidget {
@@ -31,7 +31,7 @@ class SyncPage extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Discard this entry?'),
-        content: Text('${e.label}${e.summary.isEmpty ? '' : ' · ${e.summary}'} will be removed from this phone and will NOT be saved on the server.'),
+        content: Text('${e.label}${e.summary.isEmpty ? '' : ' · ${e.summary}'} will be removed from this device and will NOT be saved on the server.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep')),
           FilledButton(
@@ -130,7 +130,7 @@ class SyncPage extends StatelessWidget {
                   ]),
                   const SizedBox(height: 8),
                   Text(
-                    'Entries are saved on this phone and sent automatically when the server is reachable. Each entry is sent once — the server ignores a repeat.',
+                    'Entries are saved on this device and sent automatically when the server is reachable. Each entry is sent once — the server ignores a repeat.',
                     style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant),
                   ),
                   const SizedBox(height: 12),
@@ -163,7 +163,7 @@ class SyncPage extends StatelessWidget {
             if (q.entries.isEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 40),
-                child: Center(child: Text('No offline entries on this phone.', style: TextStyle(color: scheme.onSurfaceVariant))),
+                child: Center(child: Text('No offline entries on this device.', style: TextStyle(color: scheme.onSurfaceVariant))),
               ),
           ],
         );

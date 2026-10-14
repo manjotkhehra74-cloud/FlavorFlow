@@ -199,7 +199,7 @@ class _ReportsPageState extends State<ReportsPage> {
       final id = _selected!['id'] as String;
       final bytes = await context.read<AuthController>().api.getBytes('/reports/$id.xlsx');
       final date = DateTime.now().toIso8601String().substring(0, 10);
-      downloadBytes('flavorflow-$id-$date.xlsx', bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      await downloadBytes('flavorflow-$id-$date.xlsx', bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       if (mounted) showOk(context, 'Excel file downloaded.');
     } catch (e) {
       if (mounted) showErr(context, e);
@@ -219,7 +219,7 @@ class _ReportsPageState extends State<ReportsPage> {
         rows: _rows,
       );
       final date = DateTime.now().toIso8601String().substring(0, 10);
-      downloadBytes('flavorflow-${_data!['id']}-$date.pdf', bytes, 'application/pdf');
+      await downloadBytes('flavorflow-${_data!['id']}-$date.pdf', bytes, 'application/pdf');
       if (mounted) showOk(context, 'PDF downloaded.');
     } catch (e) {
       if (mounted) showErr(context, e);

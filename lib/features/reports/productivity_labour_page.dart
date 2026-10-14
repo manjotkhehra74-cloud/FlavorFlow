@@ -809,7 +809,7 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
       final path = kind == 'labour' ? '/labour/daily.xlsx' : '/reports/productivity.xlsx';
       final bytes = await context.read<AuthController>().api.getBytes('$path?${_query()}');
       final date = DateTime.now().toIso8601String().substring(0, 10);
-      downloadBytes('flavorflow-${kind == 'labour' ? 'daily-labour' : 'productivity'}-$date.xlsx', bytes,
+      await downloadBytes('flavorflow-${kind == 'labour' ? 'daily-labour' : 'productivity'}-$date.xlsx', bytes,
           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       if (mounted) showOk(context, 'Excel report downloaded.');
     } catch (e) {

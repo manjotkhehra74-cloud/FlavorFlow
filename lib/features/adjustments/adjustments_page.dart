@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +7,7 @@ import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../core/i18n.dart';
 import '../../core/item_code.dart';
+import '../../core/platform_support.dart';
 import '../../state/auth.dart';
 import '../../core/offline_queue.dart';
 import '../../ui/widgets.dart';
@@ -151,7 +151,7 @@ class _AdjustmentFormDialogState extends State<AdjustmentFormDialog> {
   Future<void> _save() async {
     setState(() => busy = true);
     try {
-      // MAN-13: no connection → kept on this phone; the request still needs approval.
+      // MAN-13: no connection → kept on this device; the request still needs approval.
       final sent = await OfflineQueue.instance.submit(
         context.read<AuthController>(),
         method: 'POST',
@@ -164,7 +164,7 @@ class _AdjustmentFormDialogState extends State<AdjustmentFormDialog> {
           'reason': reason.text.trim() + (photo != null ? ' [photo attached]' : ''),
         },
       );
-      if (mounted && sent.queued) showOk(context, 'Request saved on this phone — it will sync when internet returns.');
+      if (mounted && sent.queued) showOk(context, 'Request saved on this device — it will sync when internet returns.');
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) showErr(context, e);
@@ -210,7 +210,7 @@ class _AdjustmentFormDialogState extends State<AdjustmentFormDialog> {
                 TextField(controller: cb, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('${U.carton} (${U.cb})'))),
                 const SizedBox(height: 12),
                 TextField(controller: reason, maxLines: 2, decoration: InputDecoration(labelText: tr('Reason *'), hintText: 'e.g. Damaged ${U.carton.toLowerCase()}, QC sample, sales return…')),
-                if (!kIsWeb) ...[
+                if (isPhonePlatform) ...[
                   const SizedBox(height: 12),
                   Row(children: [
                     OutlinedButton.icon(

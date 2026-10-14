@@ -338,7 +338,7 @@ Future<void> _exportCsv(BuildContext context, String path, String filename, Valu
   busy(true);
   try {
     final bytes = await context.read<AuthController>().api.getBytes(path);
-    downloadBytes(filename, bytes, 'text/csv');
+    await downloadBytes(filename, bytes, 'text/csv');
     if (context.mounted) showOk(context, tr('Exported (CSV) — open in Excel or share.'));
   } catch (e) {
     if (context.mounted) showErr(context, e);

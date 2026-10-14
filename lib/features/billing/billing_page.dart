@@ -752,7 +752,7 @@ class _RegisterTabState extends State<_RegisterTab> {
     setState(() => exporting = true);
     try {
       final bytes = await context.read<AuthController>().api.getBytes('/billing/$_path.csv?from=${ymd(from)}&to=${ymd(to)}');
-      downloadBytes('${purchase ? 'purchase' : 'gst'}-register-${ymd(from)}-to-${ymd(to)}.csv', bytes, 'text/csv');
+      await downloadBytes('${purchase ? 'purchase' : 'gst'}-register-${ymd(from)}-to-${ymd(to)}.csv', bytes, 'text/csv');
       if (mounted) showOk(context, tr('GST register exported (CSV) — open in Excel / share with your CA.'));
     } catch (e) {
       if (mounted) showErr(context, e);

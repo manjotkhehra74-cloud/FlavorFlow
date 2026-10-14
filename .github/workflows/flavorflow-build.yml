@@ -170,3 +170,95 @@ jobs:
             build/app/outputs/bundle/release/app-release.aab
           if-no-files-found: error
           retention-days: 14
+
+  build-windows:
+    name: Build Windows desktop portable x64
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install packages
+        run: flutter pub get
+
+      - name: Create native Windows runner when not checked in
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'windows/runner/main.cpp')) {
+            flutter create --platforms=windows --org in.flavorflow --project-name flavorflow_erp .
+          }
+
+      - name: Generate Windows application icon
+        run: dart run flutter_launcher_icons -f windows_launcher_icons.yaml
+
+      - name: Set desktop window title
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $mainFile = 'windows/runner/main.cpp'
+          $mainSource = Get-Content $mainFile -Raw
+          if ($mainSource -notmatch 'window\.Create\(L"[^"]+"') {
+            throw 'Could not locate the generated Windows window title in runner/main.cpp.'
+          }
+          $mainSource = [regex]::Replace($mainSource, 'window\.Create\(L"[^"]+"', 'window.Create(L"FlavorFlow ERP"')
+          Set-Content -Path $mainFile -Value $mainSource -Encoding utf8
+
+      - name: Export generated Windows scaffold for source integration
+        uses: actions/upload-artifact@v4
+        with:
+          name: flavorflow-windows-scaffold
+          path: |
+            .gitignore
+            .metadata
+            windows/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Build Windows release
+        run: flutter build windows --release --dart-define=API_BASE=https://app.flavorflow.co.in/api
+
+      - name: Package and verify portable x64 build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $releaseDir = Join-Path $PWD 'build/windows/x64/runner/Release'
+          $required = @(
+            (Join-Path $releaseDir 'flavorflow_erp.exe'),
+            (Join-Path $releaseDir 'flutter_windows.dll'),
+            (Join-Path $releaseDir 'data/flutter_assets')
+          )
+          foreach ($path in $required) {
+            if (-not (Test-Path $path)) { throw "Missing Windows release output: $path" }
+          }
+          $readme = @'
+          FlavorFlow ERP for Windows (portable x64)
+
+          Extract the complete ZIP and keep all files together, then run flavorflow_erp.exe.
+          Requires Windows 10/11 x64 and the Microsoft Visual C++ 2015-2022 x64 runtime.
+          First build is unsigned; Windows SmartScreen may show a warning.
+          CSV/XLSX files go to Downloads. PDF actions use the Windows print flow.
+          Use product/material code-entry fields or a USB keyboard-wedge barcode scanner.
+          Camera scanning, photos, GPS stamps, phone notifications and reminders are mobile-only.
+          '@
+          $readme | Set-Content -Path (Join-Path $releaseDir 'README-Windows.txt') -Encoding utf8
+          $zipPath = Join-Path $PWD 'build/FlavorFlow-Windows-x64-portable.zip'
+          if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+          Compress-Archive -Path (Join-Path $releaseDir '*') -DestinationPath $zipPath -CompressionLevel Optimal
+          if ((Get-Item $zipPath).Length -lt 1000000) { throw 'Windows portable ZIP is unexpectedly small.' }
+
+      - name: Upload Windows portable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlavorFlow-Windows-x64-portable
+          path: build/FlavorFlow-Windows-x64-portable.zip
+          if-no-files-found: error
+          retention-days: 14

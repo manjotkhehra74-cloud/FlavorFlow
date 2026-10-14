@@ -80,7 +80,7 @@ class AuthController extends ChangeNotifier {
   bool ready = false; // restored-from-storage completed
   bool busy = false;
 
-  /// True when this phone holds a saved session (encrypted keystore) that the
+  /// True when this device holds a saved session (secure storage) that the
   /// login screen can unlock after the OS fingerprint/PIN prompt — MAN-13
   /// offline open. Never restored silently.
   bool hasSavedSession = false;
@@ -145,14 +145,14 @@ class AuthController extends ChangeNotifier {
     try {
       await api.loadSavedBase();
       if (!kIsWeb) {
-        // SECURITY (mobile): the session never survives an app close —
-        // back button, swipe from recents or force-stop all end it. Every
-        // fresh open lands on the login screen (password or biometrics).
+        // SECURITY (native): the session is never silently restored after an
+        // app restart. Every fresh open lands on the login screen (password or
+        // the device's supported authentication prompt).
         final prefs = await SharedPreferences.getInstance();
         await prefs.remove('token');
         api.token = null;
         session = null;
-        // MAN-13: a session saved in the encrypted keystore may still be
+        // MAN-13: a session saved in the secure storage may still be
         // unlocked from the login screen (after the OS prompt) so the app can
         // be OPENED with no internet. It is never restored silently here.
         hasSavedSession = await OfflineSession.load() != null;
@@ -191,7 +191,7 @@ class AuthController extends ChangeNotifier {
       session = UserSession.fromJson(map);
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('token', api.token!);
-      // MAN-13: remember this session in the encrypted keystore so the app can
+      // MAN-13: remember this session in the secure storage so the app can
       // be opened offline (login screen → OS prompt → unlock). Web keeps its
       // own token persistence in SharedPreferences.
       if (!kIsWeb) await OfflineSession.save(api.token!, map);
@@ -215,7 +215,7 @@ class AuthController extends ChangeNotifier {
     }
   }
 
-  /// Open the session saved on this phone (MAN-13 offline unlock). Called from
+  /// Open the session saved on this device (MAN-13 offline unlock). Called from
   /// the login screen only AFTER the OS fingerprint/face/device-PIN prompt
   /// passed — the same gate as biometric login. Online, the saved token is
   /// validated against `/auth/me` and refreshed; with no connection the saved
@@ -223,7 +223,7 @@ class AuthController extends ChangeNotifier {
   /// or a user-facing error message.
   Future<String?> unlockSavedSession() async {
     final bundle = await OfflineSession.load();
-    if (bundle == null) return 'No saved session on this phone — sign in once with internet.';
+    if (bundle == null) return 'No saved session on this device — sign in once with internet.';
     busy = true;
     notifyListeners();
     try {
@@ -253,7 +253,7 @@ class AuthController extends ChangeNotifier {
       } catch (_) {
         // Timeout etc → offline path below.
       }
-      // OFFLINE: trust the session saved on this phone so the app is usable
+      // OFFLINE: trust the session saved on this device so the app is usable
       // without internet — screens show the last synced data and new entries
       // are queued (OfflineQueue). The next online open re-validates the
       // token against the server and drops it if it was revoked.
@@ -292,7 +292,7 @@ class AuthController extends ChangeNotifier {
     api.token = null;
     session = null;
     // MAN-13: the offline unlock and this account's cached reads go away with
-    // the session — another account on this phone must not see either.
+    // the session — another account on this device must not see either.
     hasSavedSession = false;
     await OfflineSession.clear();
     await api.clearReadCache();

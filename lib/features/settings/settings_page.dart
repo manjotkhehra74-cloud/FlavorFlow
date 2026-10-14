@@ -11,6 +11,7 @@ import '../../core/company.dart';
 import '../../core/notifier.dart';
 import '../../core/offline_queue.dart';
 import '../../core/i18n.dart';
+import '../../core/platform_support.dart';
 import '../../state/auth.dart';
 import '../../ui/app_shell.dart' show LanguageDialog, CompanyProfileDialog;
 import '../../ui/widgets.dart';
@@ -45,7 +46,9 @@ class _SettingsPageState extends State<SettingsPage> {
       final j = await context.read<AuthController>().api.get('/auth/totp/status');
       totp = (j as Map)['enabled'] == true;
     } catch (_) {/* server route optional until patched */}
-    final notif = await PhoneNotifier.notificationsAllowed();
+    final bool? notif = isPhonePlatform
+        ? await PhoneNotifier.notificationsAllowed()
+        : null;
     if (!mounted) return;
     setState(() { _bioAvailable = avail; _bioEnabled = enabled; _totpEnabled = totp; _notifOn = notif; });
   }
@@ -113,6 +116,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _toggleReminder(AppSettings settings, bool on) async {
+    if (!isPhonePlatform) return;
     if (!on) {
       await settings.setDailyReminder(false, settings.dailyReminderHour, minute: settings.dailyReminderMinute);
       await Reminders.disableAll();
@@ -124,6 +128,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   /// Hour + minute picker (MAN-10), then save and re-schedule the daily alarm.
   Future<void> _changeReminderTime(AppSettings settings) async {
+    if (!isPhonePlatform) return;
     final picked = await showTimePicker(
       context: context,
       initialTime: TimeOfDay(hour: settings.dailyReminderHour, minute: settings.dailyReminderMinute),
@@ -141,13 +146,13 @@ class _SettingsPageState extends State<SettingsPage> {
     showOk(context, 'Reminder set — roz ${_clock(picked.hour, picked.minute)} + month-end.');
   }
 
-  /// MAN-12: explain what to do when the phone blocks notifications.
+  /// MAN-12: explain what to do when the device blocks notifications.
   Future<void> _notificationGuidance() async {
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Notifications are off'),
-        content: const Text('FlavorFlow cannot show alerts or reminders until notifications are allowed. Open phone settings → Notifications → FlavorFlow and turn them on.'),
+        content: const Text('FlavorFlow cannot show alerts or reminders until notifications are allowed. Open device settings → Notifications → FlavorFlow and turn them on.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Later')),
           FilledButton(
@@ -162,8 +167,9 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  /// Ask for the notification permission; if the phone blocks it for good, open its settings.
+  /// Ask for the notification permission; if the device blocks it for good, open its settings.
   Future<void> _enableNotifications() async {
+    if (!isPhonePlatform) return;
     final st = await Permission.notification.request();
     if (st.isPermanentlyDenied) await openAppSettings();
     await _refresh();
@@ -192,7 +198,7 @@ class _SettingsPageState extends State<SettingsPage> {
         subtitle: switch (settings.darkPref) {
           DarkPref.off => 'OFF — classic light look',
           DarkPref.on => 'ON — easier on the eyes at night',
-          DarkPref.system => 'System — follows the phone setting',
+          DarkPref.system => 'System — follows the device setting',
           DarkPref.auto =>
             'Auto — dark ${settings.autoDarkStart > 12 ? settings.autoDarkStart - 12 : settings.autoDarkStart} PM to ${settings.autoDarkEnd} AM (by time)',
         },
@@ -205,7 +211,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 for (final (mode, label, icon) in [
                   (DarkPref.off, tr('Off — always light'), Icons.light_mode_outlined),
                   (DarkPref.on, tr('On — always dark'), Icons.dark_mode_outlined),
-                  (DarkPref.system, tr('System — follow phone setting'), Icons.smartphone_rounded),
+                  (DarkPref.system, tr('System — follow device setting'), Icons.smartphone_rounded),
                   (DarkPref.auto, tr('Auto — dark by time (evening to morning)'), Icons.schedule_rounded),
                 ])
                   SimpleDialogOption(
@@ -264,18 +270,19 @@ class _SettingsPageState extends State<SettingsPage> {
           onSelectionChanged: (v) => settings.setTextScale(v.first),
         ),
       ),
-      _tile(
-        icon: Icons.alarm_rounded,
-        title: 'Daily entry reminder',
-        subtitle: settings.dailyReminder
-            ? 'ON — roz ${_clock(settings.dailyReminderHour, settings.dailyReminderMinute)} vaje yaad karauga (+ month-end ${CompanyProfile.usesLossPct ? 'Loss% close' : 'stock closing'}) · tap karke time badlo'
-            : 'OFF — production/dispatch entry da roz da reminder',
-        onTap: settings.dailyReminder ? () => _changeReminderTime(settings) : null,
-        trailing: Switch(
-          value: settings.dailyReminder,
-          onChanged: (v) => _toggleReminder(settings, v),
+      if (isPhonePlatform)
+        _tile(
+          icon: Icons.alarm_rounded,
+          title: 'Daily entry reminder',
+          subtitle: settings.dailyReminder
+              ? 'ON — roz ${_clock(settings.dailyReminderHour, settings.dailyReminderMinute)} vaje yaad karauga (+ month-end ${CompanyProfile.usesLossPct ? 'Loss% close' : 'stock closing'}) · tap karke time badlo'
+              : 'OFF — production/dispatch entry da roz da reminder',
+          onTap: settings.dailyReminder ? () => _changeReminderTime(settings) : null,
+          trailing: Switch(
+            value: settings.dailyReminder,
+            onChanged: (v) => _toggleReminder(settings, v),
+          ),
         ),
-      ),
       _tile(
         icon: Icons.notifications_active_outlined,
         title: 'Notification badge',
@@ -284,23 +291,24 @@ class _SettingsPageState extends State<SettingsPage> {
         onTap: () => settings.setShowNotifBadge(!settings.showNotifBadge),
       ),
 
-      _tile(
-        icon: Icons.notifications_none_rounded,
-        title: 'Phone notifications',
-        subtitle: _notifOn == null
-            ? 'Checking…'
-            : _notifOn!
-                ? 'ON — alerts & reminders show on this phone'
-                : 'OFF — tap to allow (needed for alerts & reminders)',
-        onTap: _notifOn == false ? _enableNotifications : null,
-      ),
+      if (isPhonePlatform)
+        _tile(
+          icon: Icons.notifications_none_rounded,
+          title: 'Phone notifications',
+          subtitle: _notifOn == null
+              ? 'Checking…'
+              : _notifOn!
+                  ? 'ON — alerts & reminders show on this device'
+                  : 'OFF — tap to allow (needed for alerts & reminders)',
+          onTap: _notifOn == false ? _enableNotifications : null,
+        ),
 
       _section('SECURITY'),
       if (_bioAvailable)
         _tile(
           icon: Icons.fingerprint_rounded,
           title: 'Biometric login',
-          subtitle: _bioEnabled ? 'ON — login with fingerprint / face' : 'OFF — tap to enable on this device',
+          subtitle: _bioEnabled ? 'ON — use this device's secure sign-in' : 'OFF — tap to enable on this device',
           trailing: Switch(value: _bioEnabled, onChanged: (_) => _toggleBiometrics()),
           onTap: _toggleBiometrics,
         ),
@@ -358,7 +366,7 @@ class _SettingsPageState extends State<SettingsPage> {
           final q = OfflineQueue.instance;
           final String sub;
           if (!q.online) {
-            sub = 'Offline — ${q.pendingCount} waiting on this phone';
+            sub = 'Offline — ${q.pendingCount} waiting on this device';
           } else if (q.failed.isNotEmpty) {
             sub = '${q.failed.length} need review · ${q.pendingCount} waiting';
           } else if (q.pendingCount > 0) {
