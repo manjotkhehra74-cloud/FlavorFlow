@@ -308,7 +308,7 @@ class _SettingsPageState extends State<SettingsPage> {
         _tile(
           icon: Icons.fingerprint_rounded,
           title: 'Biometric login',
-          subtitle: _bioEnabled ? 'ON — use this device's secure sign-in' : 'OFF — tap to enable on this device',
+          subtitle: _bioEnabled ? 'ON — use this device\'s secure sign-in' : 'OFF — tap to enable on this device',
           trailing: Switch(value: _bioEnabled, onChanged: (_) => _toggleBiometrics()),
           onTap: _toggleBiometrics,
         ),

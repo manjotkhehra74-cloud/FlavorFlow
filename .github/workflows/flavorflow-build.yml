@@ -211,18 +211,6 @@ jobs:
           $mainSource = [regex]::Replace($mainSource, 'window\.Create\(L"[^"]+"', 'window.Create(L"FlavorFlow ERP"')
           Set-Content -Path $mainFile -Value $mainSource -Encoding utf8
 
-      - name: Export generated Windows scaffold for source integration
-        uses: actions/upload-artifact@v4
-        with:
-          name: flavorflow-windows-scaffold
-          path: |
-            .gitignore
-            .metadata
-            windows/
-          include-hidden-files: true
-          if-no-files-found: error
-          retention-days: 1
-
       - name: Build Windows release
         run: flutter build windows --release --dart-define=API_BASE=https://app.flavorflow.co.in/api
 

@@ -30,6 +30,7 @@ From the repository root in PowerShell (with Flutter and Visual Studio's
 
 ```powershell
 flutter config --enable-windows-desktop
+flutter create --platforms=windows --org in.flavorflow --project-name flavorflow_erp .
 flutter pub get
 dart run flutter_launcher_icons -f windows_launcher_icons.yaml
 flutter build windows --release --dart-define=API_BASE=https://app.flavorflow.co.in/api
