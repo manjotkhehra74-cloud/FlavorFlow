@@ -30,7 +30,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.35.7'
+          flutter-version: '3.44.0'
           channel: stable
           cache: true
       - name: Generate Windows runner only
@@ -39,7 +39,17 @@ jobs:
           flutter config --enable-windows-desktop
           ./tools/bootstrap-windows.ps1
       - name: Install existing ERP dependencies
-        run: flutter pub get
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          & flutter pub get 2>&1 | Tee-Object -FilePath windows-pub-get.log
+          $PubExit = $LASTEXITCODE
+          if ($PubExit -ne 0) {
+            $Tail = (Get-Content windows-pub-get.log -Tail 18) -join "`n"
+            $Escaped = $Tail.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Output "::error title=Windows dependency diagnostics::$Escaped"
+            exit $PubExit
+          }
       - name: Test mobile and desktop capability boundaries
         run: flutter test test/platform_capabilities_test.dart
       - name: Build Windows release bundle
