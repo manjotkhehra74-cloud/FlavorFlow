@@ -28,11 +28,11 @@ The header/footer branding remains unchanged. The download area, demo instructio
 
 ## Windows development foundation
 
-There is no checked-in native Windows runner yet and this Linux sandbox has no Flutter toolchain. A Windows executable has **not** been compiled or smoke-tested here.
+There is no checked-in native Windows runner yet and this Linux sandbox has no Flutter toolchain. A Windows executable has **not** been smoke-tested here. The first remote preview build passed capability tests but failed at the Windows build step; the runner/toolchain and diagnostic reporting have been adjusted for validation. A successful artifact must be confirmed before calling the build ready.
 
 `tools/bootstrap-windows.ps1` generates a runner using the installed Flutter toolchain **in a temporary sample project**, then copies only `windows/` into this repository. It does not replace `lib/`, pubspec, assets, Android signing, or app business logic. It uses the existing app icon. If a customised Windows runner already exists, it leaves it alone.
 
-`.github/workflows/flavorflow-windows.yml` is a Windows build workflow (session-branch app changes or manual dispatch) pinned to Flutter 3.35.7 (compatible with the Dart 3.9 SDK constraint). It generates the runner, resolves the existing dependencies, runs platform-boundary tests, builds Windows, and packages **the complete release directory**, including DLLs and Flutter data. A ZIP preview is for controlled QA, not a signed installer/public launch. Run the workflow on the session branch; publishing is not automatic.
+`.github/workflows/flavorflow-windows.yml` is a Windows build workflow (session-branch app changes or manual dispatch) on Windows Server 2022 / Visual Studio 2022, pinned to Flutter 3.35.7 (compatible with the Dart 3.9 SDK constraint). It generates the runner, resolves the existing dependencies, runs platform-boundary tests, builds Windows, and packages **the complete release directory**, including DLLs and Flutter data. A ZIP preview is for controlled QA, not a signed installer/public launch. Run the workflow on the session branch; publishing is not automatic.
 
 ### Platform adaptations in this foundation
 
