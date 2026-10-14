@@ -28,7 +28,7 @@ The header/footer branding remains unchanged. The download area, demo instructio
 
 ## Windows development foundation
 
-There is no checked-in native Windows runner yet and this Linux sandbox has no Flutter toolchain. A Windows executable has **not** been smoke-tested here. The first remote preview build passed capability tests but failed at the Windows build step; the runner/toolchain and diagnostic reporting have been adjusted for validation. A successful artifact must be confirmed before calling the build ready.
+There is no checked-in native Windows runner yet and this Linux sandbox has no Flutter toolchain. A Windows executable has **not** been smoke-tested here. Remote capability tests passed. The first runner attempt failed; Windows Server 2022 / Visual Studio 2022 was pinned. The next build identified a dependency mismatch: image 4.11.0 calls archive.decodeLazy, unavailable in the resolved archive 4.0.9 / Dart 3.9 combination. The existing lockfile-compatible image 4.9.1 is now pinned for reproducible PDF/icon decoding. A successful artifact must be confirmed before calling the build ready.
 
 `tools/bootstrap-windows.ps1` generates a runner using the installed Flutter toolchain **in a temporary sample project**, then copies only `windows/` into this repository. It does not replace `lib/`, pubspec, assets, Android signing, or app business logic. It uses the existing app icon. If a customised Windows runner already exists, it leaves it alone.
 
