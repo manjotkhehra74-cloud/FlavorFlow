@@ -243,6 +243,7 @@ class _LoginPageState extends State<LoginPage> {
     final wide = MediaQuery.of(context).size.width >= 920;
     final auth = context.watch<AuthController>();
     final busy = auth.busy;
+    final legacyDuckDnsSaved = (auth.serverBase ?? '').toLowerCase().contains('flavorflow.duckdns.org');
 
     final brandPanel = Container(
       color: Shell.bg,
@@ -364,8 +365,10 @@ class _LoginPageState extends State<LoginPage> {
                 decoration: InputDecoration(
                   labelText: tr('Company code'),
                   hintText: 'e.g. demo-mill · demo-dairy · yourco-1234',
-                  helperText: tr('Given at registration — sets your company server. Leave blank for own server.'),
-                  helperMaxLines: 2,
+                  helperText: legacyDuckDnsSaved
+                      ? tr('Old DuckDNS address saved. Tap Server Address below to use the official HTTPS API.')
+                      : tr('Given at registration — sets your company server. Leave blank for own server.'),
+                  helperMaxLines: 3,
                   prefixIcon: const Icon(Icons.business_rounded, size: 19),
                 ),
                 onChanged: (v) {

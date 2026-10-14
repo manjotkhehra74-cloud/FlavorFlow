@@ -39,6 +39,9 @@ jobs:
       - name: Install packages
         run: flutter pub get
 
+      - name: Generate launcher and web icons
+        run: dart run flutter_launcher_icons || echo "::warning::Icon generator did not complete; checked-in PWA icons already contain the final logo."
+
       - name: Analyze Flutter app
         shell: bash
         run: |
@@ -129,7 +132,7 @@ jobs:
           echo "artifact_name=FlavorFlow-Android-signed-release" >> "$GITHUB_OUTPUT"
 
       - name: Build web
-        run: flutter build web --release --no-tree-shake-icons --dart-define=API_BASE=https://flavorflow.duckdns.org/api
+        run: flutter build web --release --no-tree-shake-icons --dart-define=API_BASE=https://app.flavorflow.co.in/api
 
       - name: Upload web artifact
         uses: actions/upload-artifact@v4
@@ -140,10 +143,10 @@ jobs:
           retention-days: 7
 
       - name: Build Android APK
-        run: flutter build apk --release --dart-define=API_BASE=https://flavorflow.duckdns.org/api
+        run: flutter build apk --release --dart-define=API_BASE=https://app.flavorflow.co.in/api
 
       - name: Build Play Store Android App Bundle
-        run: flutter build appbundle --release --dart-define=API_BASE=https://flavorflow.duckdns.org/api
+        run: flutter build appbundle --release --dart-define=API_BASE=https://app.flavorflow.co.in/api
 
       - name: Verify Android release packages
         shell: bash

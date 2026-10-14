@@ -2,7 +2,7 @@
 
 ## Current build identity
 
-- Version: **1.2.1 (version code 5)** — increment the `+build` number in `pubspec.yaml` for every Play upload.
+- Version: **1.2.2 (version code 6)** — increment the `+build` number in `pubspec.yaml` for every Play upload.
 - Android application ID: `in.flavorflow.flavorflow_erp`.
 - Minimum Android: API 23; target Android: API 36 (required for new Play submissions from August 31, 2026).
 - The APK is for direct installation/testing. Google Play accepts the **AAB**, not the APK, for new app releases.

@@ -393,7 +393,7 @@ class _SettingsPageState extends State<SettingsPage> {
       _tile(
         icon: Icons.info_outline_rounded,
         title: 'FlavorFlow ERP',
-        subtitle: 'Version 1.2.1 · Universal manufacturing ERP',
+        subtitle: 'Version 1.2.2 · Universal manufacturing ERP',
       ),
       const SizedBox(height: 8),
       Text('${tr('Role')}: ${session?.roleLabel ?? ''} · ${session?.email ?? ''}',
