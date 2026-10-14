@@ -10,6 +10,21 @@ await page.route('**/api/saas/lead',r=>r.fulfill({json:{ok:true}}));
 await page.goto(baseURL);
 await page.waitForFunction(()=>document.getElementById('reg-title').textContent.includes('10-day'));
 assert(!/hrmate|integrations?/i.test(await page.locator('body').innerText()));
+assert.equal(await page.locator('[data-play-store]').first().getAttribute('aria-disabled'),'true');
+assert.equal(await page.locator('[data-play-store]').first().getAttribute('href'),null);
+assert.equal(await page.locator('[data-play-qr] svg').count(),0);
+assert.equal(await page.locator('[data-windows-store]').getAttribute('aria-disabled'),'true');
+assert.equal(await page.locator('a[href$=".apk"]').count(),0);
+const playURL='https://play.google.com/store/apps/details?id=in.flavorflow.flavorflow_erp';
+// Simulate an approved listing locally; production config remains blank/pending.
+await page.evaluate(url=>FlavorFlowDistribution.configure({androidPackageId:'in.flavorflow.flavorflow_erp',playStoreUrl:url}),playURL);
+assert.equal(await page.locator('[data-play-store]').first().getAttribute('href'),playURL);
+assert.equal(await page.locator('[data-play-qr]').getAttribute('data-qr-url'),playURL);
+assert.equal(await page.locator('[data-play-qr] svg').count(),1);
+await page.evaluate(()=>FlavorFlowDistribution.configure({androidPackageId:'in.flavorflow.flavorflow_erp',playStoreUrl:'https://play.google.com/store/apps/details?id=wrong.app'}));
+assert.equal(await page.locator('[data-play-store]').first().getAttribute('href'),null);
+assert.equal(await page.locator('[data-play-qr] svg').count(),0);
+
 assert.equal(await page.locator('header img.brand-mark').getAttribute('src'),'/assets/flavorflow-logo-v2.png');
 assert.equal(await page.locator('footer img.brand-mark').getAttribute('src'),'/assets/flavorflow-logo-v2.png');
 await page.waitForFunction(()=>Array.from(document.querySelectorAll('img.brand-mark')).every(img=>img.complete&&img.naturalWidth>0));
@@ -40,7 +55,7 @@ await page.locator('#r-go').click();await page.locator('#r-msg').filter({hasText
 await page.unroute('**/api/saas/register');await page.route('**/api/saas/register',r=>r.fulfill({json:{companyCode:'sample-factory',serverUrl:'https://example.com/erp',trialEnds:'2026-10-23'}}));await page.locator('#r-go').click();await page.locator('#r-res.show').waitFor();assert.equal(await page.locator('#r-code').innerText(),'sample-factory');await page.keyboard.press('Escape');
 for(const width of [320,375,768,1440]){await page.setViewportSize({width,height:900});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),`overflow at ${width}`)}
 await page.setViewportSize({width:375,height:850});await page.goto(baseURL);
-await page.locator('.hero button').nth(1).click();await page.locator('#d-name').fill('Demo Owner');await page.locator('#d-co').fill('Demo Factory');await page.locator('#d-ph').fill('9876543210');await page.locator('#d-go').click();await page.waitForURL('**/demo.html');
-assert.equal(errors.length,0,errors.join('\n'));console.log('PASS: ERP-only copy, live prices/trial, plan selection, dialogs, registration errors/success, demo navigation, logo/favicon assets, mobile widths, no JS errors.');
+await page.locator('.hero button').nth(1).click();await page.locator('#d-name').fill('Demo Owner');await page.locator('#d-co').fill('Demo Factory');await page.locator('#d-ph').fill('9876543210');await page.locator('#d-go').click();await page.waitForURL('**/demo.html');assert.equal(await page.locator('a[href$=".apk"]').count(),0);assert.equal(await page.locator('[data-play-store]').getAttribute('aria-disabled'),'true');
+assert.equal(errors.length,0,errors.join('\n'));console.log('PASS: ERP-only copy, live prices/trial, plan selection, dialogs, registration errors/success, demo navigation, logo/favicon assets, Play Store pending/live validation and QR, mobile widths, no JS errors.');
 await browser.close();
 })().catch(e=>{console.error(e);process.exit(1)});

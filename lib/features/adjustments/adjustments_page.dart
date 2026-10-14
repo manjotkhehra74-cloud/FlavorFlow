@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/company.dart';
+import '../../core/platform_capabilities.dart';
 import '../../core/format.dart';
 import '../../core/i18n.dart';
 import '../../core/item_code.dart';
@@ -124,6 +125,7 @@ class _AdjustmentFormDialogState extends State<AdjustmentFormDialog> {
   XFile? photo; // damage-proof photo (camera/gallery)
 
   Future<void> _pickPhoto(ImageSource src) async {
+    if (src == ImageSource.camera && !PlatformCapabilities.cameraCapture) return;
     try {
       final x = await ImagePicker().pickImage(source: src, maxWidth: 1600, imageQuality: 80);
       if (x != null && mounted) setState(() => photo = x);
@@ -213,12 +215,12 @@ class _AdjustmentFormDialogState extends State<AdjustmentFormDialog> {
                 if (!kIsWeb) ...[
                   const SizedBox(height: 12),
                   Row(children: [
-                    OutlinedButton.icon(
+                    if (PlatformCapabilities.cameraCapture) OutlinedButton.icon(
                       onPressed: () => _pickPhoto(ImageSource.camera),
                       icon: const Icon(Icons.photo_camera_outlined, size: 18),
                       label: Text(tr('Photo')),
                     ),
-                    const SizedBox(width: 8),
+                    if (PlatformCapabilities.cameraCapture) const SizedBox(width: 8),
                     OutlinedButton.icon(
                       onPressed: () => _pickPhoto(ImageSource.gallery),
                       icon: const Icon(Icons.photo_library_outlined, size: 18),

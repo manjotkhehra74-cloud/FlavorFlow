@@ -294,6 +294,9 @@ header{background:rgba(255,255,255,.95)}.hero{background:radial-gradient(circle 
 .capability-strip,.workflow,.faq{background:var(--bg)}.card .ic{background:#E7F1FF!important}.chip,.dash-sidebar{background:var(--bg)}.dash-sidebar .selected,.note-check{background:#E7F1FF}.dashboard{border-color:var(--line)}.bar{background:var(--blue)}.bar.light{background:#a5ddc9}.floating-note{border-color:var(--line)}.step-number{border-color:var(--line)}.band{background:linear-gradient(120deg,var(--blue),#258FD0,var(--green))}.band .eyebrow,.band p,.band small{color:#fff}.band .btn{background:#fff;color:var(--blue2)}.band .btn-o{background:transparent;border-color:#ffffff80;color:#fff}.faq details{border-color:var(--line)}.wa{background:#25D366}
 /* Selected regenerated logo; keep the existing layout and brand colours. */
 img.brand-mark{display:block;object-fit:contain;background:#fff;border-radius:7px;flex-shrink:0}
+
+.store-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;text-align:left;margin:30px auto 0;max-width:870px}.store-card{padding:24px;background:#ffffff12;border:1px solid #ffffff40;border-radius:14px}.store-card h3{font-size:19px}.band .store-card p{margin:10px 0 18px;font-size:12px;max-width:none}.store-button{display:inline-flex;align-items:center;gap:12px;padding:12px 17px;background:#111b27;color:#fff;text-decoration:none;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;max-width:100%}.store-button.is-pending{cursor:default;background:#152c43}.store-icon{width:24px;height:28px;flex-shrink:0}.windows-icon{font-size:30px;line-height:1}.play-qr{display:flex;align-items:center;justify-content:center;background:#fff;color:#617083;border-radius:10px;width:148px;height:148px;font-size:11px;text-align:center;line-height:1.6;padding:10px;margin-top:20px;overflow:hidden}.play-qr svg{display:block;width:100%;height:100%}.store-card .qr-caption{font-size:11px;margin-bottom:0}.store-button:focus-visible{outline:3px solid #A8CCFF;outline-offset:4px}@media(max-width:650px){.store-grid{grid-template-columns:1fr}.store-card{padding:20px}}
+
 </style>
 </head>
 <body>
@@ -371,12 +374,12 @@ img.brand-mark{display:block;object-fit:contain;background:#fff;border-radius:7p
 
 <section class="sec faq" id="faq"><div class="wrap faq-grid"><div><div class="eyebrow">GOOD TO KNOW</div><h2>A few questions,<br>before you start.</h2></div><div>
 <details><summary>Is FlavorFlow right for my factory?</summary><p>FlavorFlow ERP is built for manufacturing units that manage production batches, inventory, dispatches and GST billing. Try the sample company for your industry to see the workflow before signing up.</p></details>
-<details><summary>How does the free trial work?</summary><p>Start with the full Pro trial, with no credit card required. Create your company, install the Android app and sign in. Your registration confirmation shows the trial end date.</p></details>
+<details><summary>How does the free trial work?</summary><p>Create your company to start the Pro trial with no credit card required. Android installation will be available through Google Play after publication; Windows is in development. Registering starts the trial even while store publication is pending. Your registration confirmation shows the trial end date.</p></details>
 <details><summary>Can my team use it in their own language?</summary><p>Yes. The ERP supports English, Punjabi, Hindi, Gujarati, Marathi, Bengali, Tamil and Telugu.</p></details>
 <details><summary>Where is my company’s data stored?</summary><p>Your company’s ERP data is stored on our hosted server in a separate database for your company, not only on a team member’s phone. Role-based permissions control what each user can access. Contact support if you need data export or deletion assistance.</p></details>
 <details><summary>How do I pay after the trial?</summary><p>Choose monthly or yearly billing and request a company invoice. Pay by NEFT, IMPS, RTGS (minimum ₹2 lakh), or cheque using verified beneficiary details. Share your company code, invoice number and payment reference with support; activation follows verification or cheque clearance. UPI and net banking are planned but not enabled yet. Optional UPI AutoPay / eNACH will require provider setup, bank eligibility and your explicit authorisation. Credit/debit cards are not offered, and registering does not authorise automatic debits.</p></details>
 </div></div></section>
-<section class="sec" id="download"><div class="wrap"><div class="band"><div class="eyebrow">LET’S GET YOUR FACTORY FLOWING</div><h2>Your next shift could run smoother.</h2><p>Create your company, download FlavorFlow ERP for Android<br>and put your factory’s daily operations in one place.</p><button class="btn" onclick="openM('reg')">Start your free trial <span class="arrow" aria-hidden="true">↗</span></button><a class="btn btn-o" href="/download/flavorflow-erp.apk">↓ Download Android app</a><small>No credit card · Private company database · Support from Punjab, India</small></div></div></section>
+<section class="sec" id="download"><div class="wrap"><div class="band"><div class="eyebrow">ONE ERP. PHONE TO FACTORY DESK.</div><h2>FlavorFlow, wherever your team works.</h2><p>Use your company account and the same ERP workflows.<br>Android distribution is moving to Google Play; Windows is the next platform.</p><button class="btn" onclick="openM('reg')">Start your free trial <span class="arrow" aria-hidden="true">↗</span></button><div class="store-grid"><article class="store-card"><h3>Android · Google Play</h3><p data-play-status>Play Store publication is pending. Installation and QR access will open after approval.</p><a class="store-button is-pending" data-play-store aria-disabled="true" role="link" tabindex="0" target="_blank" rel="noopener"><svg class="store-icon" viewBox="0 0 32 36" aria-hidden="true"><path fill="#00C1FF" d="M1 1v34l17-17z"/><path fill="#00E676" d="M1 1l22 12-5 5z"/><path fill="#FFD740" d="M23 13l8 5-8 5-5-5z"/><path fill="#FF5252" d="M1 35l22-12-5-5z"/></svg><span data-store-label>Google Play — coming soon</span></a><div class="play-qr" data-play-qr role="img" aria-label="Play Store QR code is not yet available">QR will be available after the Play Store launch</div><p class="qr-caption">Once live, scan to open the app’s Google Play installation page.</p></article><article class="store-card"><h3>Windows · Desktop ERP</h3><p>The same FlavorFlow ERP is being prepared for Windows PCs. Company login, production, stock, billing and reports remain part of the shared app.</p><a class="store-button is-pending" data-windows-store aria-disabled="true" role="link" tabindex="0" target="_blank" rel="noopener"><span class="windows-icon" aria-hidden="true">⊞</span><span data-store-label>Windows — in development</span></a><p style="margin-top:18px">Windows build and release testing are pending. A store link will appear only after publication.</p></article></div><small>No direct APK download · Company-based access · Online payment setup pending</small></div></div></section>
 </main>
 <footer><div class="wrap"><div><a class="brand" href="#"><img class="brand-mark" src="/assets/flavorflow-logo-v2.png" alt="" width="38" height="38"><span><b>FlavorFlow</b><small>MANUFACTURING ERP</small></span></a><div class="footer-meta">© 2026 FlavorFlow ERP. Made in Punjab, India.</div></div><div><a href="https://wa.me/919501606877" target="_blank" rel="noopener">Talk to us ↗ &nbsp; +91 95016 06877</a> &nbsp;·&nbsp; <a href="/privacy.html">Privacy policy</a></div></div></footer>
 
@@ -422,7 +425,8 @@ img.brand-mark{display:block;object-fit:contain;background:#fff;border-radius:7p
       <b>Company code:</b><code id="r-code"></code>
       <b>Server address (paste in the app):</b><code id="r-url"></code>
       <b>Login:</b> your email + the password you chose.<br><br>
-      1. Download FlavorFlow ERP (we'll WhatsApp you the link)<br>
+      1. Install FlavorFlow ERP through Google Play once the listing is live.<br>
+      <span data-play-status>Play Store publication is pending. Contact support before starting your trial if you need app access now.</span><br>
       2. On the login screen tap the ✏️ next to the server address<br>
       3. Paste the server address above → Sign in<br><br>
       <b>Trial ends:</b> <span id="r-trial"></span> — save a screenshot of this box!
@@ -481,5 +485,8 @@ async function doReg(e){
   return false;
 }
 </script>
+<script src="/assets/distribution-config.js"></script>
+<script src="/assets/vendor/qrcode.js"></script>
+<script src="/assets/distribution.js"></script>
 </body>
 </html>

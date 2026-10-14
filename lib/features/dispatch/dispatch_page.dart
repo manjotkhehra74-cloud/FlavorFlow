@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import '../../core/platform_capabilities.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -796,7 +796,7 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
 
   /// Best-effort GPS stamp (lat,long) — never blocks the dispatch.
   Future<String> _locationStamp() async {
-    if (kIsWeb) return '';
+    if (!PlatformCapabilities.gpsDispatchStamp) return '';
     try {
       var perm = await Geolocator.checkPermission();
       if (perm == LocationPermission.denied) {

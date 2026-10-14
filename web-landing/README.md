@@ -10,7 +10,7 @@ From the repository root:
 python -m http.server 3000 --bind 0.0.0.0 --directory web-landing
 ```
 
-Open port 3000. This is a static preview, not a running SaaS backend. Production provides `/api/saas/plans`, `/api/saas/lead`, `/api/saas/register` and `/download/flavorflow-erp.apk`. If the plans API is unavailable, the page displays its existing default pricing. Registration requires the production API. Demo access is an Android app workflow; the website does not claim a browser demo is available.
+Open port 3000. This is a static preview, not a running SaaS backend. Production provides `/api/saas/plans`, `/api/saas/lead`, `/api/saas/register` . If the plans API is unavailable, the page displays its existing default pricing. Registration requires the production API. Public Android installation is Google Play-only, with a pending state until the owner supplies the approved listing URL. Demo access is an Android app workflow; the website does not claim a browser demo is available.
 
 The HTML uses local logo assets and requires no CDN assets or build step. Existing deployment scripts can continue serving the same HTML files. No HRMate application or backend files are changed by this redesign.
 
@@ -31,7 +31,7 @@ The test mocks SaaS endpoints: it verifies ERP-only copy even when the plans API
 
 ## Publish to the existing domain host
 
-`tools/ff-landing-deploy.sh` is a website-only deploy helper for the existing SaaS VM. It downloads one GitHub snapshot, validates the ERP landing page, backs up existing public HTML, and atomically replaces `index.html`, `demo.html`, `privacy.html`, `admin.html` and the four versioned PNGs under `assets/`. Assets are installed before HTML. It also publishes the owner console HTML favicon/logo change, but does not modify owner API behaviour, databases, APIs, APKs or reverse-proxy configuration.
+`tools/ff-landing-deploy.sh` is a website-only deploy helper for the existing SaaS VM. It downloads one GitHub snapshot, validates the ERP landing page, backs up existing public HTML, and atomically replaces `index.html`, `demo.html`, `privacy.html`, `admin.html` the four versioned PNGs and distribution/QR JavaScript under `assets/`. Assets are installed before HTML. It also publishes the owner console HTML favicon/logo change, but does not modify owner API behaviour, databases, APIs, APKs or reverse-proxy configuration.
 
 Run it on the hosting VM with `sudo`, optionally setting `FF_REF` to the published commit. The existing document root must already exist (default `/opt/flavorflow-saas/web`). It verifies the exact new page through local HTTPS for **both** `flavorflow.co.in` and `www.flavorflow.co.in`, without disabling certificate verification. A successful local check does not establish that external DNS or a CDN points to that VM.
 
@@ -44,3 +44,9 @@ Keep the new landing layout with the original blue/green theme. Credit/debit car
 ## Logo assets
 
 `assets/flavorflow-logo-v2.png` is an optimised, tightly cropped rendition of the user-selected regenerated Final Flowmark. The same mark supplies 32px/48px favicons and a 180px Apple touch icon. Versioned filenames avoid reusing cached old favicon URLs. Only website branding changes; the Android app icon and original saved design files remain untouched.
+
+Cashfree is deferred by the owner (not approved or enabled). See `docs/CASHFREE_ONBOARDING.md` for the written commercial-confirmation request and implementation gates. The agent has not submitted a sales request or created a merchant account. Keep online payments labelled setup pending until approval and tested integration.
+
+## Store-first distribution and Windows
+
+See `docs/STORE_AND_WINDOWS_LAUNCH.md`. Both store URLs remain blank in `assets/distribution-config.js` while publication is pending. Set the exact approved Play URL to activate the Play button and its local QR; there is no public APK fallback. Windows uses the shared Flutter app and has a Windows CI preview-build path, not a released desktop installer.

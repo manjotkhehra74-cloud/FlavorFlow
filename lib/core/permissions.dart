@@ -1,6 +1,7 @@
-import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'platform_capabilities.dart';
 
 /// One-time upfront permission request — like big apps do on first open.
 /// Asks all the permissions the app uses in one flow:
@@ -8,7 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Runs once (flag saved); later the OS remembers each answer anyway.
 class AppPermissions {
   static Future<void> requestAllOnce() async {
-    if (kIsWeb) return;
+    if (!PlatformCapabilities.isMobile) return;
     try {
       final prefs = await SharedPreferences.getInstance();
       if (prefs.getBool('perms_asked') ?? false) return;
@@ -30,7 +31,7 @@ class AppPermissions {
 
   /// Camera check right before the scanner opens (in case it was denied).
   static Future<bool> ensureCamera() async {
-    if (kIsWeb) return true;
+    if (!PlatformCapabilities.cameraCapture) return true;
     try {
       var st = await Permission.camera.status;
       if (!st.isGranted) st = await Permission.camera.request();

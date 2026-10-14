@@ -11,14 +11,21 @@ h1{letter-spacing:-.6px;font-size:24px}
 p{color:#67766e;font-size:14.5px;line-height:1.6}
 code{display:block;background:#f5f7ef;border:1px dashed #C9D5E2;padding:10px;border-radius:9px;margin:8px 0;word-break:break-all;font-size:13px}
 .btn{display:inline-block;margin-top:14px;padding:12px 20px;border-radius:10px;font-weight:700;font-size:14px;text-decoration:none;color:#fff;background:#14694d}
+
+.store-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;text-align:left;margin:30px auto 0;max-width:870px}.store-card{padding:24px;background:#ffffff12;border:1px solid #ffffff40;border-radius:14px}.store-card h3{font-size:19px}.band .store-card p{margin:10px 0 18px;font-size:12px;max-width:none}.store-button{display:inline-flex;align-items:center;gap:12px;padding:12px 17px;background:#111b27;color:#fff;text-decoration:none;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;max-width:100%}.store-button.is-pending{cursor:default;background:#152c43}.store-icon{width:24px;height:28px;flex-shrink:0}.windows-icon{font-size:30px;line-height:1}.play-qr{display:flex;align-items:center;justify-content:center;background:#fff;color:#617083;border-radius:10px;width:148px;height:148px;font-size:11px;text-align:center;line-height:1.6;padding:10px;margin-top:20px;overflow:hidden}.play-qr svg{display:block;width:100%;height:100%}.store-card .qr-caption{font-size:11px;margin-bottom:0}.store-button:focus-visible{outline:3px solid #A8CCFF;outline-offset:4px}@media(max-width:650px){.store-grid{grid-template-columns:1fr}.store-card{padding:20px}}
+
+.play-qr{margin:20px auto}
 </style></head>
 <body><div class="card">
 <p><a href="/" style="color:#14694d;text-decoration:none">← Back to FlavorFlow ERP</a></p>
 <h1>Try FlavorFlow ERP</h1>
 <p>The full in-browser demo is being prepared. Meanwhile, experience the <b>real app</b> with our demo factory:</p>
-<p style="text-align:left"><b>1.</b> Install the app: <a href="/download/flavorflow-erp.apk"><b>Download for Android (APK)</b></a><br><b>2.</b> On the login screen type the <b>Company code</b> of the industry you want to try:</p>
+<p data-play-status>Play Store publication is pending. Installation and QR access will open after approval.</p><a class="store-button is-pending" data-play-store aria-disabled="true" role="link" tabindex="0" target="_blank" rel="noopener"><svg class="store-icon" viewBox="0 0 32 36" aria-hidden="true"><path fill="#00C1FF" d="M1 1v34l17-17z"/><path fill="#00E676" d="M1 1l22 12-5 5z"/><path fill="#FFD740" d="M23 13l8 5-8 5-5-5z"/><path fill="#FF5252" d="M1 35l22-12-5-5z"/></svg><span data-store-label>Google Play — coming soon</span></a><div class="play-qr" data-play-qr role="img" aria-label="Play Store QR code is not yet available">QR will be available after the Play Store launch</div><p style="text-align:left"><b>1.</b> Once published, install FlavorFlow ERP from Google Play using the button or QR above.<br><b>2.</b> On the login screen type the <b>Company code</b> of the industry you want to try:</p>
 <code id="url" style="font-size:13px;line-height:1.7">demo-mill &nbsp;·&nbsp; demo-dairy &nbsp;·&nbsp; demo-oil &nbsp;·&nbsp; demo-bakery &nbsp;·&nbsp; demo-water &nbsp;·&nbsp; demo-soap &nbsp;·&nbsp; demo-cosmetics &nbsp;·&nbsp; demo-paint &nbsp;·&nbsp; demo-agro &nbsp;·&nbsp; demo-pharma &nbsp;·&nbsp; demo-textile &nbsp;·&nbsp; demo-footwear &nbsp;·&nbsp; demo-plastic &nbsp;·&nbsp; demo-hardware &nbsp;·&nbsp; demo-food &nbsp;·&nbsp; demo-general</code>
 <p style="text-align:left"><b>3.</b> Sign in (same for every industry):<br>Email: <b>demo@flavorflow.co.in</b><br>Password: <b>Demo@1234</b></p>
 <p style="font-size:12.5px">Each demo company is pre-set for its industry — units, packing &amp; raw-material categories, dispatch destinations and the sections it needs. Demo data resets every night at 3 AM IST.</p>
-<a class="btn" href="https://wa.me/919501606877?text=Hi%2C%20I%20just%20tried%20the%20FlavorFlow%20demo%20form%20—%20please%20send%20me%20the%20app%20link" target="_blank" rel="noopener">Get App Link on WhatsApp</a>
-</div></body></html>
+<a class="btn" href="https://wa.me/919501606877?text=Hi%2C%20I%20just%20tried%20the%20FlavorFlow%20demo%20form%20—%20please%20share%20the%20Play%20Store%20listing%20when%20available" target="_blank" rel="noopener">Ask About Play Store Availability</a>
+</div><script src="/assets/distribution-config.js"></script>
+<script src="/assets/vendor/qrcode.js"></script>
+<script src="/assets/distribution.js"></script>
+</body></html>

@@ -17,12 +17,13 @@ done
 STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT
 ASSETS=(assets/flavorflow-logo-v2.png assets/favicon-32-v2.png assets/favicon-48-v2.png assets/apple-touch-icon-v2.png)
-FILES=("${ASSETS[@]}" demo.html privacy.html admin.html index.html)
+SCRIPTS=(assets/distribution-config.js assets/distribution.js assets/vendor/qrcode.js)
+FILES=("${ASSETS[@]}" "${SCRIPTS[@]}" demo.html privacy.html admin.html index.html)
 # One snapshot keeps pages and versioned logo assets consistent.
 curl --fail --silent --show-error --location --max-time 120 --retry 2 \
   "https://codeload.github.com/$REPO/tar.gz/$REF" -o "$STAGE/source.tar.gz"
 tar -xzf "$STAGE/source.tar.gz" --strip-components=1 -C "$STAGE" --wildcards \
-  '*/web-landing/*.html' '*/web-landing/assets/*.png'
+  '*/web-landing/*.html' '*/web-landing/assets/*.png' '*/web-landing/assets/*.js'
 python3 - "$STAGE/web-landing" <<'PY'
 import sys
 from pathlib import Path
@@ -36,6 +37,12 @@ if 'From factory floor' not in text or 'id="features"' not in text:
     raise SystemExit('Snapshot does not contain the ERP landing page.')
 if 'hrmate' in text.lower() or 'integration' in text.lower():
     raise SystemExit('Refusing unrelated product promotion in public landing page.')
+for name in ('distribution-config.js', 'distribution.js', 'vendor/qrcode.js'):
+    if not (root / 'assets' / name).is_file():
+        raise SystemExit(f'Missing distribution asset: {name}')
+for page in ('index.html', 'demo.html'):
+    if '/download/flavorflow-erp.apk' in (root / page).read_text():
+        raise SystemExit(f'Public APK link still present in {page}')
 for name in ('flavorflow-logo-v2.png', 'favicon-32-v2.png', 'favicon-48-v2.png', 'apple-touch-icon-v2.png'):
     data = (root / 'assets' / name).read_bytes()
     if not data.startswith(b'\x89PNG\r\n\x1a\n') or len(data) < 24:
@@ -44,7 +51,7 @@ for name in ('flavorflow-logo-v2.png', 'favicon-32-v2.png', 'favicon-48-v2.png',
         raise SystemExit(f'Landing page does not reference {name}')
 PY
 BACKUP="$(dirname "$WEB")/backups/landing-$(date -u +%Y%m%dT%H%M%SZ)-$$"
-mkdir -p "$BACKUP/assets" "$WEB/assets"
+mkdir -p "$BACKUP/assets/vendor" "$WEB/assets/vendor"
 for file in "${FILES[@]}"; do
   [[ ! -f "$WEB/$file" ]] || cp -p "$WEB/$file" "$BACKUP/$file"
 done

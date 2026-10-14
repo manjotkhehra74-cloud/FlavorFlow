@@ -1,0 +1,60 @@
+name: FlavorFlow Windows preview
+
+on:
+  push:
+    branches: [arena/f2bca6ec-flavorflow]
+    paths:
+      - 'lib/**'
+      - 'test/**'
+      - 'pubspec.*'
+      - 'tools/bootstrap-windows.ps1'
+      - 'tools/windows/**'
+      - '.github/workflows/flavorflow-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flavorflow-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Build shared ERP for Windows
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.7'
+          channel: stable
+          cache: true
+      - name: Generate Windows runner only
+        shell: pwsh
+        run: ./tools/bootstrap-windows.ps1
+      - name: Install existing ERP dependencies
+        run: flutter pub get
+      - name: Test mobile and desktop capability boundaries
+        run: flutter test test/platform_capabilities_test.dart
+      - name: Build Windows release bundle
+        # Native users enter their company code/server; never bake in localhost.
+        run: flutter build windows --release
+      - name: Zip the complete runnable bundle
+        shell: pwsh
+        run: |
+          $Bundle = 'build/windows/x64/runner/Release'
+          if (-not (Test-Path "$Bundle/flavorflow_erp.exe")) {
+            throw 'Windows executable missing from build output.'
+          }
+          Compress-Archive -Path "$Bundle/*" -DestinationPath flavorflow-windows-preview.zip
+      - name: Upload Windows QA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: flavorflow-windows-preview
+          path: flavorflow-windows-preview.zip
+          if-no-files-found: error
+          retention-days: 14
