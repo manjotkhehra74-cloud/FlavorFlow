@@ -2,7 +2,7 @@
 
 ## Current build identity
 
-- Version: **1.2.2 (version code 6)** — increment the `+build` number in `pubspec.yaml` for every Play upload.
+- Version: **1.2.3 (version code 7)** — increment the `+build` number in `pubspec.yaml` for every Play upload.
 - Android application ID: `in.flavorflow.flavorflow_erp`.
 - Minimum Android: API 23; target Android: API 36 (required for new Play submissions from August 31, 2026).
 - The APK is for direct installation/testing. Google Play accepts the **AAB**, not the APK, for new app releases.
@@ -18,7 +18,7 @@ For a store-upload-signed build, configure these Actions secrets with the existi
 - `ANDROID_KEY_ALIAS`
 - `ANDROID_KEY_PASSWORD`
 
-Never commit the keystore or passwords. If no upload key is configured, Actions explicitly labels its APK/AAB as **test-only, debug-signed**; those files must not be uploaded to Play Console. CircleCI's `build-play-store-release` job requires the same four values and fails if they are missing.
+Never commit the keystore or passwords. If no upload key is configured, GitHub Actions explicitly labels its APK/AAB as **test-only, debug-signed**; those files must not be uploaded to Play Console. GitHub Actions is the release build system for this repository.
 
 ## Publishing
 
