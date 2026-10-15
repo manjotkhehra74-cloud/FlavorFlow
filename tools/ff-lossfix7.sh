@@ -95,4 +95,4 @@ systemctl restart flavorflow
 sleep 2
 curl -fsS -m 8 http://127.0.0.1:4000/api/health
 echo ""
-echo "LOSSFIX7 VERIFIED ✓ — saving Actual refreshes BOM CB; current-month overrides reset for Actual-edited products."
+echo "LOSSFIX7 INSTALLED ✓ — route syntax and API health passed; refresh Packing Loss to verify calculated CB values."
