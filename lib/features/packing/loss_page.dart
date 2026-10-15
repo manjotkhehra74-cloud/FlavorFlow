@@ -55,11 +55,24 @@ class _LossPageState extends State<LossPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(label),
-        content: TextField(
-          controller: ctl,
-          autofocus: true,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(labelText: tr('Value')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (key.startsWith('act:'))
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: Text(
+                  'Saving Actual recalculates this product’s BOM-based material CB and resets any manual CB overrides for this product.',
+                ),
+              ),
+            TextField(
+              controller: ctl,
+              autofocus: true,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(labelText: tr('Value')),
+            ),
+          ],
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),

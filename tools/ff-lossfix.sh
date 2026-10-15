@@ -148,6 +148,14 @@ router.put('/loss/cell', requirePerm('packing.manage'), (req, res) => {
   if (!/^(proj|open|act|close|cb|extra):[0-9]+(:[0-9]+)?$/.test(key) || isNaN(value)) throw bad('Bad cell.');
   const ym = lossOpenMonth();
   db.prepare('INSERT INTO loss_values (ym, key, value) VALUES (?,?,?) ON CONFLICT(ym, key) DO UPDATE SET value = excluded.value').run(ym, key, value);
+  // lossfix7: Actual edits clear product CB overrides.
+  // Actual production is the driver for this product's BOM-based material CB.
+  const actMatch = /^act:([0-9]+)$/.exec(key);
+  if (actMatch) {
+    const pid = Number(actMatch[1]);
+    db.prepare('DELETE FROM loss_values WHERE ym = ? AND (key LIKE ? OR key LIKE ?)')
+      .run(ym, 'cb:' + pid + ':%', 'base:cb:' + pid + ':%');
+  }
   audit(db, req.user, 'UPDATE', 'packing', 0, 'Loss sheet ' + ym + ': ' + key + ' = ' + value);
   res.json({ ok: true });
 });
