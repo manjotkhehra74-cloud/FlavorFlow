@@ -13,3 +13,9 @@ bool get isDesktopPlatform =>
     (defaultTargetPlatform == TargetPlatform.windows ||
         defaultTargetPlatform == TargetPlatform.macOS ||
         defaultTargetPlatform == TargetPlatform.linux);
+
+/// Native Windows gets its desktop ERP workspace regardless of logical window
+/// width or Windows display scaling. A width breakpoint alone can incorrectly
+/// send a small/high-DPI desktop window through the phone-style shell.
+bool get isWindowsPlatform =>
+    !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;

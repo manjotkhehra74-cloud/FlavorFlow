@@ -43,9 +43,13 @@ its runtime files are written to `build/windows/x64/runner/Release/`.
 
 ## Desktop behavior
 
-- At desktop widths the app uses its existing sidebar layout. Login, RBAC,
-  company switching, server settings, saved dispatch drafts, and the shared API
-  are the same as in other app versions.
+- The native Windows executable always opens the desktop ERP workspace,
+  regardless of Windows display scaling or logical window width. It provides a
+  classic menu bar, compact toolbar, searchable grouped Modules pane, active
+  screen header, and online/offline status strip; the toolbar compacts in a
+  smaller window. Wide browser layouts use the same workspace. Phone layouts
+  keep their existing mobile navigation. Login, RBAC, company switching,
+  server settings, saved dispatch drafts, and the shared API remain the same.
 - Preferences and saved sessions live under the current Windows user profile.
   Windows device authentication/Windows Hello is offered only if the OS reports
   support; otherwise password login remains available. Signing out clears the

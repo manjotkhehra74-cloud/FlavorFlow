@@ -12,6 +12,7 @@ import '../core/industry_pack.dart';
 import '../core/i18n.dart';
 import '../core/theme.dart';
 import '../core/format.dart';
+import '../core/platform_support.dart';
 import '../core/app_permissions.dart';
 import '../state/auth.dart';
 import 'widgets.dart';
@@ -352,7 +353,10 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       nav.add({'path': '/settings', 'label': 'Settings', 'icon': 'settings', 'group': nav.isNotEmpty ? (nav.last['group'] ?? 'System') : 'System'});
     }
     final width = MediaQuery.sizeOf(context).width;
-    final wide = width >= 1060;
+    // The native Windows executable always gets the desktop workspace. Do not
+    // rely only on logical width: high-DPI scaling can make a desktop window
+    // look "narrow" and accidentally select the mobile drawer/bottom-nav shell.
+    final wide = width >= 1060 || isWindowsPlatform;
     final phone = width < 700;
     final selected = _selectedIndex(context, nav);
     final currentPath = GoRouterState.of(context).uri.path;
