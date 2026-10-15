@@ -939,8 +939,8 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
           ]),
         ),
       LayoutBuilder(builder: (context, c) {
-        final wide = c.maxWidth > 900;
-        final compact = c.maxWidth < 600;
+        final wide = isWindowsPlatform ? c.maxWidth >= 760 : c.maxWidth > 900;
+        final compact = isWindowsPlatform ? c.maxWidth < 540 : c.maxWidth < 600;
         final truckField = _destTrucks.isEmpty
             ? TextField(controller: truck, textCapitalization: TextCapitalization.characters, decoration: InputDecoration(labelText: tr('Truck / Vehicle No. *'), hintText: 'PB-08-AB-1234'), onChanged: (_) => setState(() {}))
             : DropdownButtonFormField<String>(
@@ -1094,8 +1094,8 @@ class _CalculatorTabState extends State<_CalculatorTab> with _CalcMixin {
     final scheme = Theme.of(context).colorScheme;
     return ListView(padding: const EdgeInsets.all(20), children: [
       LayoutBuilder(builder: (context, c) {
-        final wide = c.maxWidth > 900;
-        final compact = c.maxWidth < 600;
+        final wide = isWindowsPlatform ? c.maxWidth >= 760 : c.maxWidth > 900;
+        final compact = isWindowsPlatform ? c.maxWidth < 540 : c.maxWidth < 600;
         final truckField = TextField(controller: truck, textCapitalization: TextCapitalization.characters, decoration: InputDecoration(labelText: tr('Truck number'), hintText: 'PB-08-AB-1234'));
         final dateField = _DateField(date: date, onPick: (d) => setState(() => date = d));
         final form = SectionCard(title: 'Truck Loading Calculator', child: Column(children: [

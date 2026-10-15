@@ -6,6 +6,7 @@ import '../../core/api.dart';
 import '../../core/biometric.dart';
 import '../../core/permissions.dart';
 import '../../core/i18n.dart';
+import '../../core/platform_support.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
 import '../../ui/app_shell.dart' show LanguageDialog;
@@ -241,6 +242,7 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final wide = MediaQuery.of(context).size.width >= 920;
+    final desktopPresentation = isWindowsPlatform || wide;
     final auth = context.watch<AuthController>();
     final busy = auth.busy;
     final legacyDuckDnsSaved = (auth.serverBase ?? '').toLowerCase().contains('flavorflow.duckdns.org');
@@ -315,7 +317,7 @@ class _LoginPageState extends State<LoginPage> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 400),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              if (!wide) ...[
+              if (!desktopPresentation) ...[
                 Row(children: [
                   Container(
                     width: 38, height: 38,
@@ -328,6 +330,26 @@ class _LoginPageState extends State<LoginPage> {
                   Text('FlavorFlow ERP', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: scheme.onSurface)),
                 ]),
                 const SizedBox(height: 26),
+              ],
+              if (isWindowsPlatform && !wide) ...[
+                Row(children: [
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(border: Border.all(color: scheme.outlineVariant), borderRadius: BorderRadius.circular(3)),
+                    clipBehavior: Clip.antiAlias,
+                    child: Image.asset('assets/icon/app_icon.png', fit: BoxFit.cover),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('FlavorFlow ERP', style: TextStyle(color: scheme.onSurface, fontSize: 12, fontWeight: FontWeight.w700)),
+                    Text('WORKSPACE SIGN IN', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9, letterSpacing: 1.0)),
+                  ])),
+                  Icon(Icons.desktop_windows_outlined, size: 16, color: scheme.onSurfaceVariant),
+                ]),
+                const SizedBox(height: 14),
+                Divider(color: scheme.outlineVariant),
+                const SizedBox(height: 12),
               ],
               Row(children: [
                 Expanded(child: Text(tr('Sign in'), style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: scheme.onSurface, letterSpacing: -0.4))),

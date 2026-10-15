@@ -18,7 +18,7 @@ class AppBrand {
 
 /// Modern, compact ERP theme. Light and dark palettes share the Flow Mark
 /// blue-to-green identity while preserving dense, readable data screens.
-ThemeData buildTheme({bool dark = false}) {
+ThemeData buildTheme({bool dark = false, bool windowsDesktop = false}) {
   final ink = dark ? const Color(0xFFF0F5FA) : const Color(0xFF172334);
   final subInk = dark ? const Color(0xFFA7B4C2) : const Color(0xFF617083);
   final surface = dark ? const Color(0xFF151D27) : Colors.white;
@@ -62,7 +62,7 @@ ThemeData buildTheme({bool dark = false}) {
       );
 
   OutlineInputBorder inputBorder(Color color, {double width = 1}) => OutlineInputBorder(
-        borderRadius: BorderRadius.circular(11),
+        borderRadius: BorderRadius.circular(windowsDesktop ? 4 : 11),
         borderSide: BorderSide(color: color, width: width),
       );
 
@@ -75,7 +75,7 @@ ThemeData buildTheme({bool dark = false}) {
     scaffoldBackgroundColor: dark ? const Color(0xFF0E151D) : const Color(0xFFF4F7FB),
     canvasColor: surface,
     shadowColor: const Color(0xFF0B2545).withValues(alpha: dark ? 0.28 : 0.10),
-    visualDensity: VisualDensity.standard,
+    visualDensity: windowsDesktop ? VisualDensity.compact : VisualDensity.standard,
     textTheme: TextTheme(
       headlineSmall: txt(21, FontWeight.w700, color: ink, ls: -0.45),
       titleLarge: txt(17.5, FontWeight.w700, color: ink, ls: -0.25),
@@ -93,18 +93,18 @@ ThemeData buildTheme({bool dark = false}) {
       elevation: 0,
       scrolledUnderElevation: 0,
       centerTitle: false,
-      toolbarHeight: 62,
+      toolbarHeight: windowsDesktop ? 48 : 62,
       titleTextStyle: txt(17, FontWeight.w700, color: ink, ls: -0.25),
       iconTheme: IconThemeData(color: subInk, size: 22),
     ),
     cardTheme: CardThemeData(
       color: surface,
       surfaceTintColor: Colors.transparent,
-      elevation: dark ? 0 : 1.2,
+      elevation: windowsDesktop || dark ? 0 : 1.2,
       shadowColor: const Color(0xFF123A63).withValues(alpha: 0.10),
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(15),
+        borderRadius: BorderRadius.circular(windowsDesktop ? 4 : 15),
         side: BorderSide(color: border),
       ),
       clipBehavior: Clip.antiAlias,
@@ -112,7 +112,9 @@ ThemeData buildTheme({bool dark = false}) {
     inputDecorationTheme: InputDecorationThemeData(
       filled: true,
       fillColor: dark ? const Color(0xFF111923) : Colors.white,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      contentPadding: windowsDesktop
+          ? const EdgeInsets.symmetric(horizontal: 10, vertical: 8)
+          : const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       border: inputBorder(fieldBorder),
       enabledBorder: inputBorder(fieldBorder),
       focusedBorder: inputBorder(scheme.primary, width: 1.8),
@@ -126,46 +128,50 @@ ThemeData buildTheme({bool dark = false}) {
     ),
     dataTableTheme: DataTableThemeData(
       headingRowColor: WidgetStatePropertyAll(scheme.surfaceContainerLow),
-      headingRowHeight: 42,
-      dataRowMinHeight: 42,
-      dataRowMaxHeight: 50,
+      headingRowHeight: windowsDesktop ? 34 : 42,
+      dataRowMinHeight: windowsDesktop ? 34 : 42,
+      dataRowMaxHeight: windowsDesktop ? 46 : 50,
       headingTextStyle: txt(10.8, FontWeight.w700, color: subInk, ls: 0.65),
       dataTextStyle: txt(12.8, FontWeight.w400, color: ink),
       dataRowColor: WidgetStateProperty.fromMap({
         WidgetState.hovered: scheme.primary.withValues(alpha: dark ? 0.08 : 0.045),
       }),
-      horizontalMargin: 16,
-      columnSpacing: 28,
-      dividerThickness: 0.65,
+      horizontalMargin: windowsDesktop ? 10 : 16,
+      columnSpacing: windowsDesktop ? 18 : 28,
+      dividerThickness: windowsDesktop ? 0.8 : 0.65,
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         backgroundColor: dark ? scheme.primary : AppBrand.blue,
         foregroundColor: scheme.onPrimary,
         disabledBackgroundColor: dark ? const Color(0xFF334353) : const Color(0xFFBED1E8),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-        minimumSize: const Size(0, 40),
+        padding: windowsDesktop
+            ? const EdgeInsets.symmetric(horizontal: 12, vertical: 8)
+            : const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+        minimumSize: Size(0, windowsDesktop ? 34 : 40),
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        textStyle: txt(13, FontWeight.w600),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(windowsDesktop ? 4 : 10)),
+        textStyle: txt(windowsDesktop ? 12 : 13, FontWeight.w600),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         foregroundColor: ink,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-        minimumSize: const Size(0, 40),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        padding: windowsDesktop
+            ? const EdgeInsets.symmetric(horizontal: 12, vertical: 8)
+            : const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+        minimumSize: Size(0, windowsDesktop ? 34 : 40),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(windowsDesktop ? 4 : 10)),
         side: BorderSide(color: fieldBorder),
-        textStyle: txt(13, FontWeight.w600),
+        textStyle: txt(windowsDesktop ? 12 : 13, FontWeight.w600),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: scheme.primary,
-        minimumSize: const Size(0, 38),
-        textStyle: txt(13, FontWeight.w600),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+        minimumSize: Size(0, windowsDesktop ? 30 : 38),
+        textStyle: txt(windowsDesktop ? 12 : 13, FontWeight.w600),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(windowsDesktop ? 4 : 9)),
       ),
     ),
     iconButtonTheme: IconButtonThemeData(
@@ -184,7 +190,7 @@ ThemeData buildTheme({bool dark = false}) {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
     ),
     dialogTheme: DialogThemeData(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(windowsDesktop ? 6 : 18)),
       backgroundColor: surface,
       surfaceTintColor: Colors.transparent,
       titleTextStyle: txt(17, FontWeight.w700, color: ink),
@@ -211,7 +217,7 @@ ThemeData buildTheme({bool dark = false}) {
       color: surface,
       surfaceTintColor: Colors.transparent,
       elevation: 7,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13), side: BorderSide(color: border)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(windowsDesktop ? 4 : 13), side: BorderSide(color: border)),
       textStyle: txt(13, FontWeight.w500, color: ink),
     ),
     tooltipTheme: TooltipThemeData(
@@ -226,8 +232,8 @@ ThemeData buildTheme({bool dark = false}) {
     ),
     listTileTheme: ListTileThemeData(
       dense: true,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(windowsDesktop ? 3 : 10)),
+      contentPadding: EdgeInsets.symmetric(horizontal: windowsDesktop ? 12 : 16, vertical: windowsDesktop ? 0 : 2),
       titleTextStyle: txt(13, FontWeight.w500, color: ink),
       subtitleTextStyle: txt(12, FontWeight.w400, color: subInk),
     ),
@@ -235,7 +241,7 @@ ThemeData buildTheme({bool dark = false}) {
     chipTheme: ChipThemeData(
       backgroundColor: scheme.surfaceContainerLow,
       side: BorderSide(color: border),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(windowsDesktop ? 4 : 9)),
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
     ),
   );

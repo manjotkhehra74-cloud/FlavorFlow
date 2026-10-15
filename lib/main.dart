@@ -8,6 +8,7 @@ import 'core/company.dart';
 import 'core/i18n.dart';
 import 'core/notifier.dart';
 import 'core/offline_queue.dart';
+import 'core/platform_support.dart';
 import 'core/theme.dart';
 import 'router.dart';
 import 'state/auth.dart';
@@ -70,7 +71,7 @@ class _ErpAppState extends State<ErpApp> {
     if (!auth.ready) {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
-        theme: buildTheme(dark: settings.darkMode),
+        theme: buildTheme(dark: settings.darkMode, windowsDesktop: isWindowsPlatform),
         home: const _Splash(),
       );
     }
@@ -78,7 +79,7 @@ class _ErpAppState extends State<ErpApp> {
     return MaterialApp.router(
       title: 'FlavorFlow ERP',
       debugShowCheckedModeBanner: false,
-      theme: buildTheme(dark: settings.darkMode),
+      theme: buildTheme(dark: settings.darkMode, windowsDesktop: isWindowsPlatform),
       routerConfig: _router,
       builder: (context, child) => scaled(child ?? const SizedBox.shrink()),
     );
