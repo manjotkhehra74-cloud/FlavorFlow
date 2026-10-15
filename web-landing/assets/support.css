@@ -8,3 +8,15 @@
 @media(max-width:1000px){.support-channel{padding:22px}.channel-status{font-size:6px}.channel-address{font-size:11px}}
 @media(max-width:780px){.support-channels{scroll-margin-top:145px}.support-channel-grid{gap:13px}.support-channel{padding:19px}.channel-top{align-items:flex-start;flex-direction:column;gap:10px}.support-channel h3{font-size:17px}.support-channel>p{font-size:10px}.channel-address{font-size:10px}.channel-action{font-size:9px;padding:11px 10px;gap:5px}.support-channel>small{font-size:7px}}
 @media(max-width:580px){.support-channels{padding:38px 0}.support-channel-grid{grid-template-columns:1fr;gap:16px}.support-channel{padding:23px}.channel-top{flex-direction:row;align-items:center;margin-bottom:16px}.channel-status{font-size:7px}.support-channel h3{font-size:19px}.support-channel>p{font-size:11px;margin:12px 0 18px}.channel-address{font-size:13px}.channel-action{font-size:11px;padding:12px 15px}.support-channel>small{font-size:8px}.contact-availability-note{font-size:8px}}
+
+/* First-party help launcher: present even when vendor scripts/network are blocked. */
+.support-reconnect{position:fixed;left:16px;bottom:max(16px,env(safe-area-inset-bottom));z-index:100;width:min(290px,calc(100vw - 32px));filter:drop-shadow(0 5px 12px #102a4320)}
+.support-reconnect>summary{list-style:none;cursor:pointer;width:max-content;max-width:100%;background:var(--blue);color:#fff;padding:13px 18px;border-radius:24px;font-size:12px;font-weight:600;border:2px solid #fff}
+.support-reconnect>summary::-webkit-details-marker{display:none}
+.support-reconnect-panel{position:absolute;bottom:58px;left:0;width:100%;box-sizing:border-box;background:#fff;color:var(--ink);border:1px solid #cfdeed;border-radius:9px;padding:18px;max-height:calc(100dvh - 100px);overflow:auto}
+.support-reconnect-panel>strong{font-size:16px;color:var(--navy)}
+.support-reconnect-panel>p{font-size:12px;line-height:1.7;margin:10px 0 14px}
+.support-reconnect-panel>a,.support-reconnect-panel>button{display:block;width:100%;box-sizing:border-box;text-align:left;border:1px solid #cfdeed;background:#f3f8ff;color:var(--blue2);border-radius:5px;padding:10px;margin-top:8px;font:inherit;font-size:12px;cursor:pointer}
+.support-reconnect-panel>button[hidden]{display:none}
+.support-reconnect-panel>small{display:block;font-size:10px;line-height:1.6;color:var(--sub);margin-top:12px}
+.support-reconnect:has(summary:focus-visible)>summary,.support-reconnect-panel>:focus-visible{outline:3px solid #91bbfa;outline-offset:3px}

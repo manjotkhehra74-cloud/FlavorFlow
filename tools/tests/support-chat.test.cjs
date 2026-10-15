@@ -23,7 +23,7 @@ const embed = 'https://embed.tawk.to/6ad0c458b841da34cc9dcaef/1k4vntur2';
     await page.keyboard.press('Space');
     await page.waitForFunction(()=>window.openCount >= 2);
     assert.equal(provider.length,1,'Repeated clicks reuse widget');
-    assert((await page.locator('#chat-feedback').innerText()).includes('Chat opened'));
+    assert((await page.locator('#chat-feedback').innerText()).includes('Chat window opened'));
     assert.equal(await page.locator('#support-call-link').getAttribute('href'),'tel:+919501606877');
     assert((await page.locator('#support-email-link').getAttribute('href')).startsWith('mailto:support%40'));
     assert.equal(await page.locator('.help-article').count(),18);
@@ -43,7 +43,7 @@ const embed = 'https://embed.tawk.to/6ad0c458b841da34cc9dcaef/1k4vntur2';
     await blocked.unroute('https://embed.tawk.to/**');
     await blocked.route('https://embed.tawk.to/**',r=>r.fulfill({contentType:'application/javascript',body:'Tawk_API.showWidget=()=>{};Tawk_API.maximize=()=>{};Tawk_API.onLoad();'}));
     await blocked.locator('#live-chat-link').click();
-    await blocked.waitForFunction(()=>document.querySelector('#chat-feedback').textContent.includes('Chat opened'));
+    await blocked.waitForFunction(()=>document.querySelector('#chat-feedback').textContent.includes('Chat window opened'));
     // Provider script loads but never calls ready: timeout, not a fake open.
     const stalled = await browser.newPage();
     await stalled.clock.install();

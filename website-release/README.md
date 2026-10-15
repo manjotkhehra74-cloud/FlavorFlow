@@ -24,3 +24,5 @@ The archive above is the original immutable website delivery, with email disable
 This historical archive also predates the owner-approved tawk.to widget. Use the tested standalone `tools/ff-support-chat-enable.py` on the existing email-enabled VM for the targeted four-file chat update. Do not reinstall this bundle or rerun the older email-only updater afterward. Source integration is not live deployment or proof of actual chat delivery. See `docs/SUPPORT_CENTRE.md`.
 
 The click-only chat update was installed by the owner. For the subsequent automatic-opening request, use `tools/ff-support-chat-autostart.py` on that existing deployment; it updates only the loader and support HTML. Do not rerun the original chat/email installers afterward.
+
+Latest follow-up: automatic opening was installed and publicly verified. For the reported disconnect/missing-launcher issue, use `tools/ff-support-chat-resilience.py` on that auto-open deployment; it updates only the chat loader, support CSS and support HTML, with backup/rollback. The local support launcher remains available even if tawk.to fails, but cannot guarantee provider connectivity.
