@@ -15,6 +15,7 @@ import '../core/format.dart';
 import '../core/app_permissions.dart';
 import '../state/auth.dart';
 import 'widgets.dart';
+import 'windows_workspace.dart';
 
 /// Standard sections in menu order with the permission that unlocks each
 /// (mirrors the server's rbac NAV_ITEMS; Dashboard is universal).
@@ -180,6 +181,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   int _unread = 0;
   Timer? _timer;
   bool _polling = false; // in-flight guard — never stack polls
+  int _pageRefreshRevision = 0;
 
   @override
   void initState() {
@@ -271,13 +273,33 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     if (mounted) context.go('/login');
   }
 
+  Future<void> _confirmPageRefresh() async {
+    final reload = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(tr('Refresh current screen?')),
+        content: Text(tr('Any unsaved changes on this screen will be lost. Continue?')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('Cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('Refresh'))),
+        ],
+      ),
+    );
+    if (reload == true && mounted) setState(() => _pageRefreshRevision++);
+  }
+
+  Future<void> _refreshPermissions() async {
+    await context.read<AuthController>().refreshSession();
+    if (mounted) showOk(context, 'Permissions refreshed.');
+  }
+
   @override
   Widget build(BuildContext context) {
     // Remount the current page when the company's industry / unit names
     // change (server sync after login, or Settings → Company details) so
     // every label, column and dropdown re-reads the IndustryPack.
     final page = KeyedSubtree(
-      key: ValueKey('co-${CompanyProfile.current.industry}-${U.cb}-${U.tray}-${U.piece}'),
+      key: ValueKey('co-${CompanyProfile.current.industry}-${U.cb}-${U.tray}-${U.piece}-r$_pageRefreshRevision'),
       child: widget.child,
     );
     final auth = context.watch<AuthController>();
@@ -333,7 +355,13 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     final wide = width >= 1060;
     final phone = width < 700;
     final selected = _selectedIndex(context, nav);
-    final title = tr(nav[selected]['label'] as String);
+    final currentPath = GoRouterState.of(context).uri.path;
+    final auxiliaryTitles = <String, String>{
+      '/notifications': 'Notifications',
+      '/sync': 'Offline entries',
+      '/subscription': 'Subscription',
+    };
+    final title = tr(auxiliaryTitles[currentPath] ?? nav[selected]['label'] as String);
 
     void goTo(int i) {
       context.go(nav[i]['path'] as String);
@@ -360,18 +388,19 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     }
 
     if (wide) {
-      return Scaffold(
-        resizeToAvoidBottomInset: true,
-        body: Row(children: [
-          sidebar,
-          Expanded(
-            child: Column(children: [
-              topBar,
-              const Divider(height: 1),
-              Expanded(child: RepaintBoundary(child: page)),
-            ]),
-          ),
-        ]),
+      return WindowsWorkspace(
+        page: page,
+        syncBanner: const _SyncBanner(),
+        nav: nav.map((e) => Map<String, dynamic>.from(e as Map)).toList(),
+        selectedIndex: selected,
+        title: title,
+        unread: _unread,
+        session: session,
+        onNavigate: goTo,
+        onMainMenu: () => context.go('/dashboard'),
+        onLogout: _logout,
+        onRefreshPage: _confirmPageRefresh,
+        onRefreshPermissions: _refreshPermissions,
       );
     }
 
