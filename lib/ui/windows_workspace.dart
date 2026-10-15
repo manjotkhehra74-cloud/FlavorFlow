@@ -180,7 +180,7 @@ class _WindowsWorkspaceState extends State<WindowsWorkspace> {
             label: 'File',
             children: [
               _menuItem('Main Menu', Icons.home_outlined, widget.onMainMenu, shortcut: 'Ctrl+0'),
-              const MenuDivider(),
+              const Divider(height: 1),
               _menuItem('Sign out', Icons.logout_rounded, () => widget.onLogout()),
             ],
           ),
@@ -247,8 +247,16 @@ class _WindowsWorkspaceState extends State<WindowsWorkspace> {
     return MenuItemButton(
       onPressed: onPressed,
       leadingIcon: Icon(icon, size: 17),
-      shortcut: shortcut == null ? null : Text(shortcut, style: const TextStyle(fontSize: 11, color: _muted)),
-      child: Text(tr(label)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(tr(label)),
+          if (shortcut != null) ...[
+            const SizedBox(width: 28),
+            Text(shortcut, style: const TextStyle(fontSize: 11, color: _muted)),
+          ],
+        ],
+      ),
     );
   }
 
@@ -364,7 +372,7 @@ class _WindowsWorkspaceState extends State<WindowsWorkspace> {
             Text(widget.session.roleLabel, style: const TextStyle(fontSize: 10, color: _muted)),
           ]),
         ),
-        const MenuDivider(),
+        const Divider(height: 1),
         _menuItem('Refresh permissions', Icons.sync_rounded, () => widget.onRefreshPermissions()),
         _menuItem('Settings', Icons.settings_outlined, () {
           final index = widget.nav.indexWhere((item) => item['path'] == '/settings');
@@ -432,7 +440,10 @@ class _WindowsWorkspaceState extends State<WindowsWorkspace> {
     final item = widget.nav.isEmpty ? null : widget.nav[widget.selectedIndex.clamp(0, widget.nav.length - 1).toInt()];
     final icon = iconFor(item?['icon'] as String?);
     final currentLabel = item?['label'] as String?;
-    final group = currentLabel != null && tr(currentLabel) == tr(widget.title) ? item?['group'] as String? : null;
+    String? group;
+    if (item != null && currentLabel != null && tr(currentLabel) == tr(widget.title)) {
+      group = item['group'] as String?;
+    }
     return Container(
       height: 34,
       decoration: const BoxDecoration(color: Color(0xFFE2E9EF), border: Border(bottom: BorderSide(color: _line))),
