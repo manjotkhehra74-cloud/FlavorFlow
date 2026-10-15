@@ -1,6 +1,10 @@
 # FlavorFlow support centre
 
-## Current state
+## Latest provider decision — Chatwoot source ready, VM migration pending
+
+The owner selected Chatwoot Cloud and supplied its public widget snippet (`Capture6.PNG`), then explicitly authorized removal of tawk.to from the website and replacement with Chatwoot. The current source no longer loads or names tawk.to in the active support HTML/config/contact runtime/loader. VM migration and actual Chatwoot visitor-to-agent message/reply testing are still pending. Email/phone remain enabled. The earlier resilience updater was prepared but its installation was not confirmed; the Chatwoot updater accepts all three known widget releases. Historical sections below are not instructions to reinstall older providers.
+
+## Previous state / deployment history
 
 - `https://support.flavorflow.co.in` now serves the support centre publicly over HTTPS. The previous coming-soon placeholder was replaced by the owner-run deployment on 15 October 2026.
 - Public DNS: `support.flavorflow.co.in` CNAME → `flavorflow.co.in`; observed address `34.180.13.78`. Confirm the current VM/address before changing infrastructure.
@@ -137,3 +141,26 @@ Deploy using the standalone `tools/ff-support-chat-resilience.py` on the existin
 Validation: five isolated release safety tests; prior immutable updater tests remain pinned to their own release bytes. Playwright vendor-stub tests cover readiness after timeout, no duplicate injection during retry, offline initial visit/recovery, loaded-connection restart on explicit click, missing/throwing APIs, blocked local loader, persistent fallback with no JavaScript, keyboard use and responsive widths. No real tawk.to message/reply delivery or global reliability guarantee follows from stub tests. After owner installation, publicly verify the new code, then test with the user's network/browser; if disconnect persists ask whether the error appears in the visitor widget or agent dashboard and obtain a redacted screenshot.
 
 API reference checked: `https://developer.tawk.to/jsapi/` — onLoad is rendering readiness, `start` starts the socket, and onStatusChange online/away/offline is page status (not definitive socket-disconnect telemetry). Do not interpret offline-agent status as evidence the vendor server is down.
+
+
+## Chatwoot migration — implementation and owner handoff
+
+- Base URL: `https://app.chatwoot.com`. SDK: `/packs/js/sdk.js`. The public website token is transcribed from the owner screenshot into `assets/support-contact-config.js`; this is not a private account API key. No password, HMAC secret, mailbox credential or ERP login is included.
+- The owner’s snippet settings (right position, standard widget, empty launcherTitle) are retained. The bubble starts hidden to avoid exposing a restored conversation before reset. `chatwoot:ready` is registered before SDK loading; the documented `$chatwoot.reset()` is called once per page visit/reload, then the bubble is shown and `$chatwoot.toggle('open')` auto-opens it. The reset guard is set before invoking reset so recursive/repeated ready events cannot produce a reset loop. Reopen, retry and network restoration do not reset a ready session or force a closed widget open.
+- Reset changes the visitor session; it does **not** delete old support-team inbox records, migrate tawk.to history, or sign out of ERP. An in-progress chat is intentionally no longer restored after refresh, as requested. Browser/provider cookies can be shared across tabs; simultaneous-tab behaviour and actual provider session handling need a real account test before making stronger privacy guarantees.
+- The loader keeps an in-flight SDK/readiness handler after a 15-second timeout, permits retry after an actual script-download failure, and does not double-run a partly initialized SDK. Offline/error messages and the native Support / Chat panel retain email/phone fallbacks. A reset failure does not open potentially restored history. No fake success, agent-online or delivery guarantee is rendered.
+- Config accepts only the approved HTTPS Chatwoot Cloud host and an alphanumeric public token. No ERP company/account context or search text is automatically sent to Chatwoot. Chat messages and technical connection data are processed by Chatwoot. The public page disclosure and cache-busted loader/config/contact/CSS URLs are updated. Main-site HTML/backend/DNS/Caddy are untouched.
+
+### Safe migration command helper
+
+`tools/ff-support-chatwoot-enable.py` is a self-contained owner-run release for `/opt/flavorflow-saas/web` (sudo required). It carries checksummed versions of five files: support config, loader, contact runtime, CSS and support HTML. It accepts exact prior bytes from the known click-only (`56da7a3`), auto-open (`478acf4`) or resilience (`3aa4401`) releases, or identical new files. Unexpected custom edits, missing files or symlink files/directories are refused before writing. Changed files are backed up under `backups/support-chatwoot-<UTC>-<pid>`; assets precede HTML, writes are atomic, failures roll back, and a successful rerun is a no-op. CSS/native fallback is included so this works even if the previous resilience update was not installed. There is no billing/signup action or Caddy reload.
+
+Do not run the old email, tawk.to, auto-open or resilience installers after migration; their immutable payloads intentionally preserve their historical state. The original full-site archive must not be used to publish this migration.
+
+### Tests and remaining acceptance
+
+Six isolated migration tests cover all three previous releases, exact source/payload match, backups, idempotency, preserved mailbox/phone, no tawk.to in active payloads, protected custom settings/missing files, symlinks, corruption and rollback. Chatwoot browser tests use an intercepted SDK: exact owner token/base, no tawk.to requests, reset-before-open, refresh clears restored test messages, recursive ready guard, single run/reset, reopen/reconnect retention, slow readiness, failed-download retry, failed reset, provider errors, offline startup, keyboard/mobile and native fallbacks. Existing support, homepage and historical release tests pass; historical tawk.to browser tests explicitly load their pinned old assets, not the new source.
+
+These tests do not create Chatwoot contacts or send actual messages. After owner installation, publicly verify source/config/HTML and have the owner send a visitor test, reply from Chatwoot Inbox, refresh to check a fresh session, and check mobile/reconnect behaviour. Owner must confirm the **Hacker $0** account plan; the widget snippet does not establish plan/billing status. Research found Hacker allows up to 2 agents, 500 conversations/month and 30-day retention; free plan limits and frequent fresh sessions should be monitored. No paid add-ons are selected by this integration.
+
+References checked: [Chatwoot SDK guide](https://www.chatwoot.com/hc/user-guide/articles/1677587234-how-to-send-additional-user-information-to-chatwoot-using-sdk), [official SDK implementation](https://github.com/chatwoot/chatwoot/blob/develop/app/javascript/entrypoints/sdk.js), [Cloud pricing](https://www.chatwoot.com/pricing). SDK reset may suppress a second ready event; the integration deliberately does not wait for one after reset.

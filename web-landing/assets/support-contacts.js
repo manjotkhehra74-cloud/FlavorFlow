@@ -1,4 +1,4 @@
-/* Contact links and click-to-load chat. No simulated replies or ERP data transfer. */
+/* Contact links and Chatwoot support chat. No simulated replies or ERP data transfer. */
 (function () {
   'use strict';
   const config = window.FF_SUPPORT_CONTACTS || {};
@@ -53,7 +53,7 @@
     document.getElementById('call-status').classList.toggle('pending-status', !number);
     if (number) enable(phone, 'tel:' + number);
     const statuses = [number ? 'Call support' : 'Phone setup pending', ready ? 'Email support' : 'Email setup pending', widget ? 'Live chat' : chatURL ? 'External chat' : 'Chat setup pending'];
-    document.getElementById('contact-availability-note').textContent = statuses.join(' · ') + '. Call/email open your device’s apps; chat uses a third-party service (tawk.to when using the embedded widget). Never share passwords, OTPs or banking credentials.';
+    document.getElementById('contact-availability-note').textContent = statuses.join(' · ') + '. Call/email open your device’s apps; chat uses a third-party service (Chatwoot when using the embedded widget). Never share passwords, OTPs or banking credentials.';
     document.getElementById('support-footer-status').textContent = statuses.join(' · ');
 
   }

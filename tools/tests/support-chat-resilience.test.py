@@ -29,7 +29,7 @@ class AutoOpenUpdate(unittest.TestCase):
         backup = mod.activate(self.web)
         for relative in mod.MANIFEST:
             path = self.web / relative
-            self.assertEqual(path.read_bytes(), (ROOT / 'web-landing' / relative).read_bytes())
+            self.assertEqual(path.read_bytes(), subprocess.check_output(['git', 'show', '3aa440115a44d215f316c9c65040cedc939a356d:web-landing/' + relative], cwd=ROOT))
             self.assertEqual((backup / relative).read_bytes(), self.original[path])
         for relative in ['assets/support-contact-config.js', 'assets/support-contacts.js']:
             path = self.web / relative

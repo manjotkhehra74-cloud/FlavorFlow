@@ -8,7 +8,7 @@ const baseURL = process.env.LANDING_URL || 'http://127.0.0.1:3000';
     const errors = [], requests = [];
     page.on('pageerror', error => errors.push(error.message));
     page.on('request', request => requests.push(request));
-    await page.route('https://embed.tawk.to/**',r=>r.fulfill({contentType:'application/javascript',body:'Tawk_API.showWidget=()=>{};Tawk_API.maximize=()=>{};Tawk_API.onLoad();'}));
+    await page.route('https://app.chatwoot.com/packs/js/sdk.js',r=>r.fulfill({contentType:'application/javascript',body:"window.chatwootSDK={run:()=>{window.$chatwoot={reset:()=>{},toggle:()=>{},toggleBubbleVisibility:()=>{}};window.dispatchEvent(new Event('chatwoot:ready'));}};"}));
     await page.goto(baseURL + '/support/');
     await page.evaluate(() => document.fonts.ready);
     assert.equal(await page.title(), 'Support Centre | FlavorFlow ERP');

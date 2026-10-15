@@ -26,3 +26,7 @@ This historical archive also predates the owner-approved tawk.to widget. Use the
 The click-only chat update was installed by the owner. For the subsequent automatic-opening request, use `tools/ff-support-chat-autostart.py` on that existing deployment; it updates only the loader and support HTML. Do not rerun the original chat/email installers afterward.
 
 Latest follow-up: automatic opening was installed and publicly verified. For the reported disconnect/missing-launcher issue, use `tools/ff-support-chat-resilience.py` on that auto-open deployment; it updates only the chat loader, support CSS and support HTML, with backup/rollback. The local support launcher remains available even if tawk.to fails, but cannot guarantee provider connectivity.
+
+## Current provider migration: Chatwoot
+
+The owner has now authorized replacement of tawk.to with Chatwoot Cloud. Use `tools/ff-support-chatwoot-enable.py`, not this historical archive or any older updater. It migrates the five static support files from the known prior widget releases with backup/rollback. It does not provision a Chatwoot account, select billing plans, or prove actual chat delivery. VM migration and message/reply/fresh-session checks remain pending.

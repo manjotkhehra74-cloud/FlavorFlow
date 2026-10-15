@@ -1,4 +1,5 @@
-// Failure/recovery regression tests: vendor stub only, never real chats.
+// Historical tawk.to release regression, pinned to immutable 3aa4401 assets.
+// Current Chatwoot behaviour is tested in support-chat.test.cjs.
 const { chromium } = require('playwright-core');
 const assert = require('node:assert/strict');
 const base = process.env.LANDING_URL || 'http://127.0.0.1:3000';
@@ -7,7 +8,13 @@ const readyStub = 'window.opens=0; window.starts=0; Tawk_API.start=()=>{starts++
 (async () => {
   const browser = await chromium.launch({executablePath:process.env.CHROMIUM_EXECUTABLE,args:['--no-sandbox'],headless:true});
   try {
-    const page = await browser.newPage();
+    const context = await browser.newContext();
+    const { execFileSync } = require('node:child_process');
+    for (const file of ['support-chat.js','support-contact-config.js']) {
+      const body=execFileSync('git',['show','3aa440115a44d215f316c9c65040cedc939a356d:web-landing/assets/'+file],{cwd:require('node:path').resolve(__dirname,'../..')}).toString();
+      await context.route('**/assets/'+file+'*',r=>r.fulfill({contentType:'application/javascript',body}));
+    }
+    const page = await context.newPage();
     const errors = [];
     page.on('pageerror',e=>errors.push(e.message));
     await page.clock.install();
@@ -52,7 +59,7 @@ const readyStub = 'window.opens=0; window.starts=0; Tawk_API.start=()=>{starts++
       assert(rect && rect.x>=0 && rect.x+rect.width<=width && rect.y>=0);
     }
     // Start offline: no request until network returns, then auto-open only once.
-    const offline = await browser.newPage();
+    const offline = await context.newPage();
     await offline.addInitScript(()=>Object.defineProperty(navigator,'onLine',{get:()=>window.testOnline===true,configurable:true}));
     let offlineLoads=0;
     await offline.route(embed,r=>{offlineLoads++;return r.fulfill({contentType:'application/javascript',body:readyStub+'Tawk_API.onLoad();'});});
@@ -62,7 +69,7 @@ const readyStub = 'window.opens=0; window.starts=0; Tawk_API.start=()=>{starts++
     await offline.waitForFunction(()=>window.opens===1);
     assert.equal(offlineLoads,1);
     // Provider scripts blocked entirely: native launcher and fallback remain available.
-    const blocked = await browser.newPage();
+    const blocked = await context.newPage();
     await blocked.route('**/assets/support-chat.js*',r=>r.abort());
     await blocked.route(embed,r=>r.abort());
     await blocked.goto(base+'/support/');

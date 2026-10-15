@@ -1,16 +1,20 @@
-/* Free tawk.to human chat. The local support launcher never depends on the vendor. */
+/* Chatwoot human support. Public website token only; no ERP or account data is sent. */
 (function () {
   'use strict';
-  const EMBED = 'https://embed.tawk.to/6ad0c458b841da34cc9dcaef/1k4vntur2';
-  let loading = false, ready = false, timer, script, generation = 0;
-  let reconnect = false;
+  const BASE = 'https://app.chatwoot.com';
+  const SDK = BASE + '/packs/js/sdk.js';
+  let loading = false, ready = false, started = false, resetDone = false;
+  let timer, script;
   function message(text) {
     ['chat-feedback', 'support-reconnect-status'].forEach(id => {
       const node = document.getElementById(id);
       if (node) node.textContent = text;
     });
   }
-  function configured(settings) { return Boolean(settings && settings.tawkEmbedUrl === EMBED); }
+  function configured(settings) {
+    return Boolean(settings && settings.chatwootBaseUrl === BASE &&
+      typeof settings.chatwootWebsiteToken === 'string' && /^[A-Za-z0-9]{16,64}$/.test(settings.chatwootWebsiteToken));
+  }
   function unavailable() {
     message('Chat could not load yet. Retry chat, or use email or call support.');
   }
@@ -18,27 +22,40 @@
     clearTimeout(timer);
     timer = setTimeout(function () {
       loading = false;
-      // A slow vendor may still finish. Keep its script/callback; never inject a second widget.
+      // Keep a slow SDK and its readiness listener; never inject duplicate widgets.
       unavailable();
     }, 15000);
   }
   function show() {
     try {
-      const api = window.Tawk_API;
-      if (reconnect && typeof api.start === 'function') api.start({ showWidget: true });
-      api.showWidget();
-      api.maximize();
-      reconnect = false;
+      window.$chatwoot.toggleBubbleVisibility('show');
+      window.$chatwoot.toggle('open');
       message('Chat window opened. Replies depend on team availability. If disconnected, use email or call support.');
     } catch (_) {
-      reconnect = true;
       message('Chat is unavailable. Retry chat, or use email or call support.');
+    }
+  }
+  function initialize(settings) {
+    if (started) return;
+    if (!window.chatwootSDK || typeof window.chatwootSDK.run !== 'function') {
+      clearTimeout(timer);
+      loading = false;
+      unavailable();
+      return;
+    }
+    started = true;
+    try {
+      window.chatwootSDK.run({ websiteToken: settings.chatwootWebsiteToken, baseUrl: BASE });
+    } catch (_) {
+      // Do not run again: a partially-created frame may already exist.
+      clearTimeout(timer);
+      loading = false;
+      unavailable();
     }
   }
   function open(settings) {
     if (!configured(settings)) return;
     if (navigator.onLine === false) {
-      reconnect = true;
       message('You appear to be offline. Reconnect to the internet, then retry chat. You can also call support.');
       return;
     }
@@ -48,31 +65,22 @@
     message('Loading chat… Email and call support remain available.');
     watch();
     if (script) {
-      // The original script is still initializing. Restart its socket if supported, not its embed.
-      try {
-        if (typeof window.Tawk_API.start === 'function') window.Tawk_API.start({ showWidget: true });
-      } catch (_) { unavailable(); }
+      // If the SDK finished but was not usable earlier, allow its initialization now.
+      if (!started) initialize(settings);
       return;
     }
-    const api = window.Tawk_API = window.Tawk_API || {};
-    const attempt = ++generation;
-    window.Tawk_LoadStart = new Date();
-    api.onLoad = function () {
-      if (attempt !== generation || ready) return;
-      clearTimeout(timer);
-      loading = false;
-      ready = true;
-      show();
+    window.chatwootSettings = {
+      position: 'right', type: 'standard', launcherTitle: '',
+      // Do not expose the restored conversation before the fresh-session reset.
+      hideMessageBubble: true, showUnreadMessagesDialog: false
     };
     const element = document.createElement('script');
     script = element;
+    element.src = SDK;
     element.async = true;
-    element.src = EMBED;
-    element.charset = 'UTF-8';
-    element.setAttribute('crossorigin', '*');
+    element.onload = function () { initialize(settings); };
     element.onerror = function () {
-      if (attempt !== generation || ready) return;
-      ++generation;
+      if (script !== element || started) return;
       clearTimeout(timer);
       loading = false;
       element.remove();
@@ -81,6 +89,28 @@
     };
     document.head.appendChild(element);
   }
+  // Register before loading the SDK: ready may fire immediately or again after reset.
+  window.addEventListener('chatwoot:ready', function () {
+    if (!started || ready || resetDone) return;
+    resetDone = true; // Set before reset to prevent recursive/repeated ready-event resets.
+    try {
+      // Once per page visit/reload, not on manual reopen or network reconnection.
+      // This creates a fresh visitor session; it does not delete agent inbox history.
+      window.$chatwoot.reset();
+      ready = true;
+      loading = false;
+      clearTimeout(timer);
+      show();
+    } catch (_) {
+      resetDone = false;
+      loading = false;
+      clearTimeout(timer);
+      message('Chat session could not be reset. Please refresh this page, or use email or call support.');
+    }
+  });
+  window.addEventListener('chatwoot:error', function () {
+    message('Chat reported a connection or setup error. Retry chat, or use email or call support.');
+  });
   window.FlavorFlowSupportChat = Object.freeze({ configured: configured, open: open });
   const settings = window.FF_SUPPORT_CONTACTS;
   const retry = document.getElementById('support-chat-retry');
@@ -89,14 +119,12 @@
     retry.addEventListener('click', function () { open(settings); });
   }
   window.addEventListener('offline', function () {
-    reconnect = true;
     message('Internet connection lost. Reconnect and retry chat, or call support.');
   });
   window.addEventListener('online', function () {
-    // Recover initial loading, but never force a closed/minimized ready widget back open.
+    // Recover initial loading, without reopening a ready/closed widget or resetting a chat.
     if (!ready && configured(settings)) open(settings);
     else if (ready) message('Internet connection restored. Retry chat if needed; email and call support remain available.');
   });
-  // Auto-open once on support-page visits. Manual reopen remains available after closing.
   open(settings);
 }());
