@@ -13,3 +13,8 @@ sudo bash flavorflow-support-release/tools/ff-support-publish.sh "$HOME/flavorfl
 The bundle publishes the approved enterprise homepage and support centre with backups. It preserves unrelated Caddy routes and does not modify ERP backend/data. Call support uses the existing business number. Chat/email stay pending until the services are configured and tested. See `docs/SUPPORT_CENTRE.md` for details. The SHA256 companion file identifies the delivered archive; an internal manifest verifies each deployed file.
 
 Prefer release assets/external storage for future generated packages once available; this ~200 KB exception exists only to unblock this requested handoff.
+
+
+## Mailbox activated after this snapshot
+
+The archive above is the original immutable website delivery, with email disabled. The owner subsequently verified `support@flavorflow.co.in` send/receive. Use `tools/ff-support-email-enable.py` for a targeted email-button update; do not reinstall this older full-site package to activate email.

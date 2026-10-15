@@ -3,6 +3,6 @@
 window.FF_SUPPORT_CONTACTS = Object.freeze({
   phoneNumber: '+919501606877', // Existing published FlavorFlow business number.
   emailAddress: 'support@flavorflow.co.in',
-  emailEnabled: false,
+  emailEnabled: true,
   liveChatUrl: '' // Approved HTTPS customer chat URL from your chosen provider.
 });

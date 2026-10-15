@@ -87,3 +87,10 @@ Run `tools/tests/support.test.cjs` with the same `NODE_PATH`, `CHROMIUM_EXECUTAB
 Public contact config is in `assets/support-contact-config.js`. Call support opens the existing business number in a dialler. Email remains disabled until the mailbox is activated/tested. Live chat remains disabled until an approved HTTPS customer-chat URL is configured; it opens the provider's external page on click and does not auto-load third-party tracking/widgets. No secrets belong in that file.
 
 For owner-run publication without GitHub access on the VM, `tools/ff-support-publish.sh` accepts an extracted, checksummed release directory. It publishes the approved enterprise homepage/support and dependencies, backs up touched files/config, and replaces only the known support placeholder block. See `docs/SUPPORT_CENTRE.md`. Publishing files is a separate step from email/chat service activation. The agent has not run this helper on the VM.
+
+
+### Verified mailbox activation (15 October 2026)
+
+`support@flavorflow.co.in` has passed actual outbound SPF/DKIM/DMARC checks and a return-delivery test confirmed by the owner. Source now sets `emailEnabled: true` and supplies a working no-JavaScript mailto fallback; chat stays pending. This changes only the email contact link, not the gateway's transactional email behaviour or a helpdesk/ticket system. Owner-run publication is separate: `sudo python3 tools/ff-support-email-enable.py` on the VM activates the two static files with backup/rollback and a cache-busted config URL. No DNS or Caddy changes are needed.
+
+The original downloadable website bundle predates activation; do not reinstall it as an email update. Earlier descriptions of pending email describe that initial release. `tools/tests/support-email-enable.test.py` tests the targeted updater without VM/network access.
