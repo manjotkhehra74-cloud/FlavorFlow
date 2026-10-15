@@ -1,0 +1,92 @@
+const { chromium } = require('playwright-core');
+const assert = require('node:assert/strict');
+const baseURL = process.env.LANDING_URL || 'http://127.0.0.1:3000';
+(async () => {
+  const browser = await chromium.launch({executablePath: process.env.CHROMIUM_EXECUTABLE, args:['--no-sandbox','--disable-dev-shm-usage'], headless:true});
+  try {
+    const page = await browser.newPage({viewport:{width:1440,height:1000}, reducedMotion:'reduce'});
+    const errors = [], requests = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('request', request => requests.push(request));
+    await page.goto(baseURL + '/support/');
+    await page.evaluate(() => document.fonts.ready);
+    assert.equal(await page.title(), 'Support Centre | FlavorFlow ERP');
+    assert.equal(await page.locator('.help-article').count(), 18);
+    assert.equal(await page.locator('.help-category').count(), 6);
+    assert.equal(await page.locator('.help-article:visible').count(), 18);
+    assert.equal(await page.locator('header .brand-mark').getAttribute('src'), '/assets/flavorflow-logo-v2.png');
+    assert(await page.locator('header .brand-mark').evaluate(img=>img.complete && img.naturalWidth>0));
+    const body = await page.locator('body').innerText();
+    assert(!/HRMate|integrations?/i.test(body));
+    assert(body.includes('SETUP PENDING'));
+    assert(body.includes('not yet enabled for support'));
+    assert.equal(await page.locator('a[href^="mailto:"], a[href*="wa.me"], a[href$=".apk"]').count(), 0);
+    assert.equal(await page.locator('#support-call-link').getAttribute('href'), 'tel:+919501606877');
+    assert.equal(await page.locator('#live-chat-link').getAttribute('href'), null);
+    assert.equal(await page.locator('#live-chat-link').getAttribute('aria-disabled'), 'true');
+    assert.equal(await page.locator('#support-email-link').getAttribute('href'), null);
+    assert.equal(await page.locator('#support-email-link').getAttribute('aria-disabled'), 'true');
+    // Owner configuration simulations only; no provider traffic or actual email/call.
+    await page.evaluate(() => FlavorFlowSupportContacts.configure({phoneNumber:'+919501606877', emailAddress:'support@flavorflow.co.in', emailEnabled:true, liveChatUrl:'https://chat.example.com/support'}));
+    assert.equal(await page.locator('#live-chat-link').getAttribute('href'), 'https://chat.example.com/support');
+    assert((await page.locator('#support-email-link').getAttribute('href')).startsWith('mailto:support%40flavorflow.co.in'));
+    assert.equal(await page.locator('#live-chat-link').getAttribute('rel'), 'noopener noreferrer');
+    assert.equal(await page.locator('#live-chat-link').getAttribute('target'), '_blank');
+    await page.evaluate(() => FlavorFlowSupportContacts.configure({phoneNumber:'bad-number', emailAddress:'support@flavorflow.co.in?bcc=bad', emailEnabled:true, liveChatUrl:'javascript:alert(1)'}));
+    for (const id of ['live-chat-link','support-email-link','support-call-link']) assert.equal(await page.locator('#'+id).getAttribute('href'),null);
+    await page.evaluate(() => FlavorFlowSupportContacts.configure({phoneNumber:'+919501606877', emailAddress:'support@flavorflow.co.in', emailEnabled:false, liveChatUrl:'https://user:secret@chat.example.com'}));
+    assert.equal(await page.locator('#live-chat-link').getAttribute('href'),null);
+    await page.evaluate(() => FlavorFlowSupportContacts.configure(window.FF_SUPPORT_CONTACTS));
+    assert.equal(await page.locator('input[type="password"], input[type="email"], textarea').count(), 0);
+    assert.equal(await page.locator('form').count(), 1); // Only local article search, no ticket form.
+    for (const button of await page.locator('.help-category').all()) {
+      await button.click();
+      assert.equal(await button.getAttribute('aria-pressed'), 'true');
+      assert.equal(await page.locator('.help-article:visible').count(), 3);
+    }
+    await page.locator('.clear-search').first().click();
+    const input = page.locator('#help-search-input');
+    await input.fill('GST invoice');
+    assert.equal(await page.locator('.help-article:visible').count(), 1);
+    await input.press('Enter');
+    assert.equal(new URL(page.url()).pathname, '/support/');
+    await page.locator('#gst-invoice summary').click();
+    assert(await page.locator('#gst-invoice').evaluate(el=>el.open));
+    assert((await page.locator('#gst-invoice').innerText()).includes('not a substitute for tax advice'));
+    await input.fill('not-a-real-help-topic');
+    assert.equal(await page.locator('.help-article:visible').count(), 0);
+    assert(await page.locator('.no-results').isVisible());
+    await page.locator('.no-results .clear-search').click();
+    assert.equal(await page.locator('.help-article:visible').count(), 18);
+    await input.fill('<img src=x onerror=alert(1)>');
+    assert.equal(await page.locator('.search-summary img').count(), 0);
+    await page.locator('.clear-search').first().click();
+    await page.locator('[data-query="sign-in"]').click();
+    assert.equal(await page.locator('.help-article:visible').count(), 1);
+    await page.locator('[data-category="billing"]').focus();
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('.help-article:visible').count(), 3);
+    assert.equal(await input.inputValue(), '');
+    await page.goto(baseURL + '/support/#windows-release');
+    assert(await page.locator('#windows-release').evaluate(el=>el.open));
+    assert((await page.locator('#windows-release').innerText()).includes('coming soon'));
+    for (const width of [320,375,390,580,768,1024,1440]) {
+      await page.setViewportSize({width,height:900});
+      assert(await page.evaluate(()=>document.documentElement.scrollWidth <= innerWidth), 'overflow at '+width);
+    }
+    await page.setViewportSize({width:375,height:850});
+    await page.goto(baseURL + '/support/');
+    await input.fill('password');
+    assert(await page.locator('.help-article:visible').count() > 0);
+    assert(!requests.some(r=>r.method()!=='GET' || r.url().includes('/api/')), 'Support preview must not call APIs or send tickets.');
+    assert.equal(errors.length,0,errors.join('\n'));
+    const noJS = await browser.newContext({javaScriptEnabled:false});
+    const staticPage = await noJS.newPage();
+    await staticPage.goto(baseURL + '/support/');
+    assert.equal(await staticPage.locator('.help-article:visible').count(),18);
+    await staticPage.locator('#sign-in summary').click();
+    assert(await staticPage.locator('#sign-in').evaluate(el=>el.open));
+    await noJS.close();
+    console.log('PASS: support branding/assets, 18 articles, 6 categories, search/filter/clear/no-results, safe query rendering, keyboard activation, native article expansion, deep links, no-JS help, responsive widths, pending email/stores, call link, safe pending/configured chat/email, no APK/ticket/API requests, no JS errors.');
+  } finally { await browser.close(); }
+})().catch(error=>{console.error(error);process.exit(1)});
