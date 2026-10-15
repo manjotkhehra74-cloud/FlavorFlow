@@ -7,7 +7,8 @@
 - The owner applied a dedicated Caddy hostname block with a plain `respond` placeholder and `X-Robots-Tag: noindex, nofollow`. Existing main/ERP routes were not intentionally modified by that setup.
 - The support design and approved enterprise homepage are **published**. The owner ran the uploaded-release installer at 2026-10-15 06:24:03 UTC. Main/www/support HTML and listed support dependencies passed local HTTPS/content checks. The agent subsequently fetched all three public HTTPS domains and confirmed the new page content. This was not an agent-executed VM deployment.
 - Mailbox `support@flavorflow.co.in` is now active on GoDaddy/Titan. An actual outbound message reached the Gmail inbox with SPF, domain-aligned DKIM and DMARC PASS; the owner confirmed receipt of the return reply on 15 October 2026. Pricing/renewal terms were not checked. Do not change the working mail DNS to another provider.
-- Email CTA activation is prepared in source/config and tested. The live static files still require the owner to run `ff-support-email-enable.py`; do not claim the live button is enabled until public verification. Live chat remains pending.
+- Email CTA is live: owner activation output and a public page/config fetch confirmed `emailEnabled: true`, active mailto and unchanged phone on 15 October 2026. Backup: `/opt/flavorflow-saas/backups/support-email-20261015T093059Z-1959580`.
+- Owner selected free tawk.to human live chat and supplied the embed snippet. Click-to-load integration is implemented/tested in source; VM installation and an actual chat message/reply test are still pending. See the latest section below. Earlier setup/deployment sections are historical, not instructions to repeat.
 
 ## Design and functional scope
 
@@ -92,3 +93,23 @@ The owner created `support@flavorflow.co.in` in GoDaddy/Titan and supplied the a
 `tools/ff-support-email-enable.py` is a targeted owner-run updater for the existing VM. It validates the expected mailbox/config/HTML, backs up both static files, enables only the email flag and email-card markup, version-busts the config URL, and rolls back changed files on failure. Call/chat configuration remains untouched. It does not modify DNS, Caddy, backend/data or provision a mailbox. Re-running it after successful activation is a no-op. Run with sudo; default web root is `/opt/flavorflow-saas/web`.
 
 The source page has an active mailto fallback even without JavaScript; live chat retains its pending UI. Support/landing browser suites and seven isolated activation tests passed, including rollback, refusal of unknown markup/address, duplicate flags, symlinks and idempotency. **These code tests are not a live deployment.** Await owner-run updater output/public page check before recording the live email button as enabled. Do not reinstall the original archive afterward without re-applying activation; its historical email flag is false.
+
+
+## tawk.to embed integration — source ready, live deployment pending
+
+Owner explicitly requested the supplied embed code rather than a dashboard Direct Chat Link. Exact public embed: `https://embed.tawk.to/6ad0c458b841da34cc9dcaef/1k4vntur2` (from owner screenshot). No password, API key, ERP credentials, AI automation, hired agent service or paid add-on is configured.
+
+`assets/support-chat.js` loads that exact script only when **Open live chat** is clicked. Before clicking, no tawk.to request is made. The existing card opens the widget in-page with the tawk.to show/maximize API after readiness, deduplicates loading/reopening, supports keyboard activation, and gives email/phone fallback on blocked scripts or a 15-second readiness timeout. The card discloses third-party processing before loading. Search text and company/account context are not automatically passed to tawk.to; any chat messages and technical connection data are handled by the provider. JavaScript is required for chat; articles, phone and email retain no-JS access. No online-agent or instant-response guarantee is made.
+
+### Targeted VM install
+
+Use `tools/ff-support-chat-enable.py` with sudo on the existing VM (default `/opt/flavorflow-saas/web`). This standalone release embeds/checksums exactly four static files: the new chat loader, config, contact runtime and support HTML. It accepts only the verified email-enabled previous release or identical new bytes; unexpected local edits/symlinks/missing required files are refused before writing. Assets are installed before HTML; all changed existing files are backed up under `backups/support-chat-<UTC>-<pid>`, and failed writes restore changes/remove newly added assets. Re-running an installed update is a no-op. It does not touch main-site HTML, DNS, Caddy, backend or company data. Email/phone remain enabled.
+
+Do not rerun the older email-only updater or original full-site bundle after the chat update; they predate this widget and could revert chat markup/config. To deploy a future revision, build a fresh reviewed targeted update.
+
+### Validation and acceptance
+
+- `python3 tools/tests/support-chat-enable.test.py`: six isolated tests for exact source/release bytes, backup, idempotency, protected existing edits/missing files, symlink refusal and rollback including deletion of a newly added file.
+- `tools/tests/support-chat.test.cjs`: Playwright test with intercepted/stubbed vendor script; exact embed, no pre-click vendor traffic, button/keyboard opening, reopens/deduplication, script URL allowlist, blocked-script fallback, timeout and retry; email/phone preserved.
+- Existing support, landing, email activation and initial publication regression tests also pass. No real chats/messages are sent by these tests.
+- After owner runs the updater, fetch public HTML/config/runtime to confirm installation. Then owner opens chat, sends a test as visitor and replies from tawk.to inbox. Only that establishes actual two-way chat delivery. Source tests are not proof of VM deployment or chat delivery.

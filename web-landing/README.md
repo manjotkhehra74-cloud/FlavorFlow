@@ -1,5 +1,7 @@
 # FlavorFlow ERP website
 
+**Latest support state (15 October 2026):** email/phone are publicly enabled. The owner-approved free tawk.to embed is integrated in source and loads only after clicking Open live chat, with third-party disclosure and blocked/timeout fallback. VM publication and real chat delivery testing are pending; use the targeted `tools/ff-support-chat-enable.py`, not the historical full-site bundle. See the latest section in `docs/SUPPORT_CENTRE.md`. Older pending-service descriptions below document earlier releases.
+
 The public website promotes FlavorFlow ERP only. Feature copy is maintained in `index.html`; the plans API supplies live prices and trial length, not marketing copy for other products. The dashboard illustration is explicitly labelled as sample data. The selected regenerated Final Flowmark logo is used in the header, footer, dashboard preview and website favicons.
 
 ## Local preview

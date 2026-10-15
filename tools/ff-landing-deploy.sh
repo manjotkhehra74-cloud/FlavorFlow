@@ -20,7 +20,7 @@ ASSETS=(assets/flavorflow-logo-v2.png assets/favicon-32-v2.png assets/favicon-48
 SCRIPTS=(assets/distribution-config.js assets/distribution.js assets/vendor/qrcode.js)
 STYLES=(assets/landing.css assets/support.css)
 FONTS=(assets/fonts/inter-regular.woff2 assets/fonts/inter-semibold.woff2 assets/fonts/inter-bold.woff2 assets/fonts/LICENSE.txt)
-SCRIPTS+=(assets/site.js assets/support.js assets/support-contact-config.js assets/support-contacts.js)
+SCRIPTS+=(assets/site.js assets/support.js assets/support-contact-config.js assets/support-chat.js assets/support-contacts.js)
 FILES=("${ASSETS[@]}" "${SCRIPTS[@]}" "${STYLES[@]}" "${FONTS[@]}" demo.html privacy.html admin.html support/index.html index.html)
 # One snapshot keeps pages and versioned logo assets consistent.
 curl --fail --silent --show-error --location --max-time 120 --retry 2 \
@@ -40,7 +40,7 @@ if '<meta name="application-name" content="FlavorFlow ERP">' not in text or 'id=
     raise SystemExit('Snapshot does not contain the ERP landing page.')
 if 'hrmate' in text.lower() or 'integration' in text.lower():
     raise SystemExit('Refusing unrelated product promotion in public landing page.')
-for name in ('distribution-config.js', 'distribution.js', 'vendor/qrcode.js', 'site.js', 'landing.css', 'support.js', 'support.css', 'support-contact-config.js', 'support-contacts.js',
+for name in ('distribution-config.js', 'distribution.js', 'vendor/qrcode.js', 'site.js', 'landing.css', 'support.js', 'support.css', 'support-contact-config.js', 'support-chat.js', 'support-contacts.js',
              'fonts/inter-regular.woff2', 'fonts/inter-semibold.woff2', 'fonts/inter-bold.woff2'):
     if not (root / 'assets' / name).is_file():
         raise SystemExit(f'Missing website asset: {name}')

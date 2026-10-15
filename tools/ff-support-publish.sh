@@ -15,7 +15,7 @@ FILES=(
   assets/flavorflow-logo-v2.png assets/favicon-32-v2.png assets/favicon-48-v2.png assets/apple-touch-icon-v2.png
   assets/fonts/inter-regular.woff2 assets/fonts/inter-semibold.woff2 assets/fonts/inter-bold.woff2 assets/fonts/LICENSE.txt
   assets/landing.css assets/site.js assets/distribution-config.js assets/distribution.js assets/vendor/qrcode.js assets/vendor/LICENSE
-  assets/support.css assets/support.js assets/support-contact-config.js assets/support-contacts.js
+  assets/support.css assets/support.js assets/support-contact-config.js assets/support-chat.js assets/support-contacts.js
   support/index.html index.html
 )
 STAGE=$(mktemp -d)
@@ -115,9 +115,9 @@ verify() {
 verify flavorflow.co.in / index.html
 verify www.flavorflow.co.in / index.html
 verify support.flavorflow.co.in / support/index.html
-for file in assets/support.css assets/support.js assets/support-contact-config.js assets/support-contacts.js assets/landing.css assets/flavorflow-logo-v2.png assets/fonts/inter-regular.woff2; do
+for file in assets/support.css assets/support.js assets/support-contact-config.js assets/support-chat.js assets/support-contacts.js assets/landing.css assets/flavorflow-logo-v2.png assets/fonts/inter-regular.woff2; do
   verify support.flavorflow.co.in "/$file" "$file"
 done
 [[ "$FAILED" == 0 ]] || { echo 'Files installed, but HTTPS routing not fully confirmed. Inspect Caddy; do not claim successful public launch.' >&2; exit 1; }
 echo 'Local HTTPS checks passed. Confirm the public domains in a private browser window.'
-echo 'Call link opens the published number. Chat/email stay pending until real service activation.'
+echo 'Contact links/widgets require configured services and real delivery checks; no agent availability is guaranteed.'

@@ -18,3 +18,7 @@ Prefer release assets/external storage for future generated packages once availa
 ## Mailbox activated after this snapshot
 
 The archive above is the original immutable website delivery, with email disabled. The owner subsequently verified `support@flavorflow.co.in` send/receive. Use `tools/ff-support-email-enable.py` for a targeted email-button update; do not reinstall this older full-site package to activate email.
+
+## Chat update after this snapshot
+
+This historical archive also predates the owner-approved tawk.to widget. Use the tested standalone `tools/ff-support-chat-enable.py` on the existing email-enabled VM for the targeted four-file chat update. Do not reinstall this bundle or rerun the older email-only updater afterward. Source integration is not live deployment or proof of actual chat delivery. See `docs/SUPPORT_CENTRE.md`.
