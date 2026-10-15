@@ -1,4 +1,4 @@
-/* tawk.to free human chat. Load the supplied embed only after a customer clicks. */
+/* tawk.to free human chat. Open the supplied widget automatically on the support page. */
 (function () {
   'use strict';
   const EMBED = 'https://embed.tawk.to/6ad0c458b841da34cc9dcaef/1k4vntur2';
@@ -44,4 +44,7 @@
     document.head.appendChild(script);
   }
   window.FlavorFlowSupportChat = Object.freeze({ configured: configured, open: open });
+  // This script is included only on the support centre, after its contact config.
+  // Run once per page load; closing the widget must not automatically reopen it.
+  open(window.FF_SUPPORT_CONTACTS);
 }());

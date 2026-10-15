@@ -8,6 +8,7 @@ const baseURL = process.env.LANDING_URL || 'http://127.0.0.1:3000';
     const errors = [], requests = [];
     page.on('pageerror', error => errors.push(error.message));
     page.on('request', request => requests.push(request));
+    await page.route('https://embed.tawk.to/**',r=>r.fulfill({contentType:'application/javascript',body:'Tawk_API.showWidget=()=>{};Tawk_API.maximize=()=>{};Tawk_API.onLoad();'}));
     await page.goto(baseURL + '/support/');
     await page.evaluate(() => document.fonts.ready);
     assert.equal(await page.title(), 'Support Centre | FlavorFlow ERP');
@@ -95,6 +96,6 @@ const baseURL = process.env.LANDING_URL || 'http://127.0.0.1:3000';
     await staticPage.locator('#sign-in summary').click();
     assert(await staticPage.locator('#sign-in').evaluate(el=>el.open));
     await noJS.close();
-    console.log('PASS: support branding/assets, 18 articles, 6 categories, search/filter/clear/no-results, safe query rendering, keyboard activation, native article expansion, deep links, no-JS help, responsive widths, verified email enabled (including no-JS fallback), click-to-load chat/pending stores, call link, safe pending/configured chat/email, no APK/ticket/API requests, no JS errors.');
+    console.log('PASS: support branding/assets, 18 articles, 6 categories, search/filter/clear/no-results, safe query rendering, keyboard activation, native article expansion, deep links, no-JS help, responsive widths, verified email enabled (including no-JS fallback), auto-opening chat/pending stores, call link, safe pending/configured chat/email, no APK/ticket/API requests, no JS errors.');
   } finally { await browser.close(); }
 })().catch(error=>{console.error(error);process.exit(1)});

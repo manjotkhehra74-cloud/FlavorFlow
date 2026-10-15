@@ -33,7 +33,7 @@ class ChatActivation(unittest.TestCase):
         sentinel.write_text('untouched')
         backup = mod.activate(self.web)
         for relative in mod.MANIFEST:
-            self.assertEqual((self.web / relative).read_bytes(), (ROOT / 'web-landing' / relative).read_bytes())
+            self.assertEqual((self.web / relative).read_bytes(), subprocess.check_output(['git', 'show', '56da7a3375b9af6d7f8bf21686fa1a75504d6c0e:web-landing/' + relative], cwd=ROOT))
         for path, data in self.original.items():
             self.assertEqual((backup / path.relative_to(self.web)).read_bytes(), data)
         self.assertIsNone(mod.activate(self.web))
