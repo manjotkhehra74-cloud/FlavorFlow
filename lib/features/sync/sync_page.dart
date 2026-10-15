@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../core/offline_queue.dart';
+import '../../core/platform_support.dart';
 import '../../core/theme.dart';
+import '../../ui/widgets.dart';
+import '../../ui/windows_widgets.dart';
 
 /// Offline entries kept on this device (MAN-13): what is waiting to sync, what
 /// the server did not accept (needs review), and what already synced.
@@ -114,6 +117,79 @@ class SyncPage extends StatelessWidget {
         final pending = q.pending;
         final failed = q.failed;
         final synced = q.synced.take(10).toList();
+        if (isWindowsPlatform) {
+          Widget register(String title, List<QueuedEntry> entries) => SectionCard(
+                title: '$title (${entries.length})',
+                padding: EdgeInsets.zero,
+                child: entries.isEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Text('No entries in this section.', style: TextStyle(color: scheme.onSurfaceVariant)),
+                      )
+                    : AppDataTable(
+                        columns: const ['Entry', 'Details', 'Created / synced', 'Attempts', 'Server reference', ''],
+                        rows: [
+                          for (final e in entries)
+                            [
+                              Text(e.label, style: const TextStyle(fontWeight: FontWeight.w600)),
+                              SizedBox(width: 180, child: Text(e.summary.isEmpty ? '—' : e.summary, maxLines: 2, overflow: TextOverflow.ellipsis)),
+                              _stamp(e.syncedAt ?? e.createdAt),
+                              e.attempts,
+                              e.serverRef ?? '—',
+                              e.state == SyncState.failed
+                                  ? Row(mainAxisSize: MainAxisSize.min, children: [
+                                      TextButton(onPressed: () => q.retry(e), child: Text(tr('Retry'))),
+                                      IconButton(tooltip: tr('Discard'), icon: const Icon(Icons.delete_outline_rounded, size: 18), onPressed: () => _confirmDiscard(context, e)),
+                                    ])
+                                  : Text(e.state == SyncState.pending ? tr('Waiting') : tr('Synced')),
+                            ],
+                        ],
+                      ),
+              );
+
+          return WindowsDocumentWorkspace(
+            title: 'Offline Entries',
+            subtitle: q.online ? 'Connected · ${pending.length} waiting · ${failed.length} needs review' : 'Offline · entries are saved locally on this device',
+            icon: Icons.cloud_sync_outlined,
+            commandBar: WindowsCommandStrip(children: [
+              Icon(q.online ? Icons.cloud_done_outlined : Icons.cloud_off_outlined, size: 17, color: q.online ? AppColors.green : AppColors.amber),
+              Text(q.online ? tr('Online') : tr('Offline'), style: const TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(width: 10),
+              FilledButton.icon(onPressed: () => q.syncNow(), icon: const Icon(Icons.sync_rounded, size: 16), label: Text(tr('Sync now'))),
+            ]),
+            content: LayoutBuilder(builder: (context, constraints) {
+              final wide = constraints.maxWidth >= 1160;
+              return ListView(padding: const EdgeInsets.all(14), children: [
+                Row(children: [
+                  Expanded(child: KpiCard(label: 'Waiting', value: '${pending.length}', icon: Icons.schedule_rounded, tint: AppColors.blue)),
+                  const SizedBox(width: 9),
+                  Expanded(child: KpiCard(label: 'Needs review', value: '${failed.length}', icon: Icons.error_outline_rounded, tint: AppColors.red)),
+                  const SizedBox(width: 9),
+                  Expanded(child: KpiCard(label: 'Synced', value: '${q.synced.length}', icon: Icons.check_circle_outline_rounded, tint: AppColors.green)),
+                ]),
+                const SizedBox(height: 12),
+                if (wide)
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(child: register('Waiting to sync', pending)),
+                    const SizedBox(width: 12),
+                    Expanded(child: register('Needs review', failed)),
+                  ])
+                else ...[
+                  register('Waiting to sync', pending),
+                  const SizedBox(height: 10),
+                  register('Needs review', failed),
+                ],
+                const SizedBox(height: 10),
+                register('Synced (latest 10)', synced),
+                const SizedBox(height: 8),
+                Text(
+                  'Entries remain on this device until accepted. Each entry is sent once; the server ignores a repeat. Review rejected entries before retrying or discarding them.',
+                  style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
+                ),
+              ]);
+            }),
+          );
+        }
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [

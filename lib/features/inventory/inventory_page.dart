@@ -880,7 +880,7 @@ class _SetStockDialogState extends State<SetStockDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final desktopForm = isWindowsPlatform && MediaQuery.sizeOf(context).width >= 760;
+    final desktopForm = isWindowsPlatform;
     final referenceField = TextField(controller: reference, textCapitalization: TextCapitalization.characters, decoration: InputDecoration(labelText: tr('Reference / count sheet no (optional)'), hintText: 'e.g. PC-0912', prefixIcon: const Icon(Icons.tag_rounded, size: 18)));
     final noteField = TextField(controller: note, decoration: InputDecoration(labelText: tr('Note (optional)'), hintText: 'e.g. Opening stock 04 Aug 2026'));
     return AlertDialog(
@@ -991,7 +991,7 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final desktopForm = isWindowsPlatform && MediaQuery.sizeOf(context).width >= 760;
+    final desktopForm = isWindowsPlatform;
     final productField = DropdownButtonFormField<int>(
       key: ValueKey('rcpt-$productId'),
       initialValue: productId,

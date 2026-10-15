@@ -8,8 +8,10 @@ import '../../core/format.dart';
 import '../../core/i18n.dart';
 import '../../core/item_code.dart';
 import '../../core/theme.dart';
+import '../../core/platform_support.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
+import '../../ui/windows_widgets.dart';
 import 'billing_page.dart' show gstStateName;
 import 'invoice_pdf.dart';
 
@@ -121,7 +123,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
         final tax = (inv['cgst'] as num) + (inv['sgst'] as num) + (inv['igst'] as num);
         final overdue = !cancelled && balance > 0 && (inv['due_date'] ?? '').toString().isNotEmpty && (inv['due_date'] as String).compareTo(todayYmd()) < 0;
 
-        return ListView(padding: const EdgeInsets.all(20), children: [
+        final pageContent = ListView(padding: const EdgeInsets.all(20), children: [
           Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, runSpacing: 8, children: [
             IconButton(onPressed: () => context.canPop() ? context.pop() : context.go('/billing'), icon: const Icon(Icons.arrow_back_rounded)),
             Text(inv['number'] as String, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
@@ -232,9 +234,144 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
           ),
           const SizedBox(height: 40),
         ]);
+        if (isWindowsPlatform) {
+          final desktopBillTo = SectionCard(
+            title: tr('Bill to'),
+            child: Wrap(spacing: 22, runSpacing: 12, children: [
+              _kv(tr('Party'), inv['party_name'] as String, bold: true),
+              _kv('GSTIN', (inv['party_gstin'] as String? ?? '').isEmpty ? tr('Unregistered (B2C)') : inv['party_gstin'] as String),
+              if ((inv['party_address'] as String? ?? '').isNotEmpty) _kv(tr('Address'), inv['party_address'] as String),
+              _kv(tr('Place of supply'), gstStateName(inv['place_of_supply'] as String? ?? '')),
+              _kv(tr('Invoice date'), fmtDate(inv['invoice_date'])),
+              if ((inv['dispatch_code'] as String? ?? '').isNotEmpty) _kv(tr('Dispatch'), inv['dispatch_code'] as String),
+              if ((inv['remarks'] as String? ?? '').isNotEmpty) _kv(tr('Remarks'), inv['remarks'] as String),
+              _kv(tr('Created by'), '${inv['created_by_name'] ?? '—'} · ${fmtDateTime(inv['created_at'])}'),
+            ]),
+          );
+          final desktopItems = SectionCard(
+            title: tr('Invoice Lines'),
+            child: AppDataTable(
+              columns: ['#', tr('Description'), 'HSN', tr('Batch'), tr('Qty'), tr('Rate'), tr('Disc %'), tr('Taxable'), 'GST %', tr('Tax'), tr('Amount')],
+              moneyColumns: const {5, 7, 9, 10},
+              rows: [
+                for (var i = 0; i < items.length; i++)
+                  [
+                    '${i + 1}',
+                    ItemNameCell(name: '${items[i]['description']}', code: ItemCode.of(items[i])),
+                    (items[i]['hsn_code'] as String? ?? '').isEmpty ? '—' : items[i]['hsn_code'],
+                    (items[i]['batch_code'] as String? ?? '').isEmpty ? '—' : items[i]['batch_code'],
+                    '${qty(items[i]['qty'])} ${items[i]['rate_per'] == 'piece' ? '${U.cb} (${qty((items[i]['qty'] as num) * (items[i]['pieces_per_pack'] as num? ?? 1))} ${U.piece.toLowerCase()})' : U.cb}',
+                    items[i]['rate'],
+                    (items[i]['discount_pct'] as num? ?? 0) > 0 ? '${qty(items[i]['discount_pct'])}%' : '—',
+                    items[i]['taxable'],
+                    '${qty(items[i]['gst_rate'])}%',
+                    (items[i]['cgst'] as num) + (items[i]['sgst'] as num) + (items[i]['igst'] as num),
+                    items[i]['total'],
+                  ],
+              ],
+            ),
+          );
+          final desktopTotals = SectionCard(
+            title: tr('Tax & Totals'),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              _tot(tr('Sub total'), inv['subtotal']),
+              if ((inv['discount'] as num) > 0) ...[_tot(tr('Discount'), -(inv['discount'] as num)), _tot(tr('Taxable value'), inv['taxable'])],
+              if (intra) ...[_tot('CGST', inv['cgst']), _tot('SGST', inv['sgst'])] else _tot('IGST', inv['igst']),
+              if ((inv['round_off'] as num) != 0) _tot(tr('Round off'), inv['round_off']),
+              const Divider(height: 18),
+              Text('${tr('Grand total')}  ${inr(inv['total'])}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+              Text(InvoicePdf.inWords(inv['total'] as num), style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12, fontStyle: FontStyle.italic)),
+              const Divider(height: 18),
+              _tot(tr('Received'), inv['paid_amount']),
+              _tot(tr('Balance due'), cancelled ? 0 : balance),
+            ]),
+          );
+          final desktopReceipts = SectionCard(
+            title: tr('Receipts Register'),
+            trailing: canManage && !cancelled && balance > 0 ? TextButton.icon(onPressed: () => _receipt(inv), icon: const Icon(Icons.add_rounded, size: 17), label: Text(tr('Add receipt'))) : null,
+            child: payments.isEmpty
+                ? EmptyState(cancelled ? tr('No receipts.') : tr('No payment received yet — record cheque / NEFT / cash receipts here.'), icon: Icons.payments_outlined)
+                : AppDataTable(
+                    columns: [tr('Date'), tr('Mode'), tr('Ref / cheque no'), tr('Bank'), tr('Amount'), tr('Note'), tr('By'), ''],
+                    moneyColumns: const {4},
+                    rows: [
+                      for (final p in payments)
+                        [
+                          fmtDate(p['paid_on']),
+                          (p['mode'] ?? '').toString().toUpperCase(),
+                          (p['ref_no'] as String? ?? '').isEmpty ? '—' : p['ref_no'],
+                          (p['bank'] as String? ?? '').isEmpty ? '—' : p['bank'],
+                          p['amount'],
+                          (p['note'] as String? ?? '').isEmpty ? '—' : p['note'],
+                          p['created_by_name'] ?? '—',
+                          canManage ? IconButton(icon: const Icon(Icons.delete_outline_rounded, size: 18), tooltip: tr('Delete receipt'), onPressed: () => _deleteReceipt(p)) : const SizedBox.shrink(),
+                        ],
+                    ],
+                  ),
+          );
+          final desktopActions = <Widget>[
+            IconButton(onPressed: () => context.canPop() ? context.pop() : context.go('/billing'), tooltip: tr('Back'), icon: const Icon(Icons.arrow_back_rounded)),
+            FilledButton.tonalIcon(onPressed: busy ? null : () => _pdf(data), icon: const Icon(Icons.picture_as_pdf_rounded, size: 16), label: Text(tr('Invoice PDF'))),
+            OutlinedButton.icon(onPressed: busy ? null : () => _pdf(data, original: false), icon: const Icon(Icons.copy_rounded, size: 16), label: Text(tr('Duplicate copy'))),
+            if (canManage && !cancelled && balance > 0)
+              FilledButton.icon(onPressed: busy ? null : () => _receipt(inv), icon: const Icon(Icons.payments_rounded, size: 16), label: Text(tr('Record receipt'))),
+            if (canManage && !cancelled && payments.isEmpty)
+              OutlinedButton.icon(onPressed: busy ? null : () => _cancel(inv), style: TextButton.styleFrom(foregroundColor: AppColors.red), icon: const Icon(Icons.block_rounded, size: 16), label: Text(tr('Cancel invoice'))),
+          ];
+          return WindowsDocumentWorkspace(
+            title: 'Sales Invoice',
+            subtitle: '${inv['number']} · ${inv['party_name']} · ${fmtDate(inv['invoice_date'])}',
+            icon: Icons.receipt_long_outlined,
+            commandBar: WindowsCommandStrip(children: [
+              StatusChip(status),
+              if (overdue) const StatusChip('OVERDUE'),
+              Text('${tr('Balance due')}: ${inr(cancelled ? 0 : balance, decimals: false)}', style: const TextStyle(fontWeight: FontWeight.w700)),
+              ...desktopActions,
+            ]),
+            content: LayoutBuilder(builder: (context, constraints) {
+              final wide = constraints.maxWidth >= 1180;
+              final kpis = [
+                KpiCard(label: tr('Grand total'), value: inr(inv['total'], decimals: false), icon: Icons.receipt_long_rounded, tint: AppColors.blue),
+                KpiCard(label: intra ? 'CGST + SGST' : 'IGST', value: inr(tax, decimals: false), icon: Icons.account_balance_rounded, tint: AppColors.teal),
+                KpiCard(label: tr('Received'), value: inr(inv['paid_amount'], decimals: false), icon: Icons.payments_rounded, tint: AppColors.green),
+                KpiCard(label: tr('Balance due'), value: inr(cancelled ? 0 : balance, decimals: false), icon: Icons.hourglass_bottom_rounded, tint: overdue ? AppColors.red : AppColors.orange),
+              ];
+              return ListView(padding: const EdgeInsets.all(14), children: [
+                Wrap(spacing: 9, runSpacing: 8, children: [for (final kpi in kpis) SizedBox(width: 205, height: 108, child: kpi)]),
+                const SizedBox(height: 12),
+                if (wide)
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(flex: 7, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [desktopBillTo, const SizedBox(height: 10), desktopItems, const SizedBox(height: 10), desktopReceipts])),
+                    const SizedBox(width: 12),
+                    Expanded(flex: 3, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [desktopTotals, if (cancelled) ...[const SizedBox(height: 10), _cancelledNotice(inv)]])),
+                  ])
+                else ...[
+                  desktopBillTo,
+                  const SizedBox(height: 10),
+                  desktopItems,
+                  const SizedBox(height: 10),
+                  desktopTotals,
+                  const SizedBox(height: 10),
+                  desktopReceipts,
+                ],
+              ]);
+            }),
+          );
+        }
+        return pageContent;
       },
     );
   }
+
+  Widget _cancelledNotice(Map<String, dynamic> inv) => Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: AppColors.red.withValues(alpha: 0.08), border: Border.all(color: AppColors.red.withValues(alpha: 0.24))),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Icon(Icons.block_rounded, color: AppColors.red, size: 18),
+          const SizedBox(width: 8),
+          Expanded(child: Text('${tr('Cancelled')} ${fmtDateTime(inv['cancelled_at'])} · ${inv['cancel_reason'] ?? ''}', style: const TextStyle(color: AppColors.red, fontWeight: FontWeight.w600))),
+        ]),
+      );
 
   Widget _kv(String k, String v, {bool bold = false}) => ConstrainedBox(
         constraints: const BoxConstraints(minWidth: 140, maxWidth: 360),

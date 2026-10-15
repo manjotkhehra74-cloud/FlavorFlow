@@ -8,6 +8,7 @@ import '../../core/download.dart';
 import '../../core/format.dart';
 import '../../core/i18n.dart';
 import '../../core/theme.dart';
+import '../../core/platform_support.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 
@@ -18,6 +19,20 @@ import '../../ui/widgets.dart';
 /// issue / consumption, adjustment) with a running balance that ends at
 /// today's stock. Newest first; tap a row to open its document.
 Future<void> showItemHistory(BuildContext context, {required String type, required int id, required String name}) {
+  if (isWindowsPlatform) {
+    final viewport = MediaQuery.sizeOf(context);
+    return showDialog<void>(
+      context: context,
+      builder: (_) => Dialog(
+        insetPadding: const EdgeInsets.all(24),
+        child: SizedBox(
+          width: viewport.width * 0.9,
+          height: viewport.height * 0.88,
+          child: ItemHistoryView(type: type, id: id, name: name),
+        ),
+      ),
+    );
+  }
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,

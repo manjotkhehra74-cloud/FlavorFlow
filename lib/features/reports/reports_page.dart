@@ -5,8 +5,10 @@ import '../../core/company.dart';
 import '../../core/download.dart';
 import '../../core/theme.dart';
 import '../../core/i18n.dart';
+import '../../core/platform_support.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
+import '../../ui/windows_widgets.dart';
 import 'report_pdf.dart';
 
 /// Role-scoped reports with export to PDF & Excel — the server decides
@@ -238,7 +240,42 @@ class _ReportsPageState extends State<ReportsPage> {
         final reports = snap.data!;
         if (reports.isEmpty) return const EmptyState('No reports available for your role', icon: Icons.bar_chart_rounded);
         return LayoutBuilder(builder: (context, c) {
-          final wide = c.maxWidth >= 900;
+          final windows = isWindowsPlatform;
+          final wide = windows || c.maxWidth >= 900;
+          if (windows) {
+            return WindowsDocumentWorkspace(
+              title: 'Reports',
+              subtitle: '${reports.length} role-authorized reports · PDF and Excel export',
+              icon: Icons.bar_chart_rounded,
+              commandBar: WindowsCommandStrip(children: [
+                Text('${tr('Report Library')}: ${reports.length}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                if (_selected != null) ...[
+                  const SizedBox(width: 10),
+                  Text('· ${U.ize(tr(_displayTitle(_selected!)))}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                ],
+              ]),
+              content: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                SizedBox(
+                  width: 268,
+                  child: Container(
+                    decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface, border: Border.all(color: const Color(0xFFC7D1DB))),
+                    child: Column(children: [
+                      Container(
+                        height: 36,
+                        alignment: Alignment.centerLeft,
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                        child: Text(tr('Report Library'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                      ),
+                      Expanded(child: ListView(padding: const EdgeInsets.all(7), children: [for (final r in reports) _reportTile(r)])),
+                    ]),
+                  ),
+                ),
+                const VerticalDivider(width: 1, thickness: 1, color: Color(0xFFC7D1DB)),
+                Expanded(child: Padding(padding: const EdgeInsets.all(12), child: _reportBody())),
+              ]),
+            );
+          }
           return ListView(padding: const EdgeInsets.all(18), children: [
             _ReportsOverview(reports: reports),
             const SizedBox(height: 16),

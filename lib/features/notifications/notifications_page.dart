@@ -5,9 +5,12 @@ import 'package:provider/provider.dart';
 import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../core/i18n.dart';
+import '../../core/theme.dart';
 import '../../core/notifier.dart';
+import '../../core/platform_support.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
+import '../../ui/windows_widgets.dart';
 
 /// All notifications. Tapping a notification marks it read AND opens the
 /// exact related screen via its server-provided deep link — no manual searching.
@@ -85,6 +88,53 @@ class _NotificationsPageState extends State<NotificationsPage> {
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
         final items = snap.data!;
         final unread = items.where((n) => n['is_read'] == 0).length;
+        if (isWindowsPlatform) {
+          return WindowsDocumentWorkspace(
+            title: 'Notifications',
+            subtitle: '$unread unread · ${items.length} total',
+            icon: Icons.notifications_outlined,
+            commandBar: WindowsCommandStrip(children: [
+              Icon(unread == 0 ? Icons.done_all_rounded : Icons.mark_email_unread_outlined, size: 16, color: unread == 0 ? AppColors.green : AppColors.blue),
+              Text('$unread ${tr('unread')} · ${items.length} ${tr('total')}'),
+              if (unread > 0)
+                OutlinedButton.icon(onPressed: _readAll, icon: const Icon(Icons.done_all_rounded, size: 16), label: Text(tr('Mark all read'))),
+            ]),
+            content: ListView(
+              padding: const EdgeInsets.all(14),
+              children: [
+                if (items.isEmpty)
+                  const EmptyState('No notifications yet', icon: Icons.notifications_none_rounded)
+                else
+                  SectionCard(
+                    title: 'Notification Register',
+                    child: AppDataTable(
+                      columns: const ['Status', 'Date', 'Notification', 'Type', 'Destination', ''],
+                      onRowTap: (i) => _open(items[i]),
+                      rows: [
+                        for (final n in items)
+                          [
+                            n['is_read'] == 0
+                                ? const StatusChip('UNREAD')
+                                : const StatusChip('READ'),
+                            fmtDate(n['created_at']),
+                            SizedBox(
+                              width: 330,
+                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                Text(U.ize(n['title'] as String), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: n['is_read'] == 0 ? FontWeight.w700 : FontWeight.w500)),
+                                Text(U.ize(n['body'] as String), maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+                              ]),
+                            ),
+                            notifLabel(n['type'] as String),
+                            _NotifTile.routeName(n['route'] as String? ?? ''),
+                            TextButton.icon(onPressed: () => _open(n), icon: const Icon(Icons.open_in_new_rounded, size: 15), label: Text(tr('Open'))),
+                          ],
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          );
+        }
         return ListView(padding: const EdgeInsets.all(20), children: [
           Row(children: [
             Expanded(

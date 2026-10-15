@@ -6,9 +6,11 @@ import '../../core/company.dart';
 import '../../core/download.dart';
 import '../../core/format.dart';
 import '../../core/i18n.dart';
+import '../../core/platform_support.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
+import '../../ui/windows_widgets.dart';
 
 /// Billing — OUTWARD (GST tax invoices, receipts, receivables) and INWARD
 /// (supplier bills entered with the supplier's invoice number → stock in,
@@ -38,6 +40,62 @@ class _BillingPageState extends State<BillingPage> with SingleTickerProviderStat
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthController>();
+    const tabs = <WindowsModuleTab>[
+      WindowsModuleTab('Sales Invoices', Icons.receipt_long_outlined),
+      WindowsModuleTab('Receivable', Icons.payments_outlined),
+      WindowsModuleTab('Purchases (Inward)', Icons.input_outlined),
+      WindowsModuleTab('Payable', Icons.account_balance_wallet_outlined),
+      WindowsModuleTab('Parties', Icons.groups_outlined),
+      WindowsModuleTab('GST Register', Icons.assessment_outlined),
+      WindowsModuleTab('Billing Setup', Icons.settings_outlined),
+    ];
+    final content = TabBarView(controller: _tab, children: const [
+      _InvoicesTab(),
+      _ReceivablesTab(),
+      _PurchasesTab(),
+      _PayablesTab(),
+      _PartiesTab(),
+      _RegisterTab(),
+      _SettingsTab(),
+    ]);
+    if (isWindowsPlatform) {
+      return AnimatedBuilder(
+        animation: _tab,
+        builder: (context, _) => WindowsModuleWorkspace(
+          title: 'Billing',
+          subtitle: 'Sales, purchases, balances and tax registers',
+          tabs: tabs,
+          selectedIndex: _tab.index,
+          onSelect: _tab.animateTo,
+          commandBar: WindowsCommandStrip(children: [
+            if (auth.canManageBilling) ...[
+              FilledButton.icon(
+                onPressed: () => context.push('/billing/new'),
+                icon: const Icon(Icons.add_rounded, size: 16),
+                label: Text(tr('New Invoice')),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => context.push('/billing/purchases/new'),
+                icon: const Icon(Icons.move_to_inbox_outlined, size: 16),
+                label: Text(tr('Supplier Bill')),
+              ),
+            ],
+            OutlinedButton.icon(
+              onPressed: () => _tab.animateTo(4),
+              icon: const Icon(Icons.groups_outlined, size: 16),
+              label: Text(tr('Parties')),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => _tab.animateTo(5),
+              icon: const Icon(Icons.assessment_outlined, size: 16),
+              label: Text(tr('GST Register')),
+            ),
+          ]),
+          content: content,
+        ),
+      );
+    }
     return Column(children: [
       Material(
         color: Theme.of(context).colorScheme.surface,
@@ -59,17 +117,7 @@ class _BillingPageState extends State<BillingPage> with SingleTickerProviderStat
           ),
         ),
       ),
-      Expanded(
-        child: TabBarView(controller: _tab, children: const [
-          _InvoicesTab(),
-          _ReceivablesTab(),
-          _PurchasesTab(),
-          _PayablesTab(),
-          _PartiesTab(),
-          _RegisterTab(),
-          _SettingsTab(),
-        ]),
-      ),
+      Expanded(child: content),
     ]);
   }
 }
@@ -662,7 +710,7 @@ class _PartyFormDialogState extends State<PartyFormDialog> {
     return AlertDialog(
       title: Text(widget.party == null ? (widget.asSupplier ? tr('Add Supplier') : tr('Add Party')) : tr('Edit Party')),
       content: SizedBox(
-        width: 460,
+        width: isWindowsPlatform ? 720 : 460,
         child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             TextField(controller: name, textCapitalization: TextCapitalization.words, decoration: InputDecoration(labelText: tr('Party name *'), hintText: widget.asSupplier ? 'e.g. Ambala Sugar Mills' : 'e.g. Guru Nanak Traders')),

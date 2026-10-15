@@ -9,8 +9,10 @@ import '../../core/format.dart';
 import '../../core/i18n.dart';
 import '../../core/item_code.dart';
 import '../../core/theme.dart';
+import '../../core/platform_support.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
+import '../../ui/windows_widgets.dart';
 import 'dispatch_pdf.dart';
 
 /// Dispatch detail — deep link target of dispatch notifications. PDF challan export.
@@ -102,7 +104,7 @@ class _DispatchDetailPageState extends State<DispatchDetailPage> {
         final d = (snap.data!['dispatch'] as Map).cast<String, dynamic>();
         final items = (snap.data!['items'] as List).cast<Map<String, dynamic>>();
         final dayName = d['weekday'] as String? ?? weekdayOf(d['dispatch_date']);
-        return ListView(padding: const EdgeInsets.all(20), children: [
+        final pageContent = ListView(padding: const EdgeInsets.all(20), children: [
           // Wrap: on narrow phones the Export button drops to its own line
           // instead of overflowing off-screen.
           Wrap(spacing: 4, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
@@ -138,7 +140,7 @@ class _DispatchDetailPageState extends State<DispatchDetailPage> {
           ]),
           const SizedBox(height: 18),
           LayoutBuilder(builder: (context, c) {
-            final wide = c.maxWidth > 900;
+            final wide = isWindowsPlatform || c.maxWidth > 900;
             final meta = SectionCard(title: 'Vehicle & Invoice', child: Column(children: [
               _row('Truck Number', d['truck_number'] as String),
               _row('Destination', d['destination'] as String? ?? '—'),
@@ -201,6 +203,20 @@ class _DispatchDetailPageState extends State<DispatchDetailPage> {
                   : 'Weights computed from the Product Master: ${U.carton.toLowerCase()} × weight/${U.cb}.',
               style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
         ]);
+        if (isWindowsPlatform) {
+          return WindowsDocumentWorkspace(
+            title: 'Dispatch Document',
+            subtitle: '${d['code']} · ${d['truck_number']} · ${d['status']}',
+            icon: Icons.local_shipping_outlined,
+            commandBar: WindowsCommandStrip(children: [
+              StatusChip(d['status'] as String),
+              Text('${tr('Destination')}: ${d['destination'] ?? '—'}'),
+              Text('· ${fmtDate(d['dispatch_date'])}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            ]),
+            content: pageContent,
+          );
+        }
+        return pageContent;
       },
     );
   }

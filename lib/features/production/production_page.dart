@@ -851,7 +851,7 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final desktopForm = isWindowsPlatform && MediaQuery.sizeOf(context).width >= 760;
+    final desktopForm = isWindowsPlatform;
     final codeField = TextField(
       controller: code,
       textCapitalization: TextCapitalization.characters,

@@ -3,8 +3,10 @@ import 'package:provider/provider.dart';
 
 import '../../core/format.dart';
 import '../../core/i18n.dart';
+import '../../core/platform_support.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
+import '../../ui/windows_widgets.dart';
 
 /// Audit Log — every mutating action, with actor, role and timestamp.
 class AuditPage extends StatefulWidget {
@@ -39,6 +41,44 @@ class _AuditPageState extends State<AuditPage> {
         if (snap.hasError) return ErrorState(snap.error!, onRetry: () => setState(() => _future = _load()));
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
         final logs = snap.data!;
+        final table = SectionCard(
+          title: 'Audit Trail',
+          trailing: Text('${logs.length} ${tr('events')}'),
+          padding: EdgeInsets.zero,
+          child: logs.isEmpty
+              ? const EmptyState('No audit entries')
+              : AppDataTable(
+                  columns: const ['When', 'User', 'Role', 'Action', 'Entity', 'Ref', 'Details'],
+                  rows: [
+                    for (final l in logs)
+                      [
+                        fmtDateTime(l['created_at']),
+                        Text(l['user_name'] as String? ?? 'system', style: const TextStyle(fontWeight: FontWeight.w600)),
+                        (l['role'] as String? ?? '').replaceAll('_', ' '),
+                        StatusChip(l['action'] as String),
+                        l['entity'],
+                        l['entity_id'],
+                        l['details'],
+                      ],
+                  ],
+                ),
+        );
+        if (isWindowsPlatform) {
+          return WindowsDocumentWorkspace(
+            title: 'Audit Trail',
+            subtitle: 'Immutable record of actions and references',
+            icon: Icons.history_rounded,
+            commandBar: WindowsCommandStrip(children: [
+              for (final e in _entities)
+                ChoiceChip(
+                  label: Text(e.isEmpty ? tr('All') : tr(e[0].toUpperCase() + e.substring(1))),
+                  selected: _entity == e,
+                  onSelected: (_) => setState(() { _entity = e; _future = _load(); }),
+                ),
+            ]),
+            content: ListView(padding: const EdgeInsets.all(12), children: [table]),
+          );
+        }
         return ListView(padding: const EdgeInsets.all(20), children: [
           Wrap(spacing: 8, runSpacing: 8, children: [
             for (final e in _entities)
@@ -49,26 +89,7 @@ class _AuditPageState extends State<AuditPage> {
               ),
           ]),
           const SizedBox(height: 16),
-          SectionCard(
-            title: 'Audit Trail',
-            child: logs.isEmpty
-                ? const EmptyState('No audit entries')
-                : AppDataTable(
-                    columns: const ['When', 'User', 'Role', 'Action', 'Entity', 'Ref', 'Details'],
-                    rows: [
-                      for (final l in logs)
-                        [
-                          fmtDateTime(l['created_at']),
-                          Text(l['user_name'] as String? ?? 'system', style: const TextStyle(fontWeight: FontWeight.w600)),
-                          (l['role'] as String? ?? '').replaceAll('_', ' '),
-                          StatusChip(l['action'] as String),
-                          l['entity'],
-                          l['entity_id'],
-                          l['details'],
-                        ],
-                    ],
-                  ),
-          ),
+          table,
         ]);
       },
     );

@@ -21,6 +21,7 @@ import '../../state/auth.dart';
 import '../../ui/scan_page.dart';
 import '../../core/offline_queue.dart';
 import '../../ui/widgets.dart';
+import '../../ui/windows_widgets.dart';
 import 'dispatch_pdf.dart';
 import 'destination_field.dart';
 
@@ -58,6 +59,34 @@ class _DispatchPageState extends State<DispatchPage> with SingleTickerProviderSt
   @override
   Widget build(BuildContext context) {
     final canManage = context.watch<AuthController>().can('dispatch.manage');
+    final entryTitle = canManage ? 'Dispatch Entry' : 'Dispatch Entry (view only)';
+    final tabs = <WindowsModuleTab>[
+      WindowsModuleTab(entryTitle, Icons.local_shipping_outlined),
+      const WindowsModuleTab('Truck Loading Calculator', Icons.calculate_outlined),
+      const WindowsModuleTab('Dispatch History', Icons.history_rounded),
+      const WindowsModuleTab('Reports', Icons.bar_chart_rounded),
+      const WindowsModuleTab('Trucks', Icons.local_shipping_outlined),
+    ];
+    final content = TabBarView(controller: _tab, children: [
+      _EntryTab(readOnly: !canManage),
+      const _CalculatorTab(),
+      const _HistoryTab(),
+      const _ReportsTab(),
+      _TrucksTab(readOnly: !canManage),
+    ]);
+    if (isWindowsPlatform) {
+      return AnimatedBuilder(
+        animation: _tab,
+        builder: (context, _) => WindowsModuleWorkspace(
+          title: 'Dispatch',
+          subtitle: 'Entry, loading, history and transport reports',
+          tabs: tabs,
+          selectedIndex: _tab.index,
+          onSelect: _tab.animateTo,
+          content: content,
+        ),
+      );
+    }
     return Column(children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
@@ -68,7 +97,7 @@ class _DispatchPageState extends State<DispatchPage> with SingleTickerProviderSt
             isScrollable: true,
             tabAlignment: TabAlignment.start,
             tabs: [
-              Tab(text: canManage ? tr('Dispatch Entry') : tr('Dispatch Entry (view only)')),
+              Tab(text: tr(entryTitle)),
               Tab(text: tr('Truck Loading Calculator')),
               Tab(text: tr('Dispatch History')),
               Tab(text: tr('Reports')),
@@ -77,15 +106,7 @@ class _DispatchPageState extends State<DispatchPage> with SingleTickerProviderSt
           ),
         ),
       ),
-      Expanded(
-        child: TabBarView(controller: _tab, children: [
-          _EntryTab(readOnly: !canManage),
-          const _CalculatorTab(),
-          const _HistoryTab(),
-          const _ReportsTab(),
-          _TrucksTab(readOnly: !canManage),
-        ]),
-      ),
+      Expanded(child: content),
     ]);
   }
 }

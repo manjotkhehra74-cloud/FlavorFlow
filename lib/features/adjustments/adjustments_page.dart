@@ -11,6 +11,7 @@ import '../../core/platform_support.dart';
 import '../../state/auth.dart';
 import '../../core/offline_queue.dart';
 import '../../ui/widgets.dart';
+import '../../ui/windows_widgets.dart';
 
 /// Stock Adjustments — request corrections (IN/OUT) and track their status.
 /// Approval happens on the Approvals screen (authorized roles only).
@@ -47,22 +48,74 @@ class _AdjustmentsPageState extends State<AdjustmentsPage> {
         if (snap.hasError) return ErrorState(snap.error!, onRetry: _reload);
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
         final rows = snap.data!;
+        final requestTable = SectionCard(
+          title: 'Adjustment Requests',
+          trailing: Text('${rows.length} ${tr('requests')}'),
+          padding: EdgeInsets.zero,
+          child: rows.isEmpty
+              ? const EmptyState('No adjustment requests')
+              : AppDataTable(
+                  columns: ['Code', 'Product', 'Type', U.cb, 'Reason', 'Status', 'Requested By', 'Requested On', 'Decision'],
+                  rows: [
+                    for (final a in rows)
+                      [
+                        Text(a['code'] as String, style: const TextStyle(fontWeight: FontWeight.w700)),
+                        ItemNameCell(name: '${a['product_name']}', code: '${a['item_code'] ?? ''}'),
+                        StatusChip(a['adj_type'] as String),
+                        qtyInt(a['qty_cb']),
+                        a['reason'],
+                        StatusChip(a['status'] as String),
+                        a['requested_by_name'],
+                        fmtDateTime(a['requested_at']),
+                        if (a['status'] == 'APPROVED')
+                          Text('${a['approved_by_name']} · ${fmtDate(a['approved_at'])}')
+                        else if (a['status'] == 'REJECTED')
+                          Text('${a['rejected_by_name']} · ${fmtDate(a['rejected_at'])}')
+                        else
+                          const Text('Awaiting'),
+                      ],
+                  ],
+                ),
+        );
+        if (isWindowsPlatform) {
+          return WindowsDocumentWorkspace(
+            title: 'Stock Adjustments',
+            subtitle: 'Request and audit stock corrections',
+            icon: Icons.tune_rounded,
+            commandBar: WindowsCommandStrip(children: [
+              for (final status in ['', 'PENDING', 'APPROVED', 'REJECTED'])
+                ChoiceChip(
+                  label: Text(status.isEmpty ? tr('All') : tr(status.toLowerCase())),
+                  selected: _status == status,
+                  onSelected: (_) => setState(() { _status = status; _future = _load(); }),
+                ),
+              if (auth.can('adjustments.approve'))
+                OutlinedButton.icon(onPressed: () => context.go('/approvals'), icon: const Icon(Icons.fact_check_outlined, size: 16), label: Text(tr('Approval queue'))),
+              if (auth.can('adjustments.create'))
+                FilledButton.icon(
+                  onPressed: () async {
+                    final saved = await showDialog<bool>(context: context, builder: (_) => const AdjustmentFormDialog());
+                    if (saved == true) { _reload(); if (context.mounted) showOk(context, 'Adjustment request submitted for approval.'); }
+                  },
+                  icon: const Icon(Icons.add_rounded, size: 16),
+                  label: Text(tr('New Adjustment')),
+                ),
+            ]),
+            content: ListView(padding: const EdgeInsets.all(12), children: [requestTable]),
+          );
+        }
         return ListView(padding: const EdgeInsets.all(20), children: [
           Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-            for (final s in ['', 'PENDING', 'APPROVED', 'REJECTED'])
+            for (final status in ['', 'PENDING', 'APPROVED', 'REJECTED'])
               ChoiceChip(
-                label: Text(s.isEmpty ? tr('All') : tr(s.toLowerCase())),
-                selected: _status == s,
-                onSelected: (_) => setState(() { _status = s; _future = _load(); }),
+                label: Text(status.isEmpty ? tr('All') : tr(status.toLowerCase())),
+                selected: _status == status,
+                onSelected: (_) => setState(() { _status = status; _future = _load(); }),
               ),
             if (auth.can('adjustments.approve'))
               Padding(
                 padding: const EdgeInsets.only(left: 8),
-                child: OutlinedButton.icon(
-                  onPressed: () => context.go('/approvals'),
-                  icon: const Icon(Icons.fact_check_outlined, size: 18),
-                  label: Text(tr('Approval queue')),
-                ),
+                child: OutlinedButton.icon(onPressed: () => context.go('/approvals'), icon: const Icon(Icons.fact_check_outlined, size: 18), label: Text(tr('Approval queue'))),
               ),
             if (auth.can('adjustments.create'))
               FilledButton.icon(
@@ -75,33 +128,7 @@ class _AdjustmentsPageState extends State<AdjustmentsPage> {
               ),
           ]),
           const SizedBox(height: 16),
-          SectionCard(
-            title: 'Adjustment Requests',
-            child: rows.isEmpty
-                ? const EmptyState('No adjustment requests')
-                : AppDataTable(
-                    columns: ['Code', 'Product', 'Type', U.cb, 'Reason', 'Status', 'Requested By', 'Requested On', 'Decision'],
-                    rows: [
-                      for (final a in rows)
-                        [
-                          Text(a['code'] as String, style: const TextStyle(fontWeight: FontWeight.w700)),
-                          ItemNameCell(name: '${a['product_name']}', code: '${a['item_code'] ?? ''}'), // not ItemCode.of — a['code'] is the ADJ code
-                          StatusChip(a['adj_type'] as String),
-                          qtyInt(a['qty_cb']),
-                          a['reason'],
-                          StatusChip(a['status'] as String),
-                          a['requested_by_name'],
-                          fmtDateTime(a['requested_at']),
-                          if (a['status'] == 'APPROVED')
-                            Text('${a['approved_by_name']} · ${fmtDate(a['approved_at'])}')
-                          else if (a['status'] == 'REJECTED')
-                            Text('${a['rejected_by_name']} · ${fmtDate(a['rejected_at'])}')
-                          else
-                            const Text('Awaiting'),
-                        ],
-                    ],
-                  ),
-          ),
+          requestTable,
         ]);
       },
     );

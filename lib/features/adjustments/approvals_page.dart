@@ -6,7 +6,9 @@ import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../core/i18n.dart';
 import '../../state/auth.dart';
+import '../../core/platform_support.dart';
 import '../../ui/widgets.dart';
+import '../../ui/windows_widgets.dart';
 
 /// Pending Approval screen — complete authorization workflow:
 /// approve / reject (with mandatory reason), remarks, full decision history
@@ -28,9 +30,21 @@ class _ApprovalsPageState extends State<ApprovalsPage> with SingleTickerProvider
   @override
   void initState() {
     super.initState();
+    _tab.addListener(_onTabChanged);
     _focus = int.tryParse(widget.focusId ?? '');
     _load();
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToFocus());
+  }
+
+  void _onTabChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _tab.removeListener(_onTabChanged);
+    _tab.dispose();
+    super.dispose();
   }
 
   void _load() {
@@ -51,6 +65,32 @@ class _ApprovalsPageState extends State<ApprovalsPage> with SingleTickerProvider
 
   @override
   Widget build(BuildContext context) {
+    final tabContent = TabBarView(controller: _tab, children: [
+      _PendingList(
+        future: _pending,
+        focus: _focus,
+        cardKeys: _cardKeys,
+        onDecided: _reload,
+        onRetry: _reload,
+      ),
+      _HistoryList(future: _history, onRetry: _reload),
+    ]);
+    if (isWindowsPlatform) {
+      return WindowsModuleWorkspace(
+        title: 'Stock Adjustments',
+        subtitle: 'Review requests and inspect decisions',
+        tabs: const [
+          WindowsModuleTab('Pending Approval', Icons.pending_actions_outlined),
+          WindowsModuleTab('Approval History', Icons.history_rounded),
+        ],
+        selectedIndex: _tab.index,
+        onSelect: (index) => _tab.index = index,
+        commandBar: const WindowsCommandStrip(children: [
+          Text('Approval decisions are recorded in the audit trail.'),
+        ]),
+        content: tabContent,
+      );
+    }
     return Column(children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
@@ -68,18 +108,7 @@ class _ApprovalsPageState extends State<ApprovalsPage> with SingleTickerProvider
           ),
         ]),
       ),
-      Expanded(
-        child: TabBarView(controller: _tab, children: [
-          _PendingList(
-            future: _pending,
-            focus: _focus,
-            cardKeys: _cardKeys,
-            onDecided: _reload,
-            onRetry: _reload,
-          ),
-          _HistoryList(future: _history, onRetry: _reload),
-        ]),
-      ),
+      Expanded(child: tabContent),
     ]);
   }
 }

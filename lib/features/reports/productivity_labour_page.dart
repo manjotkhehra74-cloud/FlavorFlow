@@ -8,9 +8,11 @@ import '../../core/api.dart';
 import '../../core/download.dart';
 import '../../core/format.dart';
 import '../../core/offline_queue.dart';
+import '../../core/platform_support.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
+import '../../ui/windows_widgets.dart';
 
 const _localLabourKey = 'flavorflow_productivity_local_labour';
 const _manualSkuChoice = '__manual_sku__';
@@ -1008,18 +1010,35 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
 
   @override
   Widget build(BuildContext context) {
+    const tabs = <WindowsModuleTab>[
+      WindowsModuleTab('Productivity', Icons.analytics_outlined),
+      WindowsModuleTab('Daily Labour', Icons.groups_outlined),
+      WindowsModuleTab('Labour Analysis', Icons.assessment_outlined),
+    ];
+    final content = TabBarView(controller: _tabs, children: [
+      _productivityTab(context),
+      _labourTab(context),
+      _analysisTab(context),
+    ]);
+    if (isWindowsPlatform) {
+      return AnimatedBuilder(
+        animation: _tabs,
+        builder: (context, _) => WindowsModuleWorkspace(
+          title: 'Productivity & Labour',
+          subtitle: 'Factory output and workforce records',
+          tabs: tabs,
+          selectedIndex: _tabs.index,
+          onSelect: _tabs.animateTo,
+          content: content,
+        ),
+      );
+    }
     return Column(children: [
       Material(
         color: Theme.of(context).colorScheme.surface,
         child: TabBar(controller: _tabs, tabs: const [Tab(text: 'Productivity'), Tab(text: 'Daily Labour'), Tab(text: 'Labour Analysis')]),
       ),
-      Expanded(
-        child: TabBarView(controller: _tabs, children: [
-          _productivityTab(context),
-          _labourTab(context),
-          _analysisTab(context),
-        ]),
-      ),
+      Expanded(child: content),
     ]);
   }
 }

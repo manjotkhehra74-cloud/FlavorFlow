@@ -653,7 +653,7 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final desktopForm = isWindowsPlatform && MediaQuery.sizeOf(context).width >= 800;
+    final desktopForm = isWindowsPlatform;
     final nameField = TextField(controller: name, textCapitalization: TextCapitalization.words, decoration: InputDecoration(labelText: tr('Product name *'), hintText: IndustryPack.eg(IndustryPack.current.productExamples)));
     final codeField = ItemCodeField(controller: code, seriesPrefix: 'FG', editing: widget.product != null);
     return AlertDialog(

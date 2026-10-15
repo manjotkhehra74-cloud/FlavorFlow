@@ -15,6 +15,7 @@ import '../../core/platform_support.dart';
 import '../../state/auth.dart';
 import '../../ui/app_shell.dart' show LanguageDialog, CompanyProfileDialog;
 import '../../ui/widgets.dart';
+import '../../ui/windows_widgets.dart';
 
 /// Settings — one place for every per-user option:
 /// language · biometric login · two-factor auth (authenticator app) ·
@@ -181,8 +182,8 @@ class _SettingsPageState extends State<SettingsPage> {
     final settings = context.watch<AppSettings>();
     final session = auth.session;
     final scheme = Theme.of(context).colorScheme;
-    return ListView(padding: const EdgeInsets.all(20), children: [
-      _section('PREFERENCES'),
+    final items = <Widget>[
+      _section('PREFERENCES', key: const ValueKey('settings-preferences')),
       _tile(
         icon: Icons.translate_rounded,
         title: '${tr('Language')} · ਭਾਸ਼ਾ · भाषा',
@@ -303,7 +304,7 @@ class _SettingsPageState extends State<SettingsPage> {
           onTap: _notifOn == false ? _enableNotifications : null,
         ),
 
-      _section('SECURITY'),
+      _section('SECURITY', key: const ValueKey('settings-security')),
       if (_bioAvailable)
         _tile(
           icon: Icons.fingerprint_rounded,
@@ -334,7 +335,7 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
 
       if (session != null && session.role == 'super_admin') ...[
-        _section('COMPANY (SUPER ADMIN)'),
+        _section('COMPANY (SUPER ADMIN)', key: const ValueKey('settings-company')),
         _tile(
           icon: Icons.business_rounded,
           title: tr('Company details (PDF header)'),
@@ -350,7 +351,7 @@ class _SettingsPageState extends State<SettingsPage> {
       ],
 
       if (auth.subscription.status.available) ...[
-        _section('SUBSCRIPTION'),
+        _section('SUBSCRIPTION', key: const ValueKey('settings-subscription')),
         _tile(
           icon: Icons.workspace_premium_outlined,
           title: tr('FlavorFlow subscription'),
@@ -359,7 +360,7 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ],
 
-      _section('CONNECTION'),
+      _section('CONNECTION', key: const ValueKey('settings-connection')),
       ListenableBuilder(
         listenable: OfflineQueue.instance,
         builder: (context, _) {
@@ -397,7 +398,7 @@ class _SettingsPageState extends State<SettingsPage> {
         },
       ),
 
-      _section('ABOUT'),
+      _section('ABOUT', key: const ValueKey('settings-about')),
       _tile(
         icon: Icons.info_outline_rounded,
         title: 'FlavorFlow ERP',
@@ -406,10 +407,57 @@ class _SettingsPageState extends State<SettingsPage> {
       const SizedBox(height: 8),
       Text('${tr('Role')}: ${session?.roleLabel ?? ''} · ${session?.email ?? ''}',
           style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
-    ]);
+    ];
+
+    if (isWindowsPlatform) {
+      const sectionKeys = ['preferences', 'security', 'company', 'subscription', 'connection', 'about'];
+      List<Widget> section(String name) {
+        final start = items.indexWhere((w) => w.key == ValueKey('settings-$name'));
+        if (start < 0) return const [];
+        var end = items.length;
+        for (final other in sectionKeys) {
+          final next = items.indexWhere((w) => w.key == ValueKey('settings-$other'));
+          if (next > start && next < end) end = next;
+        }
+        return items.sublist(start, end);
+      }
+
+      return WindowsDocumentWorkspace(
+        title: 'Settings',
+        subtitle: 'Preferences, security, company and connection',
+        icon: Icons.settings_outlined,
+        commandBar: WindowsCommandStrip(children: [
+          const Icon(Icons.account_circle_outlined, size: 17),
+          Text('${session?.name ?? ''} · ${session?.roleLabel ?? ''}'),
+          const SizedBox(width: 12),
+          Text('${tr('Login ID')}: ${session?.email ?? ''}', style: TextStyle(color: scheme.onSurfaceVariant)),
+        ]),
+        content: LayoutBuilder(builder: (context, constraints) {
+          final columns = constraints.maxWidth >= 1120;
+          final desktopGroups = columns
+              ? <Widget>[
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [...section('preferences'), ...section('security')])),
+                    const SizedBox(width: 14),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      ...section('company'),
+                      ...section('subscription'),
+                      ...section('connection'),
+                      ...section('about'),
+                    ])),
+                  ]),
+                ]
+              : items;
+          return ListView(padding: const EdgeInsets.all(18), children: desktopGroups);
+        }),
+      );
+    }
+
+    return ListView(padding: const EdgeInsets.all(20), children: items);
   }
 
-  Widget _section(String t) => Padding(
+  Widget _section(String t, {Key? key}) => Padding(
+        key: key,
         padding: const EdgeInsets.fromLTRB(4, 18, 4, 8),
         child: Text(tr(t), style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, letterSpacing: 1.2, color: Theme.of(context).colorScheme.onSurfaceVariant)),
       );
