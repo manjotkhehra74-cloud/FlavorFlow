@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/i18n.dart';
 import '../../core/offline_queue.dart';
 import '../../core/platform_support.dart';
 import '../../core/theme.dart';
