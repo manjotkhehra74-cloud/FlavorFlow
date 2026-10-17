@@ -144,6 +144,10 @@ class AdjustmentFormDialog extends StatefulWidget {
 class _AdjustmentFormDialogState extends State<AdjustmentFormDialog> {
   List<Map<String, dynamic>> products = [];
   int? productId;
+  String stockType = 'Finished Goods';
+  String materialType = 'Raw Material';
+  List<Map<String, dynamic>> materials = [];
+  int? materialId;
   String type = 'OUT';
   final cb = TextEditingController();
   final reason = TextEditingController();
@@ -168,14 +172,31 @@ class _AdjustmentFormDialogState extends State<AdjustmentFormDialog> {
             .cast<Map<String, dynamic>>()
             .where((p) => (p['active'] as num? ?? 1) != 0)
             .toList();
-        productId = products.isNotEmpty ? products.first['id'] as int : null;
+        productId = !isWindowsPlatform && products.isNotEmpty ? products.first['id'] as int : null;
       });
     }).catchError((e) { if (mounted) showErr(context, e); });
+    if (isWindowsPlatform) {
+      context.read<AuthController>().api.get('/packing/materials').then((json) {
+        if (!mounted) return;
+        setState(() => materials = ((json as Map)['materials'] as List)
+            .cast<Map<String, dynamic>>());
+      }).catchError((_) {
+        // A missing materials endpoint must not block finished-goods requests.
+      });
+    }
   }
 
-  Map<String, dynamic>? get _product => productId == null ? null : products.firstWhere((p) => p['id'] == productId, orElse: () => products.first);
+  Map<String, dynamic>? get _product => productId == null || products.isEmpty ? null : products.firstWhere((p) => p['id'] == productId, orElse: () => products.first);
 
   Future<void> _save() async {
+    if (isWindowsPlatform && stockType != 'Finished Goods') {
+      showErr(context, 'Material adjustments require the server approval and ledger API update. No request was submitted.');
+      return;
+    }
+    if (productId == null || !products.any((p) => p['id'] == productId)) {
+      showErr(context, 'Select a finished-goods SKU.');
+      return;
+    }
     setState(() => busy = true);
     try {
       // MAN-13: no connection → kept on this device; the request still needs approval.
@@ -200,8 +221,98 @@ class _AdjustmentFormDialogState extends State<AdjustmentFormDialog> {
     }
   }
 
+  Widget _windowsForm(BuildContext context) {
+    final matches = materials.where((m) => materialType == 'Raw Material'
+      ? m['category'] == 'Raw Material' : m['category'] != 'Raw Material').toList();
+    final selected = matches.where((m) => m['id'] == materialId).toList();
+    final material = selected.isEmpty ? null : selected.first;
+    return Dialog(insetPadding: const EdgeInsets.all(24), child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 780, maxHeight: 680),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Container(width: double.infinity, padding: const EdgeInsets.all(16),
+          color: const Color(0xFFE2E9EF),
+          child: Text(tr('Request Stock Adjustment'),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
+        Flexible(child: SingleChildScrollView(padding: const EdgeInsets.all(20),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            DropdownButtonFormField<String>(initialValue: stockType,
+              decoration: const InputDecoration(labelText: 'Stock type *'),
+              items: const [
+                DropdownMenuItem(value: 'Finished Goods', child: Text('Finished Goods')),
+                DropdownMenuItem(value: 'Semi-finished Goods', child: Text('Semi-finished Goods')),
+              ], onChanged: (v) => setState(() {
+                stockType = v ?? 'Finished Goods';
+                materialId = null;
+              })),
+            const SizedBox(height: 14),
+            if (stockType == 'Finished Goods') ...[
+              DropdownButtonFormField<int>(
+                key: ValueKey('windows-adj-$productId'), initialValue: productId,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'SKU *'),
+                items: [for (final p in products)
+                  DropdownMenuItem(value: p['id'] as int,
+                    child: Text(ItemCode.pick(p), overflow: TextOverflow.ellipsis))],
+                onChanged: (v) => setState(() => productId = v),
+              ),
+              if (_product != null) Padding(padding: const EdgeInsets.only(top: 8),
+                child: Text('In stock: ${qtyInt(_product!['qty_cb'])} ${U.cb}')),
+            ] else ...[
+              DropdownButtonFormField<String>(initialValue: materialType,
+                decoration: const InputDecoration(labelText: 'Material type *'),
+                items: const [
+                  DropdownMenuItem(value: 'Raw Material', child: Text('Raw Material')),
+                  DropdownMenuItem(value: 'Packing Material', child: Text('Packing Material')),
+                ], onChanged: (v) => setState(() {
+                  materialType = v ?? 'Raw Material'; materialId = null;
+                })),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<int>(key: ValueKey('material-$materialType'),
+                initialValue: materialId, isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Material *'),
+                items: [for (final m in matches)
+                  DropdownMenuItem(value: m['id'] as int,
+                    child: Text('${m['name']}', overflow: TextOverflow.ellipsis))],
+                onChanged: (v) => setState(() => materialId = v)),
+              if (material != null) Padding(padding: const EdgeInsets.only(top: 8),
+                child: Text('In stock: ${material['stock']} ${material['unit']}')),
+            ],
+            const SizedBox(height: 16),
+            SegmentedButton<String>(segments: const [
+              ButtonSegment(value: 'IN', label: Text('Stock IN')),
+              ButtonSegment(value: 'OUT', label: Text('Stock OUT')),
+            ], selected: {type}, onSelectionChanged: (v) => setState(() => type = v.first)),
+            const SizedBox(height: 14),
+            TextField(controller: cb, keyboardType: TextInputType.number,
+              decoration: InputDecoration(labelText: stockType == 'Finished Goods'
+                ? 'Quantity (${U.cb}) *' : 'Quantity (${material?['unit'] ?? 'material unit'}) *')),
+            const SizedBox(height: 12),
+            TextField(controller: reason, maxLines: 2,
+              decoration: const InputDecoration(labelText: 'Reason *')),
+            if (stockType != 'Finished Goods') const Padding(
+              padding: EdgeInsets.only(top: 16),
+              child: Text('Material stock requests are unavailable until the server supports '
+                'typed approvals, inventory updates and audit ledger. No request can be sent.'),
+            ),
+          ]),
+        )),
+        const Divider(height: 1),
+        Padding(padding: const EdgeInsets.all(12), child: Row(
+          mainAxisAlignment: MainAxisAlignment.end, children: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            const SizedBox(width: 8),
+            FilledButton(onPressed: busy || stockType != 'Finished Goods' || productId == null
+              ? null : _save,
+              child: Text(busy ? 'Submitting…' : 'Submit for Approval')),
+          ],
+        )),
+      ]),
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (isWindowsPlatform) return _windowsForm(context);
     final scheme = Theme.of(context).colorScheme;
     return AlertDialog(
       title: Text(tr('Request Stock Adjustment')),
