@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/api.dart';
+import '../../core/company.dart';
 import '../../core/download.dart';
 import '../../core/format.dart';
 import '../../core/offline_queue.dart';
@@ -892,6 +893,47 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
         final data = snap.data!;
         final columns = (data['columns'] as List? ?? const ['SKU', 'LINE', 'MANPOWER', 'PROD. IN KG', 'PROD. IN CB', 'PRODUCTIVITY IN KG/HEAD', 'PRODUCTIVITY IN CB/HEAD']).map((v) => '$v').toList();
         final rows = ((data['rows'] as List?) ?? const []).map((r) => (r as List).toList()).toList();
+        if (isWindowsPlatform) {
+          final totals = (data['totals'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+          return ListView(padding: const EdgeInsets.all(12), children: [
+            _reconciliationBanner(context, data),
+            WindowsCommandStrip(children: [
+              Text('Selected period: ${fmtDate(_fromYmd)} — ${fmtDate(_toYmd)}',
+                style: const TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(width: 12),
+              OutlinedButton.icon(onPressed: _exporting ? null : () => _export('productivity'),
+                icon: const Icon(Icons.download_outlined, size: 16), label: const Text('Export Excel')),
+            ]),
+            const SizedBox(height: 10),
+            _dateFilters(context),
+            const SizedBox(height: 12),
+            Container(
+              decoration: BoxDecoration(color: const Color(0xFFF7F9FB),
+                border: Border.all(color: const Color(0xFFC7D1DB))),
+              child: Wrap(spacing: 0, children: [
+                for (final item in [
+                  ('Production ${U.cb}', totals['cb'] ?? totals['producedCb']),
+                  ('Production KG', totals['kg'] ?? totals['netKg']),
+                  ('Manpower', totals['manpower']),
+                  ('KG / Head', totals['kgPerHead']),
+                  ('${U.cb} / Head', totals['cbPerHead']),
+                ]) SizedBox(width: 168, child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(item.$1, style: const TextStyle(fontSize: 11)),
+                    Text(qty(item.$2), style: const TextStyle(fontSize: 16,
+                      fontWeight: FontWeight.w700)),
+                  ]),
+                )),
+              ]),
+            ),
+            const SizedBox(height: 12),
+            SectionCard(title: 'Productivity — selected period', padding: EdgeInsets.zero,
+              child: rows.isEmpty
+                ? const EmptyState('No completed production or labour entries for this period.')
+                : AppDataTable(columns: columns, rows: rows)),
+          ]);
+        }
         return ListView(padding: const EdgeInsets.all(18), children: [
           _hero(context, data),
           _reconciliationBanner(context, data),
