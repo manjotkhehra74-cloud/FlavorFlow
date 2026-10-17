@@ -985,6 +985,36 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
         final data = snap.data ?? const <String, dynamic>{};
         final totals = (data['periodTotals'] as Map?)?.cast<String, dynamic>() ?? (data['totals'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
         final sections = _analysisSections(data);
+        if (isWindowsPlatform) {
+          return ListView(padding: const EdgeInsets.all(12), children: [
+            _reconciliationBanner(context, data),
+            _dateFilters(context),
+            const SizedBox(height: 10),
+            WindowsCommandStrip(children: [
+              const Text('Labour Analysis', style: TextStyle(fontWeight: FontWeight.w700)),
+              OutlinedButton.icon(onPressed: _exporting ? null : () => _export('productivity'),
+                icon: const Icon(Icons.download_outlined, size: 16),
+                label: const Text('Export Analysis Excel')),
+            ]),
+            const SizedBox(height: 10),
+            Container(padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: const Color(0xFFF7F9FB),
+                border: Border.all(color: const Color(0xFFC7D1DB))),
+              child: Wrap(spacing: 24, runSpacing: 8, children: [
+                _totalChip(U.cb, totals['cb'] ?? totals['producedCb']),
+                _totalChip('Net KG', totals['kg'] ?? totals['netKg']),
+                _totalChip('Manpower', totals['manpower']),
+                _totalChip('KG / Head', totals['kgPerHead']),
+                _totalChip('${U.cb} / Head', totals['cbPerHead']),
+              ]),
+            ),
+            for (final section in sections) ...[
+              const SizedBox(height: 12),
+              _analysisMatrix(section['title'] as String,
+                section['data'] as Map<String, dynamic>),
+            ],
+          ]);
+        }
         return ListView(padding: const EdgeInsets.all(18), children: [
           _reconciliationBanner(context, data),
           _dateFilters(context),
