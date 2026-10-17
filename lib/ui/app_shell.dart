@@ -1129,6 +1129,35 @@ class LanguageDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.watch<L10n>();
+    if (isWindowsPlatform) {
+      return Dialog(
+        child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 460),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Container(width: double.infinity, padding: const EdgeInsets.all(16),
+              color: const Color(0xFFE2E9EF),
+              child: Text('${tr('Language')} · ਭਾਸ਼ਾ · भाषा',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
+            for (final lang in L10n.languages)
+              RadioListTile<String>(
+                title: Text(lang[1]),
+                value: lang[0],
+                groupValue: l10n.code,
+                onChanged: (v) async {
+                  if (v == null) return;
+                  await L10n.instance.set(v);
+                  if (context.mounted) Navigator.pop(context);
+                },
+              ),
+            const Divider(height: 1),
+            Padding(padding: const EdgeInsets.all(10), child: Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(onPressed: () => Navigator.pop(context),
+                child: Text(tr('Cancel'))),
+            )),
+          ]),
+        ),
+      );
+    }
     return AlertDialog(
       title: Text('${tr('Language')} · ਭਾਸ਼ਾ · भाषा'),
       content: DropdownButtonFormField<String>(
