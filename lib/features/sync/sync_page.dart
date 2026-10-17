@@ -25,6 +25,33 @@ class SyncPage extends StatelessWidget {
         ]),
       );
 
+  // Desktop status strip: compact register summary instead of mobile KPI cards.
+  Widget _windowsSummary(int waiting, int failed, int synced) => Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFFF7F9FB),
+          border: Border.all(color: const Color(0xFFC7D1DB)),
+        ),
+        child: Row(children: [
+          for (final item in [
+            ('Waiting', waiting, AppColors.blue),
+            ('Needs review', failed, AppColors.red),
+            ('Synced', synced, AppColors.green),
+          ])
+            Expanded(child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+              child: Row(children: [
+                Container(width: 5, height: 24, color: item.$3),
+                const SizedBox(width: 10),
+                Text('${item.$2}', style: TextStyle(fontSize: 19,
+                    fontWeight: FontWeight.w700, color: item.$3)),
+                const SizedBox(width: 8),
+                Flexible(child: Text(item.$1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12))),
+              ]),
+            )),
+        ]),
+      );
+
   Widget _header(BuildContext context, String t) => Padding(
         padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
         child: Text(t, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, letterSpacing: 1.1, color: Theme.of(context).colorScheme.onSurfaceVariant)),
@@ -161,13 +188,7 @@ class SyncPage extends StatelessWidget {
             content: LayoutBuilder(builder: (context, constraints) {
               final wide = constraints.maxWidth >= 1160;
               return ListView(padding: const EdgeInsets.all(14), children: [
-                Row(children: [
-                  Expanded(child: KpiCard(label: 'Waiting', value: '${pending.length}', icon: Icons.schedule_rounded, tint: AppColors.blue)),
-                  const SizedBox(width: 9),
-                  Expanded(child: KpiCard(label: 'Needs review', value: '${failed.length}', icon: Icons.error_outline_rounded, tint: AppColors.red)),
-                  const SizedBox(width: 9),
-                  Expanded(child: KpiCard(label: 'Synced', value: '${q.synced.length}', icon: Icons.check_circle_outline_rounded, tint: AppColors.green)),
-                ]),
+                _windowsSummary(pending.length, failed.length, q.synced.length),
                 const SizedBox(height: 12),
                 if (wide)
                   Row(crossAxisAlignment: CrossAxisAlignment.start, children: [

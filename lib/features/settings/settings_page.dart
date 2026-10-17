@@ -533,8 +533,61 @@ class _TotpSetupDialogState extends State<_TotpSetupDialog> {
     }
   }
 
+  Widget _windowsTotp(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.all(24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 780),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(width: double.infinity, padding: const EdgeInsets.all(16),
+            color: const Color(0xFFE2E9EF),
+            child: Text(tr('Set up 2FA'), style: const TextStyle(
+                fontSize: 16, fontWeight: FontWeight.w700))),
+          Padding(padding: const EdgeInsets.all(20), child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('1. Open your authenticator app.\n\n'
+                    '2. Scan the QR code or enter the key manually.\n\n'
+                    '3. Enter the six-digit code to enable 2FA.'),
+                const SizedBox(height: 20),
+                TextField(controller: code, keyboardType: TextInputType.number,
+                  maxLength: 6, decoration: const InputDecoration(
+                    labelText: 'Code from the app', counterText: '', hintText: '000000')),
+              ])),
+              const SizedBox(width: 24),
+              SizedBox(width: 280, child: Column(children: [
+                // Never persist the QR or secret in preview assets or logs.
+                Container(color: Colors.white, padding: const EdgeInsets.all(10),
+                    child: QrImageView(data: widget.otpauth, size: 190)),
+                const SizedBox(height: 10),
+                SelectableText(widget.secret, style: const TextStyle(fontFamily: 'monospace')),
+                TextButton.icon(onPressed: () {
+                  Clipboard.setData(ClipboardData(text: widget.secret));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Key copied.')));
+                }, icon: const Icon(Icons.copy_rounded, size: 16),
+                    label: const Text('Copy key')),
+              ])),
+            ],
+          )),
+          const Divider(height: 1),
+          Padding(padding: const EdgeInsets.all(12), child: Row(
+            mainAxisAlignment: MainAxisAlignment.end, children: [
+              TextButton(onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel')),
+              const SizedBox(width: 8),
+              FilledButton(onPressed: busy ? null : _confirm,
+                  child: Text(busy ? 'Checking…' : 'Turn on 2FA')),
+            ],
+          )),
+        ]),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (isWindowsPlatform) return _windowsTotp(context);
     final scheme = Theme.of(context).colorScheme;
     return AlertDialog(
       title: Text(tr('Set up 2FA')),
