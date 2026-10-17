@@ -7,7 +7,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/company.dart';
@@ -22,7 +21,6 @@ import '../../ui/scan_page.dart';
 import '../../core/offline_queue.dart';
 import '../../ui/widgets.dart';
 import '../../ui/windows_widgets.dart';
-import 'dispatch_pdf.dart';
 import 'destination_field.dart';
 
 /// Destinations that older builds hard-coded for the original sauce factory
