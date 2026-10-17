@@ -120,6 +120,43 @@ class _PendingList extends StatelessWidget {
   final VoidCallback onDecided, onRetry;
   const _PendingList({required this.future, required this.focus, required this.cardKeys, required this.onDecided, required this.onRetry});
 
+  void _inspectWindows(BuildContext context, Map<String, dynamic> a) {
+    showDialog<void>(context: context, builder: (dialogContext) => AlertDialog(
+      title: Text('${a['code'] ?? 'Adjustment'} · Request details'),
+      content: SizedBox(width: 560, child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min, children: [
+          for (final field in [
+            ('Product', a['product_name']),
+            ('Direction', a['adj_type']),
+            ('Quantity (${U.cb})', a['qty_cb']),
+            ('Reason', a['reason']),
+            ('Requested by', a['requested_by_name']),
+            ('Requested on', fmtDateTime(a['requested_at'])),
+          ]) Padding(padding: const EdgeInsets.only(bottom: 10),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              SizedBox(width: 130, child: Text(field.$1,
+                  style: const TextStyle(fontWeight: FontWeight.w700))),
+              Expanded(child: SelectableText('${field.$2 ?? '—'}')),
+            ]),
+          ),
+        ],
+      )),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close')),
+        OutlinedButton(onPressed: () {
+          Navigator.pop(dialogContext);
+          _reject(context, a, onDecided);
+        }, child: Text(tr('Reject'))),
+        FilledButton(onPressed: () {
+          Navigator.pop(dialogContext);
+          _approve(context, a, onDecided);
+        }, child: Text(tr('Approve'))),
+      ],
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<Map<String, dynamic>>>(
@@ -129,6 +166,29 @@ class _PendingList extends StatelessWidget {
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
         final rows = snap.data!;
         if (rows.isEmpty) return const EmptyState('No pending adjustments — all caught up 🎉', icon: Icons.fact_check_rounded);
+        if (isWindowsPlatform) {
+          return ListView(padding: const EdgeInsets.all(12), children: [
+            SectionCard(
+              title: 'Pending approval (${rows.length})',
+              padding: EdgeInsets.zero,
+              child: AppDataTable(
+                columns: ['Code', 'Product', 'Type', U.cb, 'Reason', 'Requested by', 'Requested on', ''],
+                onRowTap: (i) => _inspectWindows(context, rows[i]),
+                rows: [for (final a in rows) [
+                  Text('${a['code']}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                  a['product_name'] ?? '—',
+                  StatusChip('${a['adj_type']}'),
+                  qtyInt(a['qty_cb']),
+                  a['reason'] ?? '—',
+                  a['requested_by_name'] ?? '—',
+                  fmtDateTime(a['requested_at']),
+                  TextButton(onPressed: () => _inspectWindows(context, a),
+                      child: const Text('Review')),
+                ]],
+              ),
+            ),
+          ]);
+        }
         final scheme = Theme.of(context).colorScheme;
         return ListView.builder(
           padding: const EdgeInsets.all(20),
