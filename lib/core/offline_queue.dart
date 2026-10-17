@@ -10,8 +10,8 @@ import 'api.dart';
 /// Where an offline-captured entry is in its life.
 enum SyncState { pending, failed, synced }
 
-/// One data-entry request that could not reach the server. It is kept on this
-/// phone (encrypted storage) until the server accepts it. The entry id is sent
+/// One data-entry request that could not reach the server. It is kept in
+/// platform-protected storage until the server accepts it. The entry id is sent
 /// as the `Idempotency-Key`, so re-sending after a lost reply cannot create a
 /// second record on a server that has the ff-idempotency patch.
 class QueuedEntry {
@@ -88,7 +88,7 @@ class QueuedEntry {
 }
 
 /// Result of [OfflineQueue.submit]: either the server's reply, or `queued`
-/// when the entry was kept on this phone for later sync.
+/// when the entry was kept on this device for later sync.
 class SubmitResult {
   final dynamic json;
   final bool queued;
@@ -99,14 +99,15 @@ class SubmitResult {
 /// Offline entry queue (MAN-13).
 ///
 /// - Supported entries are sent straight away. If the server cannot be reached
-///   (no network, timeout, 502–504) the entry is stored on the phone and sent
+///   (no network, timeout, 502–504) the entry is stored on the device and sent
 ///   automatically when the connection returns (retry loop, app resume, Sync now).
 /// - Entries are sent oldest first, once each thanks to the Idempotency-Key.
 /// - A real rejection from the server (validation, permission, stock rule) marks
 ///   the entry "needs review" — it is never sent again without the user's Retry.
 /// - Entries belong to the account that captured them; another account on the
-///   same phone will not send them.
-/// - Storage uses encrypted storage (Android Keystore-backed).
+///   same device will not send them.
+/// - Storage uses the platform's secure-storage implementation. Android and
+///   Windows protect it using their native user/device security facilities.
 class OfflineQueue extends ChangeNotifier {
   OfflineQueue._();
   static final OfflineQueue instance = OfflineQueue._();
@@ -201,7 +202,7 @@ class OfflineQueue extends ChangeNotifier {
     unawaited(flush());
   }
 
-  /// Called when the account signs out. Waiting entries stay on the phone.
+  /// Called when the account signs out. Waiting entries stay on the device.
   void detach() {
     _timer?.cancel();
     _timer = null;
@@ -242,7 +243,7 @@ class OfflineQueue extends ChangeNotifier {
   }
 
   /// Sends one entry now. When the server cannot be reached the entry is kept
-  /// on this phone. Real rejections from the server are thrown unchanged.
+  /// on this device. Real rejections from the server are thrown unchanged.
   Future<SubmitResult> submit(
     AuthController auth, {
     required String method,
@@ -276,7 +277,7 @@ class OfflineQueue extends ChangeNotifier {
       _items.add(entry);
       if (!await _persist()) {
         _items.remove(entry);
-        throw ApiException(-3, 'This entry could not be saved securely on this phone. Keep the app open and try again when storage is available.');
+        throw ApiException(-3, 'This entry could not be saved securely on this device. Keep the app open and try again when storage is available.');
       }
       notifyListeners();
       return SubmitResult(json: null, queued: true, id: id);

@@ -64,7 +64,7 @@ class ReportPdf {
         List<String>? curCols;
         var curRows = <List<dynamic>>[];
         void flush() {
-          if (curTitle != null) auto.add(PdfSection(title: curTitle!, columns: curCols!, rows: curRows));
+          if (curTitle != null) auto.add(PdfSection(title: curTitle, columns: curCols!, rows: curRows));
           curRows = <List<dynamic>>[];
         }
         for (final r in rows.sublist(firstHead)) {

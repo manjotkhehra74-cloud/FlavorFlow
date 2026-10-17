@@ -6,6 +6,7 @@ import '../../core/api.dart';
 import '../../core/biometric.dart';
 import '../../core/permissions.dart';
 import '../../core/i18n.dart';
+import '../../core/platform_support.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
 import '../../ui/app_shell.dart' show LanguageDialog;
@@ -29,7 +30,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void initState() {
     super.initState();
-    AppPermissions.requestAllOnce(); // one-time upfront permissions
+    AppPermissions.requestNotificationOnce(); // ask for alerts once; other access is contextual
     _checkBio();
     // Prefill company code from the saved SaaS server URL.
     final base = context.read<AuthController>().serverBase ?? '';
@@ -43,7 +44,7 @@ class _LoginPageState extends State<LoginPage> {
     final lock = await BiometricAuth.deviceLockAvailable();
     if (!mounted) return;
     setState(() { _bioAvailable = avail; _bioEnabled = enabled; _deviceLock = lock; });
-    // Prefill the saved email for convenience.
+    // Prefill the saved login ID for convenience.
     if (enabled && _email.text.isEmpty) {
       final saved = await BiometricAuth.savedEmail();
       if (saved != null && mounted) setState(() => _email.text = saved);
@@ -60,7 +61,7 @@ class _LoginPageState extends State<LoginPage> {
     final email = _email.text.trim();
     final password = _password.text;
     if (email.isEmpty || password.isEmpty) {
-      setState(() => _error = 'Enter your email and password.');
+      setState(() => _error = 'Enter your login ID and password.');
       return;
     }
 
@@ -75,7 +76,7 @@ class _LoginPageState extends State<LoginPage> {
             builder: (ctx) => AlertDialog(
               title: Text(tr('Register biometric login?')),
               content: const Text(
-                  'Sign in next time with just your fingerprint / face / device PIN — no password typing.\n\nStored only in this phone\'s encrypted keystore.'),
+                  'Sign in next time with just your fingerprint / face / device PIN — no password typing.\n\nStored only in this device\'s secure storage.'),
               actions: [
                 TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Later')),
                 FilledButton.icon(
@@ -186,7 +187,7 @@ class _LoginPageState extends State<LoginPage> {
     if (!mounted) return;
     if (err != null) {
       // Offline: the server could not be reached. Keep biometrics registered
-      // and open the session saved on this phone instead of resetting it.
+      // and open the session saved on this device instead of resetting it.
       if (auth.lastLoginNetworkError) {
         final uerr = await auth.unlockSavedSession();
         if (uerr == null) {
@@ -207,7 +208,7 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  /// When a login fails because the server is unreachable and this phone holds
+  /// When a login fails because the server is unreachable and this device holds
   /// a saved session, point the user at the offline unlock (the password form
   /// can never work without internet — the server must verify the password).
   String _withOfflineHint(String err) {
@@ -223,7 +224,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   /// MAN-13 "Open without internet": OS fingerprint/PIN prompt → the session
-  /// saved on this phone (encrypted keystore) opens. Screens show the last
+  /// saved on this device (secure storage) opens. Screens show the last
   /// synced data; new entries are queued and sent when the network returns.
   Future<void> _offlineUnlock() async {
     final ok = await BiometricAuth.verifyOnly('Unlock FlavorFlow');
@@ -241,8 +242,10 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final wide = MediaQuery.of(context).size.width >= 920;
+    final desktopPresentation = isWindowsPlatform || wide;
     final auth = context.watch<AuthController>();
     final busy = auth.busy;
+    final legacyDuckDnsSaved = (auth.serverBase ?? '').toLowerCase().contains('flavorflow.duckdns.org');
 
     final brandPanel = Container(
       color: Shell.bg,
@@ -282,7 +285,7 @@ class _LoginPageState extends State<LoginPage> {
                   'A different dashboard for every role',
                   'Packing material consumed automatically per BOM',
                   'Stock adjustments with approval & audit trail',
-                  'Truck loading calculator with PDF docket',
+                  'Dispatch weights calculated with PDF docket',
                   'Every report exports to PDF and Excel',
                 ])
                   Padding(
@@ -314,7 +317,7 @@ class _LoginPageState extends State<LoginPage> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 400),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              if (!wide) ...[
+              if (!desktopPresentation) ...[
                 Row(children: [
                   Container(
                     width: 38, height: 38,
@@ -327,6 +330,26 @@ class _LoginPageState extends State<LoginPage> {
                   Text('FlavorFlow ERP', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: scheme.onSurface)),
                 ]),
                 const SizedBox(height: 26),
+              ],
+              if (isWindowsPlatform && !wide) ...[
+                Row(children: [
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(border: Border.all(color: scheme.outlineVariant), borderRadius: BorderRadius.circular(3)),
+                    clipBehavior: Clip.antiAlias,
+                    child: Image.asset('assets/icon/app_icon.png', fit: BoxFit.cover),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('FlavorFlow ERP', style: TextStyle(color: scheme.onSurface, fontSize: 12, fontWeight: FontWeight.w700)),
+                    Text('WORKSPACE SIGN IN', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9, letterSpacing: 1.0)),
+                  ])),
+                  Icon(Icons.desktop_windows_outlined, size: 16, color: scheme.onSurfaceVariant),
+                ]),
+                const SizedBox(height: 14),
+                Divider(color: scheme.outlineVariant),
+                const SizedBox(height: 12),
               ],
               Row(children: [
                 Expanded(child: Text(tr('Sign in'), style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: scheme.onSurface, letterSpacing: -0.4))),
@@ -364,8 +387,10 @@ class _LoginPageState extends State<LoginPage> {
                 decoration: InputDecoration(
                   labelText: tr('Company code'),
                   hintText: 'e.g. demo-mill · demo-dairy · yourco-1234',
-                  helperText: tr('Given at registration — sets your company server. Leave blank for own server.'),
-                  helperMaxLines: 2,
+                  helperText: legacyDuckDnsSaved
+                      ? tr('Old DuckDNS address saved. Tap Server Address below to use the official HTTPS API.')
+                      : tr('Given at registration — sets your company server. Leave blank for own server.'),
+                  helperMaxLines: 3,
                   prefixIcon: const Icon(Icons.business_rounded, size: 19),
                 ),
                 onChanged: (v) {
@@ -385,8 +410,8 @@ class _LoginPageState extends State<LoginPage> {
               TextField(
                 controller: _email,
                 keyboardType: TextInputType.emailAddress,
-                autofillHints: const [AutofillHints.email],
-                decoration: InputDecoration(labelText: tr('Email'), prefixIcon: const Icon(Icons.alternate_email_rounded, size: 19)),
+                autofillHints: const [AutofillHints.username],
+                decoration: InputDecoration(labelText: tr('Login ID'), prefixIcon: const Icon(Icons.alternate_email_rounded, size: 19)),
                 onSubmitted: (_) => _submit(),
               ),
               const SizedBox(height: 13),
@@ -429,7 +454,7 @@ class _LoginPageState extends State<LoginPage> {
                   label: Text(tr('Register biometric login')),
                 ),
               ],
-              // MAN-13: a session saved on this phone can be opened without
+              // MAN-13: a session saved on this device can be opened without
               // internet — after the OS fingerprint/PIN prompt. With biometrics
               // registered, the automatic prompt above already covers this path.
               if (auth.hasSavedSession && !_bioEnabled && _deviceLock) ...[

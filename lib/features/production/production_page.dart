@@ -7,6 +7,7 @@ import '../../core/industry_pack.dart';
 import '../../core/format.dart';
 import '../../core/i18n.dart';
 import '../../core/item_code.dart';
+import '../../core/platform_support.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
 import '../../core/offline_queue.dart';
@@ -62,6 +63,9 @@ class _ProductionPageState extends State<ProductionPage> {
                 final haystack = '${b['code'] ?? ''} ${b['product_name'] ?? ''} ${b['item_code'] ?? ''}'.toLowerCase();
                 return haystack.contains(_query.trim().toLowerCase());
               }).toList();
+        if (isWindowsPlatform) {
+          return _buildWindowsRegister(rows: rows, visibleRows: visibleRows, auth: auth, canExecute: canExecute);
+        }
         return ListView(padding: const EdgeInsets.all(20), children: [
           _ProductionHealthCard(rows: rows),
           const SizedBox(height: 14),
@@ -144,6 +148,121 @@ class _ProductionPageState extends State<ProductionPage> {
         ]);
       },
     );
+  }
+
+  Widget _buildWindowsRegister({
+    required List<Map<String, dynamic>> rows,
+    required List<Map<String, dynamic>> visibleRows,
+    required AuthController auth,
+    required bool canExecute,
+  }) {
+    final canManage = auth.can('production.manage');
+    final filters = Wrap(spacing: 6, runSpacing: 6, children: [
+      for (final status in ['', 'PLANNED', 'IN_PROGRESS', 'COMPLETED'])
+        ChoiceChip(
+          label: Text(status.isEmpty ? tr('All') : tr(status.replaceAll('_', ' ').toLowerCase())),
+          selected: _status == status,
+          onSelected: (_) => setState(() { _status = status; _future = _load(); }),
+        ),
+    ]);
+    final search = TextField(
+      onChanged: (value) => setState(() => _query = value),
+      decoration: InputDecoration(
+        prefixIcon: const Icon(Icons.search_rounded, size: 18),
+        hintText: U.ize('Search batch or product'),
+        suffixIcon: _query.isEmpty ? null : IconButton(icon: const Icon(Icons.clear_rounded, size: 17), onPressed: () => setState(() => _query = '')),
+      ),
+    );
+    final createButton = FilledButton.icon(
+      onPressed: () async {
+        final saved = await showFastDialog<bool>(context, (_) => const BatchFormDialog());
+        if (saved == true) _reload();
+      },
+      icon: const Icon(Icons.add_rounded, size: 17),
+      label: Text(U.ize(tr('New Batch'))),
+    );
+    final batchTable = SectionCard(
+      title: U.ize('Batch Register'),
+      trailing: Text('${visibleRows.length} ${tr('of')} ${rows.length}', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+      padding: EdgeInsets.zero,
+      child: visibleRows.isEmpty
+          ? EmptyState(U.ize(_query.trim().isEmpty ? 'No batches yet' : 'No matching batches'))
+          : AppDataTable(
+              columns: [
+                'Batch', 'Product', 'Planned ${U.cb}', 'Produced ${U.cb}',
+                if (CompanyProfile.usesTrays) U.tray,
+                'Status', 'Mfg. date', 'Actions',
+              ],
+              rows: [
+                for (final batch in visibleRows)
+                  [
+                    Text('${batch['code'] ?? '—'}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                    Text('${batch['product_name'] ?? '—'}', maxLines: 1, overflow: TextOverflow.ellipsis),
+                    qtyInt(batch['planned_cb']),
+                    qtyInt(batch['produced_cb']),
+                    if (CompanyProfile.usesTrays) qtyInt(batch['produced_trays']),
+                    StatusChip('${batch['status'] ?? ''}'),
+                    fmtDate(batch['planned_date']),
+                    Wrap(spacing: 0, children: [
+                      IconButton(
+                        tooltip: tr('View'),
+                        icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                        onPressed: () async {
+                          await context.push('/production/batches/${batch['id']}');
+                          _reload();
+                        },
+                      ),
+                      if (canExecute && batch['status'] == 'PLANNED')
+                        IconButton(tooltip: tr('Start'), icon: const Icon(Icons.play_arrow_rounded, size: 17), onPressed: () => _start(context, batch)),
+                      if (canExecute && batch['status'] == 'IN_PROGRESS')
+                        IconButton(tooltip: tr('Complete'), icon: const Icon(Icons.check_circle_outline_rounded, size: 17), onPressed: () => _complete(context, batch)),
+                      if (canManage)
+                        PopupMenuButton<String>(
+                          tooltip: U.ize('More actions'),
+                          onSelected: (value) {
+                            if (value == 'edit') {
+                              showFastDialog<bool>(context, (_) => BatchFormDialog(batch: batch)).then((saved) { if (saved == true) _reload(); });
+                            }
+                            if (value == 'delete') _delete(context, batch);
+                          },
+                          itemBuilder: (_) => [
+                            PopupMenuItem(value: 'edit', child: Text(U.ize('Edit batch'))),
+                            PopupMenuItem(value: 'delete', child: Text(U.ize('Delete batch'))),
+                          ],
+                          child: const Padding(padding: EdgeInsets.all(7), child: Icon(Icons.more_horiz_rounded, size: 17)),
+                        ),
+                    ]),
+                  ],
+              ],
+            ),
+    );
+
+    return LayoutBuilder(builder: (context, constraints) {
+      return ListView(
+        padding: EdgeInsets.all(constraints.maxWidth < 640 ? 10 : 14),
+        children: [
+          _WindowsProductionHeading(totalBatches: rows.length, onRefresh: _reload),
+          const SizedBox(height: 10),
+          _WindowsProductionMetrics(rows: rows),
+          const SizedBox(height: 10),
+          if (constraints.maxWidth >= 960)
+            Row(children: [
+              Expanded(flex: 6, child: filters),
+              const SizedBox(width: 10),
+              Expanded(flex: 3, child: search),
+              if (canManage) ...[const SizedBox(width: 10), createButton],
+            ])
+          else
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              filters,
+              const SizedBox(height: 8),
+              Row(children: [Expanded(child: search), if (canManage) ...[const SizedBox(width: 8), createButton]]),
+            ]),
+          const SizedBox(height: 10),
+          batchTable,
+        ],
+      );
+    });
   }
 
   Future<void> _start(BuildContext context, Map<String, dynamic> b) async {
@@ -259,6 +378,93 @@ int _productionInt(Object? value) {
 num _productionNum(Object? value) {
   if (value is num) return value;
   return num.tryParse('${value ?? ''}') ?? 0;
+}
+
+class _WindowsProductionHeading extends StatelessWidget {
+  final int totalBatches;
+  final VoidCallback onRefresh;
+  const _WindowsProductionHeading({required this.totalBatches, required this.onRefresh});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        child: LayoutBuilder(builder: (context, constraints) {
+          final identity = Row(children: [
+            Container(width: 4, height: 38, color: AppBrand.blue),
+            const SizedBox(width: 10),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Production Register', style: TextStyle(color: scheme.onSurface, fontSize: 18, fontWeight: FontWeight.w700)),
+              Text('$totalBatches batches · plan, execute and review', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5)),
+            ])),
+          ]);
+          final refresh = OutlinedButton.icon(onPressed: onRefresh, icon: const Icon(Icons.refresh_rounded, size: 16), label: Text(tr('Refresh')));
+          if (constraints.maxWidth < 520) {
+            return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [identity, const SizedBox(height: 8), Align(alignment: Alignment.centerRight, child: refresh)]);
+          }
+          return Row(children: [Expanded(child: identity), const SizedBox(width: 10), refresh]);
+        }),
+      ),
+    );
+  }
+}
+
+class _WindowsProductionMetrics extends StatelessWidget {
+  final List<Map<String, dynamic>> rows;
+  const _WindowsProductionMetrics({required this.rows});
+
+  @override
+  Widget build(BuildContext context) {
+    final planned = rows.fold<int>(0, (sum, row) => sum + _productionInt(row['planned_cb']));
+    final produced = rows.fold<int>(0, (sum, row) => sum + _productionInt(row['produced_cb']));
+    final inProgress = rows.where((row) => '${row['status']}'.toUpperCase() == 'IN_PROGRESS').length;
+    final completed = rows.where((row) => '${row['status']}'.toUpperCase() == 'COMPLETED').length;
+    final metrics = <(String, String, IconData, Color)>[
+      ('Planned ${U.cb}', qtyInt(planned), Icons.event_note_outlined, AppColors.blue),
+      ('Produced ${U.cb}', qtyInt(produced), Icons.factory_outlined, AppColors.teal),
+      ('In progress', '$inProgress', Icons.pending_actions_rounded, AppColors.orange),
+      ('Completed', '$completed', Icons.check_circle_outline_rounded, AppColors.green),
+    ];
+    return LayoutBuilder(builder: (context, constraints) {
+      final columns = constraints.maxWidth >= 900 ? metrics.length : constraints.maxWidth >= 540 ? 2 : 1;
+      const gap = 8.0;
+      final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+      return Wrap(spacing: gap, runSpacing: gap, children: [
+        for (final metric in metrics)
+          SizedBox(width: width, height: 62, child: _WindowsProductionMetric(label: metric.$1, value: metric.$2, icon: metric.$3, tint: metric.$4)),
+      ]);
+    });
+  }
+}
+
+class _WindowsProductionMetric extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color tint;
+  const _WindowsProductionMetric({required this.label, required this.value, required this.icon, required this.tint});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(color: scheme.surface, border: Border.all(color: scheme.outlineVariant), borderRadius: BorderRadius.circular(3)),
+      child: Row(children: [
+        Container(width: 3, height: double.infinity, color: tint),
+        const SizedBox(width: 10),
+        Icon(icon, size: 19, color: tint),
+        const SizedBox(width: 8),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w600)),
+          Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 17, fontWeight: FontWeight.w700, fontFeatures: const [FontFeature.tabularFigures()])),
+        ])),
+        const SizedBox(width: 8),
+      ]),
+    );
+  }
 }
 
 class _ProductionHealthCard extends StatelessWidget {
@@ -645,45 +851,67 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final desktopForm = isWindowsPlatform;
+    final codeField = TextField(
+      controller: code,
+      textCapitalization: TextCapitalization.characters,
+      decoration: InputDecoration(
+        labelText: U.ize('Batch code'),
+        hintText: autoCode.isEmpty ? 'Leave blank for auto code' : 'Leave blank for auto ($autoCode)',
+        helperText: editing
+            ? 'Same code is allowed again on a different date'
+            : (autoCode.isEmpty ? 'You may type your own code, e.g. SS-740-A' : 'Auto code would be $autoCode — or type your own, e.g. SS-740-A'),
+      ),
+    );
+    final productField = completed
+        ? InputDecorator(
+            decoration: InputDecoration(labelText: tr('Product')),
+            child: Text('${widget.batch!['product_name']}', style: const TextStyle(fontWeight: FontWeight.w600)),
+          )
+        : DropdownButtonFormField<int>(
+            key: ValueKey('prod-$productId'),
+            initialValue: productId,
+            decoration: InputDecoration(labelText: tr('Product *'), suffixIcon: ScanPickButton(rows: products, onPicked: (p) => setState(() => productId = p['id'] as int))),
+            isExpanded: true,
+            items: [for (final p in products) DropdownMenuItem(value: p['id'] as int, child: Text(ItemCode.pick(p), overflow: TextOverflow.ellipsis))],
+            onChanged: (v) => setState(() {
+              productId = v;
+              _followTraySize();
+            }),
+          );
+    final plannedDateField = InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () async {
+        final d = await showDatePicker(context: context, initialDate: planned, firstDate: DateTime(DateTime.now().year, DateTime.now().month - 1, 1), lastDate: DateTime.now().add(const Duration(days: 365)));
+        if (d != null) setState(() => planned = d);
+      },
+      child: InputDecorator(
+        decoration: InputDecoration(labelText: tr('Planned date *')),
+        child: Text(fmtDateWithDay(_plannedYmd)),
+      ),
+    );
+    final remarksField = TextField(controller: remarks, decoration: InputDecoration(labelText: tr('Remarks (optional)')));
     return AlertDialog(
       title: Text(U.ize(editing ? 'Edit Batch ${widget.batch!['code']}' : 'Plan Production Batch')),
       content: SizedBox(
-        width: 440,
+        width: desktopForm ? 760 : 440,
         child: products.isEmpty
             ? const SizedBox(height: 90, child: Center(child: CircularProgressIndicator()))
             // Scrollable: on phones a tall dialog can overlap its own
             // buttons — scrolling keeps fields inside while the IME resizes the window.
             : SingleChildScrollView(
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
-                TextField(
-                  controller: code,
-                  textCapitalization: TextCapitalization.characters,
-                  decoration: InputDecoration(
-                    labelText: U.ize('Batch code'),
-                    hintText: autoCode.isEmpty ? 'Leave blank for auto code' : 'Leave blank for auto ($autoCode)',
-                    helperText: editing
-                        ? 'Same code is allowed again on a different date'
-                        : (autoCode.isEmpty ? 'You may type your own code, e.g. SS-740-A' : 'Auto code would be $autoCode — or type your own, e.g. SS-740-A'),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                if (completed)
-                  InputDecorator(
-                    decoration: InputDecoration(labelText: tr('Product')),
-                    child: Text('${widget.batch!['product_name']}', style: const TextStyle(fontWeight: FontWeight.w600)),
-                  )
-                else
-                  DropdownButtonFormField<int>(
-                    key: ValueKey('prod-$productId'),
-                    initialValue: productId,
-                    decoration: InputDecoration(labelText: tr('Product *'), suffixIcon: ScanPickButton(rows: products, onPicked: (p) => setState(() => productId = p['id'] as int))),
-                    isExpanded: true,
-                    items: [for (final p in products) DropdownMenuItem(value: p['id'] as int, child: Text(ItemCode.pick(p), overflow: TextOverflow.ellipsis))],
-                    onChanged: (v) => setState(() {
-                          productId = v;
-                          _followTraySize();
-                        }),
-                  ),
+                if (desktopForm)
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(child: codeField),
+                    const SizedBox(width: 12),
+                    Expanded(child: productField),
+                  ])
+                else ...[
+                  codeField,
+                  const SizedBox(height: 12),
+                  productField,
+                ],
                 const SizedBox(height: 12),
                 if (!completed) ...[
                   // Plan in CB or in Trays (fixed sizes 610 / 740 / 1.0 / 1.3).
@@ -751,23 +979,17 @@ class _BatchFormDialogState extends State<BatchFormDialog> {
                     ),
                   ),
                 const SizedBox(height: 4),
-                Row(children: [
-                  Expanded(
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: () async {
-                        final d = await showDatePicker(context: context, initialDate: planned, firstDate: DateTime(DateTime.now().year, DateTime.now().month - 1, 1), lastDate: DateTime.now().add(const Duration(days: 365)));
-                        if (d != null) setState(() => planned = d);
-                      },
-                      child: InputDecorator(
-                        decoration: InputDecoration(labelText: tr('Planned date *')),
-                        child: Text(fmtDateWithDay(_plannedYmd)),
-                      ),
-                    ),
-                  ),
-                ]),
-                const SizedBox(height: 12),
-                TextField(controller: remarks, decoration: InputDecoration(labelText: tr('Remarks (optional)'))),
+                if (desktopForm)
+                  Row(children: [
+                    Expanded(child: plannedDateField),
+                    const SizedBox(width: 12),
+                    Expanded(child: remarksField),
+                  ])
+                else ...[
+                  Row(children: [Expanded(child: plannedDateField)]),
+                  const SizedBox(height: 12),
+                  remarksField,
+                ],
               ])),
       ),
       actions: [

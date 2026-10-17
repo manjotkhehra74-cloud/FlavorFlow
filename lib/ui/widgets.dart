@@ -4,6 +4,7 @@ import '../core/i18n.dart';
 
 import '../core/format.dart';
 import '../core/theme.dart';
+import '../core/platform_support.dart';
 
 /// Icon registry — server sends icon names, client maps to Material icons.
 IconData iconFor(String? name) {
@@ -171,23 +172,28 @@ class SectionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final windows = isWindowsPlatform;
     return Card(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
         if (title != null) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(17, 14, 13, 13),
-            child: LayoutBuilder(builder: (context, constraints) {
+          Container(
+            color: windows ? scheme.surfaceContainerHigh : null,
+            child: Padding(
+              padding: windows ? const EdgeInsets.fromLTRB(12, 8, 10, 8) : const EdgeInsets.fromLTRB(17, 14, 13, 13),
+              child: LayoutBuilder(builder: (context, constraints) {
               Widget titleLine() => Row(children: [
                     Container(
-                      width: 4,
-                      height: 20,
-                      decoration: BoxDecoration(gradient: AppBrand.gradient, borderRadius: BorderRadius.circular(8)),
+                      width: windows ? 3 : 4,
+                      height: windows ? 16 : 20,
+                      decoration: windows
+                          ? BoxDecoration(color: AppBrand.blue, borderRadius: BorderRadius.circular(1))
+                          : BoxDecoration(gradient: AppBrand.gradient, borderRadius: BorderRadius.circular(8)),
                     ),
-                    const SizedBox(width: 10),
+                    SizedBox(width: windows ? 8 : 10),
                     Expanded(
                       child: Text(
                         tr(title!),
-                        style: const TextStyle(fontSize: 13.8, fontWeight: FontWeight.w700, letterSpacing: -0.15),
+                        style: TextStyle(fontSize: windows ? 12.5 : 13.8, fontWeight: FontWeight.w700, letterSpacing: windows ? 0 : -0.15),
                       ),
                     ),
                   ]);
@@ -208,10 +214,11 @@ class SectionCard extends StatelessWidget {
                 ],
               ]);
             }),
+            ),
           ),
           Divider(height: 1, color: scheme.outlineVariant),
         ],
-        Padding(padding: padding, child: child),
+        Padding(padding: windows ? const EdgeInsets.all(12) : padding, child: child),
       ]),
     );
   }
@@ -330,7 +337,24 @@ class _AppDataTableState extends State<AppDataTable> {
           ],
         ),
       ),
-      if (widget.rows.length > visible)
+      if (isWindowsPlatform)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 6, 8, 2),
+          child: Row(children: [
+            Text(
+              '${tr('Showing')} $visible ${tr('of')} ${widget.rows.length} ${tr('rows')}',
+              style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant),
+            ),
+            const Spacer(),
+            if (widget.rows.length > visible)
+              OutlinedButton.icon(
+                onPressed: () => setState(() => _shown += widget.pageSize),
+                icon: const Icon(Icons.expand_more_rounded, size: 16),
+                label: Text('${tr('Load next')} ${widget.pageSize < widget.rows.length - visible ? widget.pageSize : widget.rows.length - visible}'),
+              ),
+          ]),
+        )
+      else if (widget.rows.length > visible)
         Padding(
           padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
           child: TextButton.icon(

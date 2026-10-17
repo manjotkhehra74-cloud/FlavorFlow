@@ -6,7 +6,9 @@ import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../core/i18n.dart';
 import '../../state/auth.dart';
+import '../../core/platform_support.dart';
 import '../../ui/widgets.dart';
+import '../../ui/windows_widgets.dart';
 
 /// Pending Approval screen — complete authorization workflow:
 /// approve / reject (with mandatory reason), remarks, full decision history
@@ -28,9 +30,21 @@ class _ApprovalsPageState extends State<ApprovalsPage> with SingleTickerProvider
   @override
   void initState() {
     super.initState();
+    _tab.addListener(_onTabChanged);
     _focus = int.tryParse(widget.focusId ?? '');
     _load();
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToFocus());
+  }
+
+  void _onTabChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _tab.removeListener(_onTabChanged);
+    _tab.dispose();
+    super.dispose();
   }
 
   void _load() {
@@ -51,6 +65,32 @@ class _ApprovalsPageState extends State<ApprovalsPage> with SingleTickerProvider
 
   @override
   Widget build(BuildContext context) {
+    final tabContent = TabBarView(controller: _tab, children: [
+      _PendingList(
+        future: _pending,
+        focus: _focus,
+        cardKeys: _cardKeys,
+        onDecided: _reload,
+        onRetry: _reload,
+      ),
+      _HistoryList(future: _history, onRetry: _reload),
+    ]);
+    if (isWindowsPlatform) {
+      return WindowsModuleWorkspace(
+        title: 'Stock Adjustments',
+        subtitle: 'Review requests and inspect decisions',
+        tabs: const [
+          WindowsModuleTab('Pending Approval', Icons.pending_actions_outlined),
+          WindowsModuleTab('Approval History', Icons.history_rounded),
+        ],
+        selectedIndex: _tab.index,
+        onSelect: (index) => _tab.index = index,
+        commandBar: const WindowsCommandStrip(children: [
+          Text('Approval decisions are recorded in the audit trail.'),
+        ]),
+        content: tabContent,
+      );
+    }
     return Column(children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
@@ -68,18 +108,7 @@ class _ApprovalsPageState extends State<ApprovalsPage> with SingleTickerProvider
           ),
         ]),
       ),
-      Expanded(
-        child: TabBarView(controller: _tab, children: [
-          _PendingList(
-            future: _pending,
-            focus: _focus,
-            cardKeys: _cardKeys,
-            onDecided: _reload,
-            onRetry: _reload,
-          ),
-          _HistoryList(future: _history, onRetry: _reload),
-        ]),
-      ),
+      Expanded(child: tabContent),
     ]);
   }
 }
@@ -91,6 +120,43 @@ class _PendingList extends StatelessWidget {
   final VoidCallback onDecided, onRetry;
   const _PendingList({required this.future, required this.focus, required this.cardKeys, required this.onDecided, required this.onRetry});
 
+  void _inspectWindows(BuildContext context, Map<String, dynamic> a) {
+    showDialog<void>(context: context, builder: (dialogContext) => AlertDialog(
+      title: Text('${a['code'] ?? 'Adjustment'} · Request details'),
+      content: SizedBox(width: 560, child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min, children: [
+          for (final field in [
+            ('Product', a['product_name']),
+            ('Direction', a['adj_type']),
+            ('Quantity (${U.cb})', a['qty_cb']),
+            ('Reason', a['reason']),
+            ('Requested by', a['requested_by_name']),
+            ('Requested on', fmtDateTime(a['requested_at'])),
+          ]) Padding(padding: const EdgeInsets.only(bottom: 10),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              SizedBox(width: 130, child: Text(field.$1,
+                  style: const TextStyle(fontWeight: FontWeight.w700))),
+              Expanded(child: SelectableText('${field.$2 ?? '—'}')),
+            ]),
+          ),
+        ],
+      )),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close')),
+        OutlinedButton(onPressed: () {
+          Navigator.pop(dialogContext);
+          _reject(context, a, onDecided);
+        }, child: Text(tr('Reject'))),
+        FilledButton(onPressed: () {
+          Navigator.pop(dialogContext);
+          _approve(context, a, onDecided);
+        }, child: Text(tr('Approve'))),
+      ],
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<Map<String, dynamic>>>(
@@ -100,6 +166,29 @@ class _PendingList extends StatelessWidget {
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
         final rows = snap.data!;
         if (rows.isEmpty) return const EmptyState('No pending adjustments — all caught up 🎉', icon: Icons.fact_check_rounded);
+        if (isWindowsPlatform) {
+          return ListView(padding: const EdgeInsets.all(12), children: [
+            SectionCard(
+              title: 'Pending approval (${rows.length})',
+              padding: EdgeInsets.zero,
+              child: AppDataTable(
+                columns: ['Code', 'Product', 'Type', U.cb, 'Reason', 'Requested by', 'Requested on', ''],
+                onRowTap: (i) => _inspectWindows(context, rows[i]),
+                rows: [for (final a in rows) [
+                  Text('${a['code']}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                  a['product_name'] ?? '—',
+                  StatusChip('${a['adj_type']}'),
+                  qtyInt(a['qty_cb']),
+                  a['reason'] ?? '—',
+                  a['requested_by_name'] ?? '—',
+                  fmtDateTime(a['requested_at']),
+                  TextButton(onPressed: () => _inspectWindows(context, a),
+                      child: const Text('Review')),
+                ]],
+              ),
+            ),
+          ]);
+        }
         final scheme = Theme.of(context).colorScheme;
         return ListView.builder(
           padding: const EdgeInsets.all(20),
@@ -271,6 +360,39 @@ class _HistoryList extends StatelessWidget {
   final VoidCallback onRetry;
   const _HistoryList({required this.future, required this.onRetry});
 
+  void _inspectWindows(BuildContext context, Map<String, dynamic> a) {
+    showDialog<void>(context: context, builder: (ctx) => AlertDialog(
+      title: Text('${a['code'] ?? 'Adjustment'} · Decision history'),
+      content: SizedBox(width: 600, child: SingleChildScrollView(
+        child: Column(mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start, children: [
+            for (final field in [
+              ('Product', a['product_name']),
+              ('Type', a['adj_type']),
+              ('Quantity (${U.cb})', a['qty_cb']),
+              ('Reason', a['reason']),
+              ('Decision', a['status']),
+              ('Approved by', a['approved_by_name']),
+              ('Approved on', fmtDateTime(a['approved_at'])),
+              ('Rejected by', a['rejected_by_name']),
+              ('Rejected on', fmtDateTime(a['rejected_at'])),
+              ('Reject reason', a['reject_reason']),
+              ('Remarks', a['approval_remarks']),
+            ]) Padding(padding: const EdgeInsets.only(bottom: 9),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                SizedBox(width: 145, child: Text(field.$1,
+                  style: const TextStyle(fontWeight: FontWeight.w700))),
+                Expanded(child: SelectableText('${field.$2 ?? '—'}')),
+              ]),
+            ),
+          ],
+        ),
+      )),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx),
+        child: const Text('Close'))],
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<Map<String, dynamic>>>(
@@ -280,11 +402,12 @@ class _HistoryList extends StatelessWidget {
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
         final rows = snap.data!;
         if (rows.isEmpty) return const EmptyState('No decisions recorded yet');
-        return ListView(padding: const EdgeInsets.all(20), children: [
+        return ListView(padding: EdgeInsets.all(isWindowsPlatform ? 12 : 20), children: [
           SectionCard(
             title: 'Decision History & Audit Trail',
             child: AppDataTable(
               columns: ['Code', 'Product', 'Type', U.cb, 'Reason', 'Decision', 'Approved By', 'Approved Date', 'Rejected By', 'Rejected Date', 'Reject Reason', 'Remarks'],
+              onRowTap: isWindowsPlatform ? (i) => _inspectWindows(context, rows[i]) : null,
               rows: [
                 for (final a in rows)
                   [

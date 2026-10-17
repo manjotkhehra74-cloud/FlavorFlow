@@ -8,8 +8,8 @@
 #     PUT  /api/packing/loss/cell       → { key, value }  manual edit
 #     POST /api/packing/loss/close      → archive month, roll closing→opening
 #   Computation:
-#     Actual  = Σ produced_cb of COMPLETED batches in the month (per product)
-#     CB      = BOM qty/cb × produced CB (+ qty/tray × trays) per material
+#     Actual  = manual act: override or Σ produced_cb of COMPLETED batches
+#     CB      = BOM qty/cb × displayed Actual (+ qty/tray × recorded trays)
 #     Extra   = manual CONSUMED txns in month (batch NULL); shared materials
 #               split by expected usage; every cell overridable
 #     Loss%   = Extra ÷ CB × 100 · %Adherence = (Opening+Actual)/Projection×100
@@ -76,18 +76,20 @@ function lossBuild(ym) {
   ).all(ym)) dispAgg[r.pid] = r.cb;
 
   const top = [];
-  let tProj = 0, tOpen = 0, tAct = 0;
+  const actualByProduct = {}; // lossfix6-cascade
+  let tProj = 0, tOpen = 0, tAct = 0, tClose = 0;
   for (const p of products) {
     const actual = Math.round(g('act:' + p.id, (prodAgg[p.id] || {}).cb || 0));
+    actualByProduct[p.id] = actual;
     const projection = g('proj:' + p.id, 0);
     const opening = g('open:' + p.id, 0);
     const oa = opening + actual;
     const adherence = projection > 0 ? Math.round(oa / projection * 1000) / 10 : 0;
     const closing = g('close:' + p.id, Math.max(0, oa - (dispAgg[p.id] || 0)));
     top.push({ productId: p.id, name: p.name, projection, opening, actual, openingActual: oa, adherence, closing });
-    tProj += projection; tOpen += opening; tAct += actual;
+    tProj += projection; tOpen += opening; tAct += actual; tClose += Number(closing) || 0;
   }
-  top.push({ productId: 0, name: 'Total', projection: tProj, opening: tOpen, actual: tAct, openingActual: tOpen + tAct, adherence: tProj > 0 ? Math.round((tOpen + tAct) / tProj * 1000) / 10 : 0, closing: '' });
+  top.push({ productId: 0, name: 'Total', projection: tProj, opening: tOpen, actual: tAct, openingActual: tOpen + tAct, adherence: tProj > 0 ? Math.round((tOpen + tAct) / tProj * 1000) / 10 : 0, closing: tClose });
 
   // expected material usage per product (BOM × production)
   const bom = db.prepare(
@@ -96,7 +98,9 @@ function lossBuild(ym) {
   const expByMat = {}, expByPidMat = {};
   for (const l of bom) {
     const a = prodAgg[l.pid] || { cb: 0, tr: 0 };
-    const exp = (a.cb || 0) * l.qc + (a.tr || 0) * l.qt;
+    // Use the same actual CB shown in Production & Stock, including an admin's
+    // manual override. Otherwise the top Actual changes while material CB stays stale.
+    const exp = (actualByProduct[l.pid] ?? (a.cb || 0)) * l.qc + (a.tr || 0) * l.qt;
     expByPidMat[l.pid + ':' + l.mid] = exp;
     expByMat[l.mid] = (expByMat[l.mid] || 0) + exp;
   }
@@ -123,7 +127,7 @@ function lossBuild(ym) {
     }
     sections.push({ productId: p.id, name: p.name, rows });
   }
-  return { ym, top, sections };
+  return { ym, top, sections }; // lossfix6: Actual-to-BOM cascade and Closing total
 }
 
 router.get('/loss', requirePerm('packing.view'), (req, res) => {
@@ -144,6 +148,14 @@ router.put('/loss/cell', requirePerm('packing.manage'), (req, res) => {
   if (!/^(proj|open|act|close|cb|extra):[0-9]+(:[0-9]+)?$/.test(key) || isNaN(value)) throw bad('Bad cell.');
   const ym = lossOpenMonth();
   db.prepare('INSERT INTO loss_values (ym, key, value) VALUES (?,?,?) ON CONFLICT(ym, key) DO UPDATE SET value = excluded.value').run(ym, key, value);
+  // lossfix7: Actual edits clear product CB overrides.
+  // Actual production is the driver for this product's BOM-based material CB.
+  const actMatch = /^act:([0-9]+)$/.exec(key);
+  if (actMatch) {
+    const pid = Number(actMatch[1]);
+    db.prepare('DELETE FROM loss_values WHERE ym = ? AND (key LIKE ? OR key LIKE ?)')
+      .run(ym, 'cb:' + pid + ':%', 'base:cb:' + pid + ':%');
+  }
   audit(db, req.user, 'UPDATE', 'packing', 0, 'Loss sheet ' + ym + ': ' + key + ' = ' + value);
   res.json({ ok: true });
 });

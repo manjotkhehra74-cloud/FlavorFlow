@@ -1,26 +1,26 @@
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-/// The last signed-in session, kept in the phone's encrypted keystore so the
-/// app can be OPENED without internet (MAN-13 offline mode).
+/// The last signed-in session, kept in platform-protected secure storage so
+/// the app can be opened without internet (MAN-13 offline mode).
 ///
 /// The bundle holds the bearer token plus the `/auth/me` payload (user, role,
 /// permissions, nav, currency). It is written on every successful login and
 /// cleared on logout. It is NEVER restored silently: the login screen opens
 /// it only after the OS fingerprint/face/device-PIN prompt passes — the same
 /// gate as biometric login (`lib/core/biometric.dart` already stores the
-/// password in this same keystore for quick login).
+/// password in platform-protected storage for quick login).
 ///
-/// Storage is the Android Keystore-backed encrypted SharedPreferences — the
-/// same protection the biometric credentials already use.
+/// `AndroidOptions` below configures Android only; other native targets use
+/// their platform-specific secure-storage implementation.
 class OfflineSession {
   static const _storage = FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
   );
   static const _kBundle = 'ff_session_bundle_v1';
 
-  /// Persist the session of a successful login (mobile only — web keeps its
-  /// token in SharedPreferences already).
+  /// Persist the session of a successful native login (web keeps its token in
+  /// SharedPreferences already).
   static Future<void> save(String token, Map<String, dynamic> sessionJson) async {
     try {
       await _storage.write(
@@ -31,10 +31,10 @@ class OfflineSession {
           'savedAt': DateTime.now().toIso8601String(),
         }),
       );
-    } catch (_) {/* keystore unavailable — offline unlock just won't be offered */}
+    } catch (_) {/* secure storage unavailable — offline unlock won't be offered */}
   }
 
-  /// The saved bundle as `{'token': …, 'session': …}`, or null when this phone
+  /// The saved bundle as `{'token': …, 'session': …}`, or null when this device
   /// has no saved session (or the stored copy is unreadable).
   static Future<Map<String, dynamic>?> load() async {
     try {

@@ -5,12 +5,15 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/api.dart';
+import '../../core/company.dart';
 import '../../core/download.dart';
 import '../../core/format.dart';
 import '../../core/offline_queue.dart';
+import '../../core/platform_support.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
+import '../../ui/windows_widgets.dart';
 
 const _localLabourKey = 'flavorflow_productivity_local_labour';
 const _manualSkuChoice = '__manual_sku__';
@@ -809,7 +812,7 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
       final path = kind == 'labour' ? '/labour/daily.xlsx' : '/reports/productivity.xlsx';
       final bytes = await context.read<AuthController>().api.getBytes('$path?${_query()}');
       final date = DateTime.now().toIso8601String().substring(0, 10);
-      downloadBytes('flavorflow-${kind == 'labour' ? 'daily-labour' : 'productivity'}-$date.xlsx', bytes,
+      await downloadBytes('flavorflow-${kind == 'labour' ? 'daily-labour' : 'productivity'}-$date.xlsx', bytes,
           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       if (mounted) showOk(context, 'Excel report downloaded.');
     } catch (e) {
@@ -890,6 +893,47 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
         final data = snap.data!;
         final columns = (data['columns'] as List? ?? const ['SKU', 'LINE', 'MANPOWER', 'PROD. IN KG', 'PROD. IN CB', 'PRODUCTIVITY IN KG/HEAD', 'PRODUCTIVITY IN CB/HEAD']).map((v) => '$v').toList();
         final rows = ((data['rows'] as List?) ?? const []).map((r) => (r as List).toList()).toList();
+        if (isWindowsPlatform) {
+          final totals = (data['totals'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+          return ListView(padding: const EdgeInsets.all(12), children: [
+            _reconciliationBanner(context, data),
+            WindowsCommandStrip(children: [
+              Text('Selected period: ${fmtDate(_fromYmd)} — ${fmtDate(_toYmd)}',
+                style: const TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(width: 12),
+              OutlinedButton.icon(onPressed: _exporting ? null : () => _export('productivity'),
+                icon: const Icon(Icons.download_outlined, size: 16), label: const Text('Export Excel')),
+            ]),
+            const SizedBox(height: 10),
+            _dateFilters(context),
+            const SizedBox(height: 12),
+            Container(
+              decoration: BoxDecoration(color: const Color(0xFFF7F9FB),
+                border: Border.all(color: const Color(0xFFC7D1DB))),
+              child: Wrap(spacing: 0, children: [
+                for (final item in [
+                  ('Production ${U.cb}', totals['cb'] ?? totals['producedCb']),
+                  ('Production KG', totals['kg'] ?? totals['netKg']),
+                  ('Manpower', totals['manpower']),
+                  ('KG / Head', totals['kgPerHead']),
+                  ('${U.cb} / Head', totals['cbPerHead']),
+                ]) SizedBox(width: 168, child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(item.$1, style: const TextStyle(fontSize: 11)),
+                    Text(qty(item.$2), style: const TextStyle(fontSize: 16,
+                      fontWeight: FontWeight.w700)),
+                  ]),
+                )),
+              ]),
+            ),
+            const SizedBox(height: 12),
+            SectionCard(title: 'Productivity — selected period', padding: EdgeInsets.zero,
+              child: rows.isEmpty
+                ? const EmptyState('No completed production or labour entries for this period.')
+                : AppDataTable(columns: columns, rows: rows)),
+          ]);
+        }
         return ListView(padding: const EdgeInsets.all(18), children: [
           _hero(context, data),
           _reconciliationBanner(context, data),
@@ -941,6 +985,36 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
         final data = snap.data ?? const <String, dynamic>{};
         final totals = (data['periodTotals'] as Map?)?.cast<String, dynamic>() ?? (data['totals'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
         final sections = _analysisSections(data);
+        if (isWindowsPlatform) {
+          return ListView(padding: const EdgeInsets.all(12), children: [
+            _reconciliationBanner(context, data),
+            _dateFilters(context),
+            const SizedBox(height: 10),
+            WindowsCommandStrip(children: [
+              const Text('Labour Analysis', style: TextStyle(fontWeight: FontWeight.w700)),
+              OutlinedButton.icon(onPressed: _exporting ? null : () => _export('productivity'),
+                icon: const Icon(Icons.download_outlined, size: 16),
+                label: const Text('Export Analysis Excel')),
+            ]),
+            const SizedBox(height: 10),
+            Container(padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: const Color(0xFFF7F9FB),
+                border: Border.all(color: const Color(0xFFC7D1DB))),
+              child: Wrap(spacing: 24, runSpacing: 8, children: [
+                _totalChip(U.cb, totals['cb'] ?? totals['producedCb']),
+                _totalChip('Net KG', totals['kg'] ?? totals['netKg']),
+                _totalChip('Manpower', totals['manpower']),
+                _totalChip('KG / Head', totals['kgPerHead']),
+                _totalChip('${U.cb} / Head', totals['cbPerHead']),
+              ]),
+            ),
+            for (final section in sections) ...[
+              const SizedBox(height: 12),
+              _analysisMatrix(section['title'] as String,
+                section['data'] as Map<String, dynamic>),
+            ],
+          ]);
+        }
         return ListView(padding: const EdgeInsets.all(18), children: [
           _reconciliationBanner(context, data),
           _dateFilters(context),
@@ -1008,18 +1082,35 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
 
   @override
   Widget build(BuildContext context) {
+    const tabs = <WindowsModuleTab>[
+      WindowsModuleTab('Productivity', Icons.analytics_outlined),
+      WindowsModuleTab('Daily Labour', Icons.groups_outlined),
+      WindowsModuleTab('Labour Analysis', Icons.assessment_outlined),
+    ];
+    final content = TabBarView(controller: _tabs, children: [
+      _productivityTab(context),
+      _labourTab(context),
+      _analysisTab(context),
+    ]);
+    if (isWindowsPlatform) {
+      return AnimatedBuilder(
+        animation: _tabs,
+        builder: (context, _) => WindowsModuleWorkspace(
+          title: 'Productivity & Labour',
+          subtitle: 'Factory output and workforce records',
+          tabs: tabs,
+          selectedIndex: _tabs.index,
+          onSelect: _tabs.animateTo,
+          content: content,
+        ),
+      );
+    }
     return Column(children: [
       Material(
         color: Theme.of(context).colorScheme.surface,
         child: TabBar(controller: _tabs, tabs: const [Tab(text: 'Productivity'), Tab(text: 'Daily Labour'), Tab(text: 'Labour Analysis')]),
       ),
-      Expanded(
-        child: TabBarView(controller: _tabs, children: [
-          _productivityTab(context),
-          _labourTab(context),
-          _analysisTab(context),
-        ]),
-      ),
+      Expanded(child: content),
     ]);
   }
 }
@@ -1179,8 +1270,115 @@ class _DailyLabourDialogState extends State<_DailyLabourDialog> {
 
   String _ymd(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
+  Widget _windowsForm(BuildContext context) {
+    Widget dateField() => OutlinedButton.icon(
+      onPressed: () async {
+        final picked = await showDatePicker(context: context, initialDate: date,
+          firstDate: DateTime(2020), lastDate: DateTime.now().add(const Duration(days: 365)));
+        if (picked != null) setState(() => date = picked);
+      }, icon: const Icon(Icons.calendar_today, size: 17), label: Text(fmtDate(_ymd(date))),
+    );
+    return Dialog(
+      insetPadding: const EdgeInsets.all(24),
+      child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 880, maxHeight: 680),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(width: double.infinity, padding: const EdgeInsets.all(16),
+            color: const Color(0xFFE2E9EF),
+            child: Text(widget.entry == null ? 'Daily Labour Entry' : 'Edit Daily Labour Entry',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
+          Flexible(child: SingleChildScrollView(padding: const EdgeInsets.all(20),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [const Text('Date'), dateField()])),
+                const SizedBox(width: 16),
+                Expanded(child: DropdownButtonFormField<String>(initialValue: shift,
+                  decoration: const InputDecoration(labelText: 'Shift'),
+                  items: const [DropdownMenuItem(value: 'Day', child: Text('Day')),
+                    DropdownMenuItem(value: 'Night', child: Text('Night'))],
+                  onChanged: (v) => setState(() => shift = v ?? 'Day'))),
+              ]),
+              const SizedBox(height: 16),
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(child: TextField(controller: line,
+                  decoration: const InputDecoration(labelText: 'Production line *'))),
+                const SizedBox(width: 16),
+                Expanded(child: Column(children: [
+                  if (products.isNotEmpty) DropdownButtonFormField<String>(
+                    initialValue: product == _manualSkuChoice ||
+                      products.any((p) => '${p['id']}' == product) ? product : null,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'SKU / Product *'),
+                    items: [for (final p in products)
+                      DropdownMenuItem(value: '${p['id']}', child: Text('${p['name']}')),
+                      const DropdownMenuItem(value: _manualSkuChoice,
+                        child: Text('Type SKU / product manually'))],
+                    onChanged: (v) {
+                      final selected = products.where((p) => '${p['id']}' == v).toList();
+                      final inferredName = selected.isNotEmpty
+                        ? '${selected.first['name']}' : manualSku.text.trim();
+                      final inferred = _lineForSku(inferredName);
+                      setState(() {
+                        product = v;
+                        if (selected.isNotEmpty) manualSku.text = inferredName;
+                        if (_isUnassignedLine(line.text) && inferred != null) line.text = inferred;
+                      });
+                    },
+                  ),
+                  if (products.isEmpty || product == _manualSkuChoice) ...[
+                    if (products.isEmpty) const Text(
+                      'Product list unavailable offline. Type an existing SKU; it will be checked when synced.'),
+                    TextField(controller: manualSku,
+                      decoration: const InputDecoration(labelText: 'SKU / Product *'),
+                      onChanged: (value) {
+                        final inferred = _lineForSku(value);
+                        if (_isUnassignedLine(line.text) && inferred != null) line.text = inferred;
+                      }),
+                  ],
+                ])),
+              ]),
+              const SizedBox(height: 16),
+              Row(children: [
+                Expanded(child: TextField(controller: workers,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'Workers *'))),
+                const SizedBox(width: 16),
+                Expanded(child: TextField(controller: hours,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'Actual hours *'))),
+              ]),
+              const SizedBox(height: 16),
+              Row(children: [
+                Expanded(child: TextField(controller: supervisor,
+                  decoration: const InputDecoration(labelText: 'Supervisor'))),
+                const SizedBox(width: 16),
+                Expanded(child: TextField(controller: remarks,
+                  decoration: const InputDecoration(labelText: 'Remarks (optional)'))),
+              ]),
+              const SizedBox(height: 14),
+              const Text('Offline entries are queued on this device for later sync. '
+                'Older servers may only support local storage.',
+                style: TextStyle(fontSize: 11)),
+            ]),
+          )),
+          const Divider(height: 1),
+          Padding(padding: const EdgeInsets.all(12), child: Row(
+            mainAxisAlignment: MainAxisAlignment.end, children: [
+              TextButton(onPressed: busy ? null : () => Navigator.pop(context),
+                child: const Text('Cancel')),
+              const SizedBox(width: 8),
+              FilledButton(onPressed: busy ? null : _save,
+                child: Text(busy ? 'Saving…' : widget.entry == null ? 'Save Entry' : 'Update Entry')),
+            ],
+          )),
+        ]),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (isWindowsPlatform) return _windowsForm(context);
     return AlertDialog(
       title: Text(widget.entry == null ? 'Daily Labour Entry' : 'Edit Daily Labour Entry'),
       content: SizedBox(

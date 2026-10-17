@@ -7,7 +7,7 @@ set -euo pipefail
 
 ROOT="${FF_ROOT:-/opt/flavorflow/server}"
 BACKUP_ROOT="${FF_BACKUP_ROOT:-/opt/flavorflow/backups}"
-EMAIL="${FF_TOTP_EMAIL:-super.admin@flavorflow.in}"
+EMAIL="${FF_TOTP_EMAIL:-super.admin@flavorflow.co.in}"
 SKIP_HEALTH="${FF_SKIP_HEALTH:-0}"
 cd "$ROOT" || { echo "FATAL: $ROOT nahi mili"; exit 1; }
 [ -f data/erp.db ] || { echo "FATAL: data/erp.db nahi mili"; exit 1; }

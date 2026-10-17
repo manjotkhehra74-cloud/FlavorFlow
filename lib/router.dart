@@ -60,6 +60,20 @@ String? permForPath(String path) {
   return null; // dashboard is universal
 }
 
+/// Navigation visibility and route guards must agree. Settings contains
+/// per-device/user preferences (administrative company controls are separately
+/// gated in the page), and notifications are user-scoped, so both are open to
+/// every signed-in user. Legacy server roles may also lack the newer stock.view
+/// permission even though the app exposes Stock Ledger to inventory viewers.
+bool hasRoutePermission(String path, bool Function(String) hasPermission) {
+  if (path.startsWith('/settings') || path.startsWith('/notifications')) return true;
+  if (path.startsWith('/stock')) {
+    return hasPermission('stock.view') || hasPermission('inventory.view');
+  }
+  final required = permForPath(path);
+  return required == null || hasPermission(required);
+}
+
 /// Set by main() before the router is built: fresh install → one-time
 /// language + industry setup screen comes before login.
 bool kNeedsFirstRunSetup = false;
@@ -83,7 +97,7 @@ GoRouter buildRouter(AuthController auth) {
       final perm = permForPath(state.matchedLocation);
       // Billing falls back to dispatch permissions on servers not yet patched.
       if (perm == 'billing.view') return auth.canViewBilling ? null : '/dashboard';
-      if (perm != null && !auth.can(perm)) return '/dashboard';
+      if (!hasRoutePermission(state.matchedLocation, auth.can)) return '/dashboard';
       return null;
     },
     routes: [

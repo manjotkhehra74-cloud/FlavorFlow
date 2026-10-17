@@ -8,8 +8,10 @@ import '../../core/i18n.dart';
 import '../../core/offline_queue.dart';
 import '../../core/item_code.dart';
 import '../../core/theme.dart';
+import '../../core/platform_support.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
+import '../../ui/windows_widgets.dart';
 import 'billing_page.dart' show PartyFormDialog, gstStateName, kGstStates;
 
 /// GST slabs after GST 2.0 (22 Sep 2025): 0 / 5 / 18 / 40. The legacy 12 and
@@ -230,9 +232,9 @@ class _InvoiceFormPageState extends State<InvoiceFormPage> {
     final tax = lines.fold<num>(0, (s, l) => s + l.tax);
     final raw = subtotal + tax;
     final total = settings['roundOff'] == false ? raw : raw.round();
-    final wide = MediaQuery.sizeOf(context).width > 820;
+    final wide = isWindowsPlatform || MediaQuery.sizeOf(context).width > 820;
 
-    return ListView(padding: const EdgeInsets.all(20), children: [
+    final form = ListView(padding: const EdgeInsets.all(20), children: [
       Row(children: [
         IconButton(onPressed: () => context.canPop() ? context.pop(false) : context.go('/billing'), icon: const Icon(Icons.arrow_back_rounded)),
         const SizedBox(width: 4),
@@ -393,6 +395,20 @@ class _InvoiceFormPageState extends State<InvoiceFormPage> {
       ),
       const SizedBox(height: 40),
     ]);
+    if (isWindowsPlatform) {
+      return WindowsDocumentWorkspace(
+        title: 'Create Sales Invoice',
+        subtitle: widget.dispatchId == null ? 'Customer invoice · ${nextNumber.isEmpty ? tr('Number pending') : nextNumber}' : 'Invoice from dispatch · ${nextNumber.isEmpty ? tr('Number pending') : nextNumber}',
+        icon: Icons.receipt_long_outlined,
+        commandBar: WindowsCommandStrip(children: [
+          const StatusChip('DRAFT'),
+          if (nextNumber.isNotEmpty) Text('${tr('Next invoice number')}: $nextNumber'),
+          if (dispatch != null) Text('· ${dispatch!['code']} · ${dispatch!['destination']}'),
+        ]),
+        content: form,
+      );
+    }
+    return form;
   }
 
   Widget _tot(String label, num v) => Padding(

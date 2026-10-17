@@ -1,13 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/company.dart';
@@ -16,26 +15,19 @@ import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../core/i18n.dart';
 import '../../core/item_code.dart';
+import '../../core/platform_support.dart';
 import '../../state/auth.dart';
 import '../../ui/scan_page.dart';
 import '../../core/offline_queue.dart';
 import '../../ui/widgets.dart';
-import 'dispatch_pdf.dart';
-
-/// Dispatch destinations for the ACTIVE industry (a rice mill ships to
-/// MANDI / FCI GODOWN / EXPORT CHA…, a dairy to CHILLING CENTRE / RETAIL
-/// ROUTE…). The company's own truck-master + typed destinations are merged
-/// on top; 'Other' always allows a new name.
-List<String> get kDispatchDestinations => [...IndustryPack.current.destinations, 'Other'];
-
-/// Default destination for a fresh form = the industry's first typical one.
-String get kDefaultDestination => IndustryPack.current.destinations.first;
+import '../../ui/windows_widgets.dart';
+import 'destination_field.dart';
 
 /// Destinations that older builds hard-coded for the original sauce factory
 /// (purged once from other companies' phones on upgrade — see loadSavedDests).
 const kLegacyDestinations = ['NEEMRANA', 'MATIALA'];
 
-/// Dedicated Dispatch Module: entry · truck loading calculator · history · reports.
+/// Dedicated Dispatch Module: entry · history · reports.
 class DispatchPage extends StatefulWidget {
   final String? tab;
   const DispatchPage({super.key, this.tab});
@@ -49,11 +41,10 @@ class _DispatchPageState extends State<DispatchPage> with SingleTickerProviderSt
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 5, vsync: this);
-    if (widget.tab == 'calculator') _tab.index = 1;
-    if (widget.tab == 'history') _tab.index = 2;
-    if (widget.tab == 'reports') _tab.index = 3;
-    if (widget.tab == 'trucks') _tab.index = 4;
+    _tab = TabController(length: 4, vsync: this);
+    if (widget.tab == 'history') _tab.index = 1;
+    if (widget.tab == 'reports') _tab.index = 2;
+    if (widget.tab == 'trucks') _tab.index = 3;
   }
 
   @override
@@ -65,6 +56,32 @@ class _DispatchPageState extends State<DispatchPage> with SingleTickerProviderSt
   @override
   Widget build(BuildContext context) {
     final canManage = context.watch<AuthController>().can('dispatch.manage');
+    final entryTitle = canManage ? 'Dispatch Entry' : 'Dispatch Entry (view only)';
+    final tabs = <WindowsModuleTab>[
+      WindowsModuleTab(entryTitle, Icons.local_shipping_outlined),
+      const WindowsModuleTab('Dispatch History', Icons.history_rounded),
+      const WindowsModuleTab('Reports', Icons.bar_chart_rounded),
+      const WindowsModuleTab('Trucks', Icons.local_shipping_outlined),
+    ];
+    final content = TabBarView(controller: _tab, children: [
+      _EntryTab(readOnly: !canManage),
+      const _HistoryTab(),
+      const _ReportsTab(),
+      _TrucksTab(readOnly: !canManage),
+    ]);
+    if (isWindowsPlatform) {
+      return AnimatedBuilder(
+        animation: _tab,
+        builder: (context, _) => WindowsModuleWorkspace(
+          title: 'Dispatch',
+          subtitle: 'Entry, history and transport reports',
+          tabs: tabs,
+          selectedIndex: _tab.index,
+          onSelect: _tab.animateTo,
+          content: content,
+        ),
+      );
+    }
     return Column(children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
@@ -75,8 +92,7 @@ class _DispatchPageState extends State<DispatchPage> with SingleTickerProviderSt
             isScrollable: true,
             tabAlignment: TabAlignment.start,
             tabs: [
-              Tab(text: canManage ? tr('Dispatch Entry') : tr('Dispatch Entry (view only)')),
-              Tab(text: tr('Truck Loading Calculator')),
+              Tab(text: tr(entryTitle)),
               Tab(text: tr('Dispatch History')),
               Tab(text: tr('Reports')),
               Tab(text: tr('Trucks')),
@@ -84,15 +100,7 @@ class _DispatchPageState extends State<DispatchPage> with SingleTickerProviderSt
           ),
         ),
       ),
-      Expanded(
-        child: TabBarView(controller: _tab, children: [
-          _EntryTab(readOnly: !canManage),
-          const _CalculatorTab(),
-          const _HistoryTab(),
-          const _ReportsTab(),
-          _TrucksTab(readOnly: !canManage),
-        ]),
-      ),
+      Expanded(child: content),
     ]);
   }
 }
@@ -198,7 +206,8 @@ class _LinesEditor extends StatelessWidget {
                   batches: batchOptions[lines[i].productId] ?? const [],
                   loading: lines[i].productId != null && batchLoading.contains(lines[i].productId),
                   onChanged: (value) {
-                    lines[i].batchCode.text = '${value?['code'] ?? ''}'.toUpperCase();
+                    final code = '${value?['code'] ?? ''}'.toUpperCase();
+                    if (lines[i].batchCode.text != code) lines[i].batchCode.text = code;
                     lines[i].batchId = value?['id'] as int?;
                     onChanged();
                   },
@@ -265,26 +274,36 @@ class _BatchField extends StatelessWidget {
         ),
       );
     }
+    final codeFormatters = <TextInputFormatter>[
+      TextInputFormatter.withFunction(
+        (oldValue, newValue) => newValue.copyWith(text: newValue.text.toUpperCase()),
+      ),
+    ];
+    Widget cameraButton() => IconButton(
+          tooltip: U.ize('Scan batch code'),
+          icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
+          onPressed: () async {
+            final value = await ScanPage.scan(context, title: U.ize('Scan batch code'));
+            if (value != null) onChanged({'code': value.toUpperCase()});
+          },
+        );
+
     if (batches.isEmpty) {
-      // Opening stock / old servers can legitimately have no production batch.
-      // Keep manual entry available, while all new production stock uses the
-      // controlled selector above.
+      // Opening stock / older servers can legitimately have no production
+      // batch list. Keep manual entry available on every platform.
       return TextField(
         controller: line.batchCode,
+        inputFormatters: codeFormatters,
         textCapitalization: TextCapitalization.characters,
+        textInputAction: TextInputAction.done,
         decoration: InputDecoration(
           labelText: U.ize('Batch code · date · available stock'),
-          hintText: 'No batch stock — enter code if known',
-          helperText: U.ize('Stock deducts batch-wise'),
-          helperMaxLines: 1,
-          suffixIcon: IconButton(
-            tooltip: U.ize('Scan batch code'),
-            icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
-            onPressed: () async {
-              final value = await ScanPage.scan(context, title: U.ize('Scan batch code'));
-              if (value != null) onChanged({'code': value.toUpperCase()});
-            },
-          ),
+          hintText: 'No batch list — enter code if known',
+          helperText: isDesktopPlatform
+              ? 'Type a code or scan it with a USB barcode scanner.'
+              : U.ize('Stock deducts batch-wise'),
+          helperMaxLines: 2,
+          suffixIcon: isPhonePlatform ? cameraButton() : null,
         ),
         onChanged: (_) => onChanged({'code': line.batchCode.text}),
       );
@@ -294,22 +313,18 @@ class _BatchField extends StatelessWidget {
             ? batches.firstWhere((b) => b['id'] == line.batchId)
             : batches.firstWhere((b) => '${b['code'] ?? ''}'.trim().toUpperCase() == selected))
         : null;
-    return DropdownButtonFormField<int>(
-      key: ValueKey('batch-${line.productId}-${batches.map((b) => '${b['id']}:${b['code']}:${b['planned_date'] ?? b['plannedDate']}').join('|')}'),
+    final optionsKey = batches
+        .map((b) => '${b['id']}:${b['code']}:${b['planned_date'] ?? b['plannedDate']}')
+        .join('|');
+    final dropdown = DropdownButtonFormField<int>(
+      key: ValueKey('batch-${line.productId}-${selectedBatch?['id'] ?? 'none'}-$optionsKey'),
       initialValue: hasSelected ? selectedBatch!['id'] as int : null,
       isExpanded: true,
       decoration: InputDecoration(
         labelText: U.ize('Batch code · date · available stock'),
         helperText: selectedBatch == null ? U.ize('Select batch to deduct stock') : 'Available: ${_batchAvailability(selectedBatch)}',
         helperMaxLines: 1,
-        suffixIcon: IconButton(
-          tooltip: U.ize('Scan batch code'),
-          icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
-          onPressed: () async {
-            final value = await ScanPage.scan(context, title: U.ize('Scan batch code'));
-            if (value != null) onChanged({'code': value.toUpperCase()});
-          },
-        ),
+        suffixIcon: isPhonePlatform ? cameraButton() : null,
       ),
       items: [
         for (final batch in batches)
@@ -323,6 +338,44 @@ class _BatchField extends StatelessWidget {
       ],
       onChanged: (id) => onChanged(id == null ? null : batches.firstWhere((b) => b['id'] == id)),
     );
+    if (!isDesktopPlatform) return dropdown;
+
+    Map<String, dynamic>? matchingBatch(String code) {
+      final normalized = code.trim().toUpperCase();
+      for (final batch in batches) {
+        if ('${batch['code'] ?? ''}'.trim().toUpperCase() == normalized) return batch;
+      }
+      return null;
+    }
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      dropdown,
+      const SizedBox(height: 8),
+      TextField(
+        controller: line.batchCode,
+        inputFormatters: codeFormatters,
+        textCapitalization: TextCapitalization.characters,
+        textInputAction: TextInputAction.done,
+        decoration: InputDecoration(
+          labelText: U.ize('Enter batch code'),
+          hintText: 'Type or scan with a USB barcode scanner',
+          helperText: line.batchCode.text.trim().isEmpty
+              ? 'Use the dropdown or enter the exact code printed on the batch label.'
+              : matchingBatch(line.batchCode.text) == null
+                  ? 'No available batch exactly matches this code.'
+                  : 'Available: ${_batchAvailability(matchingBatch(line.batchCode.text)!)}',
+          helperMaxLines: 2,
+        ),
+        onChanged: (raw) {
+          final code = raw.trim().toUpperCase();
+          if (code.isEmpty) {
+            onChanged(null);
+          } else {
+            onChanged(matchingBatch(code) ?? {'code': code});
+          }
+        },
+      ),
+    ]);
   }
 }
 
@@ -557,50 +610,6 @@ class _DateField extends StatelessWidget {
   }
 }
 
-/// Destination selector — options = the industry's typical destinations +
-/// the company's own truck master + destinations typed before (saved on this
-/// phone). 'Other' adds a new one.
-class _DestinationField extends StatelessWidget {
-  final String value;
-  final TextEditingController otherCtl;
-  /// Dropdown pick — always one of the options or 'Other'.
-  final ValueChanged<String> onChanged;
-  /// Free text typed for 'Other' (already in [otherCtl]) — for rebuilds.
-  final ValueChanged<String>? onTyped;
-  final List<String> options;
-  const _DestinationField({required this.value, required this.otherCtl, required this.onChanged, this.onTyped, this.options = const []});
-
-  @override
-  Widget build(BuildContext context) {
-    final merged = <String>{...IndustryPack.current.destinations, ...options};
-    final opts = [...merged, 'Other'];
-    final safeValue = opts.contains(value) ? value : 'Other';
-    String pretty(String d) => d.split(' ').map((w) => w.isEmpty ? w : '${w[0]}${w.substring(1).toLowerCase()}').join(' ');
-    return Column(children: [
-      DropdownButtonFormField<String>(
-        key: ValueKey('dest-${opts.join(',')}'),
-        initialValue: safeValue,
-        isExpanded: true,
-        decoration: InputDecoration(labelText: tr('Destination *')),
-        items: [
-          for (final d in opts)
-            DropdownMenuItem(value: d, child: Text(d == 'Other' ? tr('Add new / other…') : pretty(d), overflow: TextOverflow.ellipsis)),
-        ],
-        onChanged: (v) => onChanged(v ?? safeValue),
-      ),
-      if (safeValue == 'Other') ...[
-        const SizedBox(height: 12),
-        TextField(
-          controller: otherCtl,
-          textCapitalization: TextCapitalization.characters,
-          decoration: InputDecoration(labelText: tr('Destination name *'), hintText: 'e.g. LUDHIANA'),
-          onChanged: (v) => onTyped?.call(v),
-        ),
-      ],
-    ]);
-  }
-}
-
 /* ------------------------------- entry tab ------------------------------- */
 
 class _EntryTab extends StatefulWidget {
@@ -612,18 +621,16 @@ class _EntryTab extends StatefulWidget {
 
 class _EntryTabState extends State<_EntryTab> with _CalcMixin {
   final truck = TextEditingController();
-  final otherDest = TextEditingController();
+  final destination = TextEditingController();
   final remarks = TextEditingController();
-  String destination = kDefaultDestination;
   DateTime date = DateTime.now();
   bool saving = false;
   /// Truck master list (number + destination) — dropdown filters by the
   /// selected destination; 'Other/new' falls back to free typing.
   List<Map<String, dynamic>> _trucks = [];
 
-  /// Company's own destination list: truck-master destinations + ones typed
-  /// before on this phone (persisted). Falls back to factory defaults inside
-  /// _DestinationField only when both are empty.
+  /// Suggestions from the company's truck master + destinations typed before
+  /// on this device (persisted). They never preselect a destination.
   static List<String> _savedDests = [];
   List<String> get _destOptions {
     final set = <String>{};
@@ -656,15 +663,20 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
         await p.setBool('dispatch_dests_v2', true);
         list = cleaned;
       }
-      _savedDests = list;
+      _savedDests = list
+          .map(normalizeDispatchDestination)
+          .where((d) => d.isNotEmpty)
+          .toSet()
+          .toList()
+        ..sort();
     } catch (_) {}
   }
 
   static Future<void> rememberDest(String d) async {
-    d = d.trim().toUpperCase();
-    if (d.isEmpty || d == 'OTHER' || _savedDests.contains(d)) return;
+    d = normalizeDispatchDestination(d);
+    if (d.isEmpty || _savedDests.contains(d)) return;
     _savedDests = [..._savedDests, d]..sort();
-    try { (await SharedPreferences.getInstance()).setStringList('dispatch_dests', _savedDests); } catch (_) {}
+    try { await (await SharedPreferences.getInstance()).setStringList('dispatch_dests', _savedDests); } catch (_) {}
   }
 
   /// DRAFT: the half-filled entry survives leaving this screen (e.g. going
@@ -677,6 +689,7 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
 
   bool get _formHasData =>
       truck.text.trim().isNotEmpty ||
+      destination.text.trim().isNotEmpty ||
       remarks.text.trim().isNotEmpty ||
       lines.any((l) => l.cartons.text.trim().isNotEmpty || l.trays.text.trim().isNotEmpty || l.batchCode.text.trim().isNotEmpty);
 
@@ -684,8 +697,7 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
     if (!_formHasData) { _clearDraft(); return; } // empty form → no draft
     _draft = {
       'truck': truck.text,
-      'destination': destination,
-      'otherDest': otherDest.text,
+      'destination': destination.text,
       'remarks': remarks.text,
       'date': date.toIso8601String(),
       'lines': [
@@ -694,20 +706,19 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
       ],
     };
     // survive app restarts too (fire-and-forget)
-    SharedPreferences.getInstance().then((p) => p.setString(_draftKey, jsonEncode(_draft))).catchError((_) {});
+    SharedPreferences.getInstance().then((p) => p.setString(_draftKey, jsonEncode(_draft))).catchError((_) => false);
   }
 
   void _clearDraft() {
     _draft = null;
-    SharedPreferences.getInstance().then((p) => p.remove(_draftKey)).catchError((_) {});
+    SharedPreferences.getInstance().then((p) => p.remove(_draftKey)).catchError((_) => false);
   }
 
   /// Wipe the form fields AND the saved draft (Delete draft button).
   void _deleteDraftAndReset() {
     truck.clear();
-    otherDest.clear();
+    destination.clear();
     remarks.clear();
-    destination = kDefaultDestination;
     date = DateTime.now();
     for (final l in lines) { l.dispose(); }
     lines
@@ -734,9 +745,17 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
     final d = _draft;
     if (d == null) return;
     truck.text = d['truck'] as String? ?? '';
-    destination = d['destination'] as String? ?? kDefaultDestination;
-    if (_isLegacyDest(destination) && !_destOptions.contains(destination.toUpperCase())) destination = kDefaultDestination;
-    otherDest.text = d['otherDest'] as String? ?? '';
+    // Older drafts stored "Other" separately from the manually entered name.
+    // Restore those drafts without carrying the old industry-first default into
+    // new blank entries.
+    final savedDestination = d['destination'] as String? ?? '';
+    final hadLegacyOtherField = d.containsKey('otherDest') && savedDestination.toUpperCase() == 'OTHER';
+    destination.text = hadLegacyOtherField
+        ? (d['otherDest'] as String? ?? '')
+        : savedDestination;
+    if (_isLegacyDest(destination.text) && !_destOptions.contains(normalizeDispatchDestination(destination.text))) {
+      destination.clear();
+    }
     remarks.text = d['remarks'] as String? ?? '';
     date = DateTime.tryParse(d['date'] as String? ?? '') ?? DateTime.now();
     final ls = (d['lines'] as List?) ?? const [];
@@ -778,7 +797,7 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
   /// Trucks registered for the currently selected destination.
   List<String> get _destTrucks => [
         for (final t in _trucks)
-          if ('${t['destination']}'.toUpperCase() == _destination.toUpperCase()) '${t['number']}',
+          if (normalizeDispatchDestination('${t['destination'] ?? ''}') == _destination) '${t['number']}',
       ];
 
   @override
@@ -786,17 +805,17 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
     // keep the half-filled form for when the user comes back
     _saveDraft();
     disposeLines();
+    truck.dispose();
+    destination.dispose();
+    remarks.dispose();
     super.dispose();
   }
 
-  String get _destination {
-    if (destination != 'Other') return destination;
-    return otherDest.text.trim().toUpperCase();
-  }
+  String get _destination => normalizeDispatchDestination(destination.text);
 
   /// Best-effort GPS stamp (lat,long) — never blocks the dispatch.
   Future<String> _locationStamp() async {
-    if (kIsWeb) return '';
+    if (!isPhonePlatform) return '';
     try {
       var perm = await Geolocator.checkPermission();
       if (perm == LocationPermission.denied) {
@@ -813,8 +832,9 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
   }
 
   Future<void> _submit() async {
-    if (destination == 'Other' && _destination.isEmpty) {
-      showErr(context, 'Please type the destination name.');
+    final dispatchDestination = _destination;
+    if (dispatchDestination.isEmpty) {
+      showErr(context, tr('Please enter the destination company or place.'));
       return;
     }
     final list = nonZeroItems();
@@ -830,15 +850,26 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
         showErr(context, 'Batch stock is still loading. Please select a batch and try again.');
         return;
       }
-      if ((batchOptions[pid]?.isNotEmpty ?? false) && (item['batchCode'] as String?) == null) {
-        showErr(context, 'Select a batch code for every product line before dispatch.');
-        return;
+      final availableBatches = batchOptions[pid] ?? const <Map<String, dynamic>>[];
+      if (availableBatches.isNotEmpty) {
+        final code = (item['batchCode'] as String?)?.trim().toUpperCase();
+        if (code == null || code.isEmpty) {
+          showErr(context, 'Select or enter a batch code for every product line before dispatch.');
+          return;
+        }
+        final matchesAvailableBatch = availableBatches.any(
+          (batch) => '${batch['code'] ?? ''}'.trim().toUpperCase() == code,
+        );
+        if (!matchesAvailableBatch) {
+          showErr(context, 'No available batch matches "$code". Choose a batch with remaining stock.');
+          return;
+        }
       }
     }
     setState(() => saving = true);
     try {
       final loc = await _locationStamp();
-      // MAN-13: no connection → kept on this phone and sent automatically later.
+      // MAN-13: no connection → kept on this device and sent automatically later.
       final sent = await OfflineQueue.instance.submit(
         context.read<AuthController>(),
         method: 'POST',
@@ -846,7 +877,7 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
         label: 'Dispatch',
         body: {
           'dispatchDate': ymd(date),
-          'destination': _destination,
+          'destination': dispatchDestination,
           'truckNumber': truck.text.trim(),
           'remarks': ('${remarks.text.trim()} $loc').trim(),
           'items': list,
@@ -854,22 +885,24 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
       );
       if (!mounted) return;
       if (sent.queued) {
-        rememberDest(_destination);
+        rememberDest(dispatchDestination);
         _clearDraft();
         _hasDraft = false;
         for (final l in lines) { l.cartons.clear(); l.trays.clear(); l.batchCode.clear(); l.batchId = null; }
+        destination.clear();
         remarks.clear();
-        showOk(context, 'Dispatch saved on this phone — it will sync automatically when internet returns.');
+        showOk(context, 'Dispatch saved on this device — it will sync automatically when internet returns.');
         return;
       }
       final json = sent.json;
       final id = (json as Map)['id'];
-      rememberDest(_destination); // company's own list grows automatically
+      rememberDest(dispatchDestination); // company's own list grows automatically
       _clearDraft(); // success — draft is no longer needed (memory + disk)
       _hasDraft = false;
       for (final l in lines) { l.cartons.clear(); l.trays.clear(); l.batchCode.clear(); l.batchId = null; }
+      destination.clear();
       remarks.clear();
-      showOk(context, '${json['code']} dispatched to $_destination · ${qty(json['totals']['grossWeight'])} kg gross (${json['weekday']}).');
+      showOk(context, '${json['code']} dispatched to $dispatchDestination · ${qty(json['totals']['grossWeight'])} kg gross (${json['weekday']}).');
       context.push('/dispatch/$id');
     } catch (e) {
       if (mounted) showErr(context, e);
@@ -921,8 +954,8 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
           ]),
         ),
       LayoutBuilder(builder: (context, c) {
-        final wide = c.maxWidth > 900;
-        final compact = c.maxWidth < 600;
+        final wide = isWindowsPlatform ? c.maxWidth >= 760 : c.maxWidth > 900;
+        final compact = isWindowsPlatform ? c.maxWidth < 540 : c.maxWidth < 600;
         final truckField = _destTrucks.isEmpty
             ? TextField(controller: truck, textCapitalization: TextCapitalization.characters, decoration: InputDecoration(labelText: tr('Truck / Vehicle No. *'), hintText: 'PB-08-AB-1234'), onChanged: (_) => setState(() {}))
             : DropdownButtonFormField<String>(
@@ -958,12 +991,10 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
                 },
               );
         final dateField = _DateField(date: date, onPick: (d) => setState(() => date = d));
-        final destinationField = _DestinationField(
-          options: _destOptions,
-          value: destination,
-          otherCtl: otherDest,
-          onChanged: (v) => setState(() => destination = v),
-          onTyped: (_) => setState(() {}),
+        final destinationField = DispatchDestinationField(
+          controller: destination,
+          suggestions: _destOptions,
+          onChanged: (_) => setState(() {}),
         );
         final remarksField = TextField(controller: remarks, decoration: InputDecoration(labelText: tr('Remarks')));
         final form = SectionCard(title: 'Dispatch Entry', child: Column(children: [
@@ -1014,119 +1045,6 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
           const SizedBox(height: 8),
           Text(tr('Date & day are stamped automatically. Stock is deducted and the team is notified.'),
               style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
-        ]));
-        if (wide) {
-          return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(flex: 3, child: form), const SizedBox(width: 16), Expanded(flex: 2, child: side)]);
-        }
-        return Column(children: [form, const SizedBox(height: 16), side]);
-      }),
-    ]);
-  }
-}
-
-/* ----------------------------- calculator tab ----------------------------- */
-
-class _CalculatorTab extends StatefulWidget {
-  const _CalculatorTab();
-  @override
-  State<_CalculatorTab> createState() => _CalculatorTabState();
-}
-
-class _CalculatorTabState extends State<_CalculatorTab> with _CalcMixin {
-  final truck = TextEditingController();
-  final otherDest = TextEditingController();
-  List<String> get _savedDests => _EntryTabState._savedDests;
-  String destination = kDefaultDestination;
-  DateTime date = DateTime.now();
-  bool exporting = false;
-
-  @override
-  void initState() {
-    super.initState();
-    loadProducts();
-  }
-
-  @override
-  void dispose() {
-    disposeLines();
-    super.dispose();
-  }
-
-  Future<void> _exportPdf() async {
-    if (calc == null) return;
-    setState(() => exporting = true);
-    try {
-      final dest = destination == 'Other' ? otherDest.text.trim().toUpperCase() : destination;
-      final bytes = await DispatchPdf.estimate(
-        lines: (calc!['lines'] as List).cast<Map<String, dynamic>>(),
-        totals: (calc!['totals'] as Map).cast<String, dynamic>(),
-        truckNumber: truck.text.trim(),
-        destination: dest,
-        dispatchDate: ymd(date),
-      );
-      await Printing.sharePdf(bytes: bytes, filename: 'truck-loading-${truck.text.trim().isEmpty ? 'plan' : truck.text.trim()}.pdf');
-    } catch (e) {
-      if (mounted) showErr(context, e);
-    } finally {
-      if (mounted) setState(() => exporting = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return ListView(padding: const EdgeInsets.all(20), children: [
-      LayoutBuilder(builder: (context, c) {
-        final wide = c.maxWidth > 900;
-        final compact = c.maxWidth < 600;
-        final truckField = TextField(controller: truck, textCapitalization: TextCapitalization.characters, decoration: InputDecoration(labelText: tr('Truck number'), hintText: 'PB-08-AB-1234'));
-        final dateField = _DateField(date: date, onPick: (d) => setState(() => date = d));
-        final form = SectionCard(title: 'Truck Loading Calculator', child: Column(children: [
-          if (compact) ...[
-            truckField,
-            const SizedBox(height: 12),
-            dateField,
-          ] else
-            Row(children: [Expanded(child: truckField), const SizedBox(width: 12), Expanded(child: dateField)]),
-          const SizedBox(height: 12),
-          _DestinationField(
-            options: _savedDests,
-            value: destination,
-            otherCtl: otherDest,
-            onChanged: (v) => setState(() => destination = v),
-            onTyped: (_) => setState(() {}),
-          ),
-          const SizedBox(height: 16),
-          products.isEmpty
-              ? (productsLoaded
-                  ? _NoProductsHint(onAdd: () => context.go('/products'))
-                  : const SizedBox(height: 60, child: Center(child: CircularProgressIndicator())))
-              : _LinesEditor(products: products, lines: lines, onAdd: addLine, onRemove: removeLine, onChanged: recalcDebounced, onProductChanged: selectProduct),
-        ]));
-        final side = SectionCard(title: 'Calculated Weights', child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          if (calc != null) ...[
-            _SummaryCard(totals: (calc!['totals'] as Map).cast<String, dynamic>(), lines: (calc!['lines'] as List).cast<Map<String, dynamic>>()),
-            const SizedBox(height: 14),
-            FilledButton.icon(
-              onPressed: exporting ? null : _exportPdf,
-              icon: const Icon(Icons.picture_as_pdf_rounded, size: 19),
-              label: Text(exporting ? 'Preparing PDF…' : 'Export Loading Plan (PDF)'),
-            ),
-            const SizedBox(height: 8),
-            Text('Shares/prints a pre-dispatch loading plan with per-line and total weights.',
-                style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
-          ] else
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              child: Column(children: [
-                Icon(Icons.calculate_outlined, size: 38, color: scheme.outline),
-                const SizedBox(height: 8),
-                Text(CompanyProfile.usesTrays
-                        ? 'Enter ${U.carton.toLowerCase()} / ${U.trayLc} to auto-calculate\nweights, ${U.piece.toLowerCase()} and ${U.carton.toLowerCase()} counts.'
-                        : 'Enter ${U.carton.toLowerCase()} to auto-calculate\nweights and ${U.piece.toLowerCase()} counts.',
-                    textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
-              ]),
-            ),
         ]));
         if (wide) {
           return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(flex: 3, child: form), const SizedBox(width: 16), Expanded(flex: 2, child: side)]);
@@ -1294,8 +1212,9 @@ class _TrucksTabState extends State<_TrucksTab> {
 
   Future<void> _add() async {
     final number = TextEditingController();
-    final otherDest = TextEditingController();
-    String dest = kDefaultDestination;
+    final destination = TextEditingController();
+    String? truckError;
+    String? destinationError;
     final saved = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -1306,31 +1225,37 @@ class _TrucksTabState extends State<_TrucksTab> {
               controller: number,
               autofocus: true,
               textCapitalization: TextCapitalization.characters,
-              decoration: InputDecoration(labelText: tr('Truck / Vehicle No. *'), hintText: 'PB-08-AB-1234'),
+              decoration: InputDecoration(
+                labelText: tr('Truck / Vehicle No. *'),
+                hintText: 'PB-08-AB-1234',
+                errorText: truckError == null ? null : tr(truckError!),
+              ),
+              onChanged: (_) => setD(() => truckError = null),
             ),
             const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: dest,
-              isExpanded: true,
-              decoration: InputDecoration(labelText: tr('Destination *')),
-              items: [for (final d in kDispatchDestinations) DropdownMenuItem(value: d, child: Text(d == 'Other' ? tr('Add new / other…') : d))],
-              onChanged: (v) => setD(() => dest = v ?? kDefaultDestination),
+            DispatchDestinationField(
+              controller: destination,
+              suggestions: _EntryTabState._savedDests,
+              errorText: destinationError,
+              onChanged: (_) => setD(() => destinationError = null),
             ),
-            if (dest == 'Other') ...[
-              const SizedBox(height: 12),
-              TextField(controller: otherDest, textCapitalization: TextCapitalization.characters, decoration: InputDecoration(labelText: tr('Destination name *'), hintText: 'e.g. LUDHIANA')),
-            ],
           ]),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('Cancel'))),
             FilledButton(
               onPressed: () async {
                 final n = number.text.trim().toUpperCase();
-                final d = dest == 'Other' ? otherDest.text.trim().toUpperCase() : dest;
-                if (n.isEmpty || d.isEmpty) return;
+                final d = normalizeDispatchDestination(destination.text);
+                if (n.isEmpty || d.isEmpty) {
+                  setD(() {
+                    truckError = n.isEmpty ? 'Truck number is required.' : null;
+                    destinationError = d.isEmpty ? 'Destination is required.' : null;
+                  });
+                  return;
+                }
                 try {
                   await ctx.read<AuthController>().api.post('/dispatch/trucks', {'number': n, 'destination': d});
-                  await _EntryTabState.rememberDest(d); // typed here = real destination → shown in entry dropdown
+                  await _EntryTabState.rememberDest(d); // typed here = real destination → shown in entry suggestions
                   if (ctx.mounted) Navigator.pop(ctx, true);
                 } catch (e) {
                   if (ctx.mounted) showErr(ctx, e);
@@ -1342,7 +1267,9 @@ class _TrucksTabState extends State<_TrucksTab> {
         ),
       ),
     );
-    if (saved == true) _reload();
+    number.dispose();
+    destination.dispose();
+    if (saved == true && mounted) _reload();
   }
 
   Future<void> _remove(Map<String, dynamic> t) async {

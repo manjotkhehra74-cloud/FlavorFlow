@@ -8,14 +8,14 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../core/app_settings.dart';
 import '../../core/biometric.dart';
 import '../../core/company.dart';
-import '../../core/format.dart';
 import '../../core/notifier.dart';
 import '../../core/offline_queue.dart';
 import '../../core/i18n.dart';
-import '../../core/theme.dart';
+import '../../core/platform_support.dart';
 import '../../state/auth.dart';
 import '../../ui/app_shell.dart' show LanguageDialog, CompanyProfileDialog;
 import '../../ui/widgets.dart';
+import '../../ui/windows_widgets.dart';
 
 /// Settings — one place for every per-user option:
 /// language · biometric login · two-factor auth (authenticator app) ·
@@ -47,7 +47,9 @@ class _SettingsPageState extends State<SettingsPage> {
       final j = await context.read<AuthController>().api.get('/auth/totp/status');
       totp = (j as Map)['enabled'] == true;
     } catch (_) {/* server route optional until patched */}
-    final notif = await PhoneNotifier.notificationsAllowed();
+    final bool? notif = isPhonePlatform
+        ? await PhoneNotifier.notificationsAllowed()
+        : null;
     if (!mounted) return;
     setState(() { _bioAvailable = avail; _bioEnabled = enabled; _totpEnabled = totp; _notifOn = notif; });
   }
@@ -115,6 +117,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _toggleReminder(AppSettings settings, bool on) async {
+    if (!isPhonePlatform) return;
     if (!on) {
       await settings.setDailyReminder(false, settings.dailyReminderHour, minute: settings.dailyReminderMinute);
       await Reminders.disableAll();
@@ -126,6 +129,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   /// Hour + minute picker (MAN-10), then save and re-schedule the daily alarm.
   Future<void> _changeReminderTime(AppSettings settings) async {
+    if (!isPhonePlatform) return;
     final picked = await showTimePicker(
       context: context,
       initialTime: TimeOfDay(hour: settings.dailyReminderHour, minute: settings.dailyReminderMinute),
@@ -143,13 +147,13 @@ class _SettingsPageState extends State<SettingsPage> {
     showOk(context, 'Reminder set — roz ${_clock(picked.hour, picked.minute)} + month-end.');
   }
 
-  /// MAN-12: explain what to do when the phone blocks notifications.
+  /// MAN-12: explain what to do when the device blocks notifications.
   Future<void> _notificationGuidance() async {
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Notifications are off'),
-        content: const Text('FlavorFlow cannot show alerts or reminders until notifications are allowed. Open phone settings → Notifications → FlavorFlow and turn them on.'),
+        content: const Text('FlavorFlow cannot show alerts or reminders until notifications are allowed. Open device settings → Notifications → FlavorFlow and turn them on.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Later')),
           FilledButton(
@@ -164,8 +168,9 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  /// Ask for the notification permission; if the phone blocks it for good, open its settings.
+  /// Ask for the notification permission; if the device blocks it for good, open its settings.
   Future<void> _enableNotifications() async {
+    if (!isPhonePlatform) return;
     final st = await Permission.notification.request();
     if (st.isPermanentlyDenied) await openAppSettings();
     await _refresh();
@@ -177,8 +182,8 @@ class _SettingsPageState extends State<SettingsPage> {
     final settings = context.watch<AppSettings>();
     final session = auth.session;
     final scheme = Theme.of(context).colorScheme;
-    return ListView(padding: const EdgeInsets.all(20), children: [
-      _section('PREFERENCES'),
+    final items = <Widget>[
+      _section('PREFERENCES', key: const ValueKey('settings-preferences')),
       _tile(
         icon: Icons.translate_rounded,
         title: '${tr('Language')} · ਭਾਸ਼ਾ · भाषा',
@@ -194,7 +199,7 @@ class _SettingsPageState extends State<SettingsPage> {
         subtitle: switch (settings.darkPref) {
           DarkPref.off => 'OFF — classic light look',
           DarkPref.on => 'ON — easier on the eyes at night',
-          DarkPref.system => 'System — follows the phone setting',
+          DarkPref.system => 'System — follows the device setting',
           DarkPref.auto =>
             'Auto — dark ${settings.autoDarkStart > 12 ? settings.autoDarkStart - 12 : settings.autoDarkStart} PM to ${settings.autoDarkEnd} AM (by time)',
         },
@@ -207,7 +212,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 for (final (mode, label, icon) in [
                   (DarkPref.off, tr('Off — always light'), Icons.light_mode_outlined),
                   (DarkPref.on, tr('On — always dark'), Icons.dark_mode_outlined),
-                  (DarkPref.system, tr('System — follow phone setting'), Icons.smartphone_rounded),
+                  (DarkPref.system, tr('System — follow device setting'), Icons.smartphone_rounded),
                   (DarkPref.auto, tr('Auto — dark by time (evening to morning)'), Icons.schedule_rounded),
                 ])
                   SimpleDialogOption(
@@ -266,18 +271,19 @@ class _SettingsPageState extends State<SettingsPage> {
           onSelectionChanged: (v) => settings.setTextScale(v.first),
         ),
       ),
-      _tile(
-        icon: Icons.alarm_rounded,
-        title: 'Daily entry reminder',
-        subtitle: settings.dailyReminder
-            ? 'ON — roz ${_clock(settings.dailyReminderHour, settings.dailyReminderMinute)} vaje yaad karauga (+ month-end ${CompanyProfile.usesLossPct ? 'Loss% close' : 'stock closing'}) · tap karke time badlo'
-            : 'OFF — production/dispatch entry da roz da reminder',
-        onTap: settings.dailyReminder ? () => _changeReminderTime(settings) : null,
-        trailing: Switch(
-          value: settings.dailyReminder,
-          onChanged: (v) => _toggleReminder(settings, v),
+      if (isPhonePlatform)
+        _tile(
+          icon: Icons.alarm_rounded,
+          title: 'Daily entry reminder',
+          subtitle: settings.dailyReminder
+              ? 'ON — roz ${_clock(settings.dailyReminderHour, settings.dailyReminderMinute)} vaje yaad karauga (+ month-end ${CompanyProfile.usesLossPct ? 'Loss% close' : 'stock closing'}) · tap karke time badlo'
+              : 'OFF — production/dispatch entry da roz da reminder',
+          onTap: settings.dailyReminder ? () => _changeReminderTime(settings) : null,
+          trailing: Switch(
+            value: settings.dailyReminder,
+            onChanged: (v) => _toggleReminder(settings, v),
+          ),
         ),
-      ),
       _tile(
         icon: Icons.notifications_active_outlined,
         title: 'Notification badge',
@@ -286,23 +292,24 @@ class _SettingsPageState extends State<SettingsPage> {
         onTap: () => settings.setShowNotifBadge(!settings.showNotifBadge),
       ),
 
-      _tile(
-        icon: Icons.notifications_none_rounded,
-        title: 'Phone notifications',
-        subtitle: _notifOn == null
-            ? 'Checking…'
-            : _notifOn!
-                ? 'ON — alerts & reminders show on this phone'
-                : 'OFF — tap to allow (needed for alerts & reminders)',
-        onTap: _notifOn == false ? _enableNotifications : null,
-      ),
+      if (isPhonePlatform)
+        _tile(
+          icon: Icons.notifications_none_rounded,
+          title: 'Phone notifications',
+          subtitle: _notifOn == null
+              ? 'Checking…'
+              : _notifOn!
+                  ? 'ON — alerts & reminders show on this device'
+                  : 'OFF — tap to allow (needed for alerts & reminders)',
+          onTap: _notifOn == false ? _enableNotifications : null,
+        ),
 
-      _section('SECURITY'),
+      _section('SECURITY', key: const ValueKey('settings-security')),
       if (_bioAvailable)
         _tile(
           icon: Icons.fingerprint_rounded,
           title: 'Biometric login',
-          subtitle: _bioEnabled ? 'ON — login with fingerprint / face' : 'OFF — tap to enable on this device',
+          subtitle: _bioEnabled ? 'ON — use this device\'s secure sign-in' : 'OFF — tap to enable on this device',
           trailing: Switch(value: _bioEnabled, onChanged: (_) => _toggleBiometrics()),
           onTap: _toggleBiometrics,
         ),
@@ -328,7 +335,7 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
 
       if (session != null && session.role == 'super_admin') ...[
-        _section('COMPANY (SUPER ADMIN)'),
+        _section('COMPANY (SUPER ADMIN)', key: const ValueKey('settings-company')),
         _tile(
           icon: Icons.business_rounded,
           title: tr('Company details (PDF header)'),
@@ -344,7 +351,7 @@ class _SettingsPageState extends State<SettingsPage> {
       ],
 
       if (auth.subscription.status.available) ...[
-        _section('SUBSCRIPTION'),
+        _section('SUBSCRIPTION', key: const ValueKey('settings-subscription')),
         _tile(
           icon: Icons.workspace_premium_outlined,
           title: tr('FlavorFlow subscription'),
@@ -353,14 +360,14 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ],
 
-      _section('CONNECTION'),
+      _section('CONNECTION', key: const ValueKey('settings-connection')),
       ListenableBuilder(
         listenable: OfflineQueue.instance,
         builder: (context, _) {
           final q = OfflineQueue.instance;
           final String sub;
           if (!q.online) {
-            sub = 'Offline — ${q.pendingCount} waiting on this phone';
+            sub = 'Offline — ${q.pendingCount} waiting on this device';
           } else if (q.failed.isNotEmpty) {
             sub = '${q.failed.length} need review · ${q.pendingCount} waiting';
           } else if (q.pendingCount > 0) {
@@ -391,19 +398,66 @@ class _SettingsPageState extends State<SettingsPage> {
         },
       ),
 
-      _section('ABOUT'),
+      _section('ABOUT', key: const ValueKey('settings-about')),
       _tile(
         icon: Icons.info_outline_rounded,
         title: 'FlavorFlow ERP',
-        subtitle: 'Version 1.2.0 · Universal manufacturing ERP',
+        subtitle: 'Version 1.2.4 · Universal manufacturing ERP',
       ),
       const SizedBox(height: 8),
       Text('${tr('Role')}: ${session?.roleLabel ?? ''} · ${session?.email ?? ''}',
           style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
-    ]);
+    ];
+
+    if (isWindowsPlatform) {
+      const sectionKeys = ['preferences', 'security', 'company', 'subscription', 'connection', 'about'];
+      List<Widget> section(String name) {
+        final start = items.indexWhere((w) => w.key == ValueKey('settings-$name'));
+        if (start < 0) return const [];
+        var end = items.length;
+        for (final other in sectionKeys) {
+          final next = items.indexWhere((w) => w.key == ValueKey('settings-$other'));
+          if (next > start && next < end) end = next;
+        }
+        return items.sublist(start, end);
+      }
+
+      return WindowsDocumentWorkspace(
+        title: 'Settings',
+        subtitle: 'Preferences, security, company and connection',
+        icon: Icons.settings_outlined,
+        commandBar: WindowsCommandStrip(children: [
+          const Icon(Icons.account_circle_outlined, size: 17),
+          Text('${session?.name ?? ''} · ${session?.roleLabel ?? ''}'),
+          const SizedBox(width: 12),
+          Text('${tr('Login ID')}: ${session?.email ?? ''}', style: TextStyle(color: scheme.onSurfaceVariant)),
+        ]),
+        content: LayoutBuilder(builder: (context, constraints) {
+          final columns = constraints.maxWidth >= 1120;
+          final desktopGroups = columns
+              ? <Widget>[
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [...section('preferences'), ...section('security')])),
+                    const SizedBox(width: 14),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      ...section('company'),
+                      ...section('subscription'),
+                      ...section('connection'),
+                      ...section('about'),
+                    ])),
+                  ]),
+                ]
+              : items;
+          return ListView(padding: const EdgeInsets.all(18), children: desktopGroups);
+        }),
+      );
+    }
+
+    return ListView(padding: const EdgeInsets.all(20), children: items);
   }
 
-  Widget _section(String t) => Padding(
+  Widget _section(String t, {Key? key}) => Padding(
+        key: key,
         padding: const EdgeInsets.fromLTRB(4, 18, 4, 8),
         child: Text(tr(t), style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, letterSpacing: 1.2, color: Theme.of(context).colorScheme.onSurfaceVariant)),
       );
@@ -479,8 +533,61 @@ class _TotpSetupDialogState extends State<_TotpSetupDialog> {
     }
   }
 
+  Widget _windowsTotp(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.all(24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 780),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(width: double.infinity, padding: const EdgeInsets.all(16),
+            color: const Color(0xFFE2E9EF),
+            child: Text(tr('Set up 2FA'), style: const TextStyle(
+                fontSize: 16, fontWeight: FontWeight.w700))),
+          Padding(padding: const EdgeInsets.all(20), child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('1. Open your authenticator app.\n\n'
+                    '2. Scan the QR code or enter the key manually.\n\n'
+                    '3. Enter the six-digit code to enable 2FA.'),
+                const SizedBox(height: 20),
+                TextField(controller: code, keyboardType: TextInputType.number,
+                  maxLength: 6, decoration: const InputDecoration(
+                    labelText: 'Code from the app', counterText: '', hintText: '000000')),
+              ])),
+              const SizedBox(width: 24),
+              SizedBox(width: 280, child: Column(children: [
+                // Never persist the QR or secret in preview assets or logs.
+                Container(color: Colors.white, padding: const EdgeInsets.all(10),
+                    child: QrImageView(data: widget.otpauth, size: 190)),
+                const SizedBox(height: 10),
+                SelectableText(widget.secret, style: const TextStyle(fontFamily: 'monospace')),
+                TextButton.icon(onPressed: () {
+                  Clipboard.setData(ClipboardData(text: widget.secret));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Key copied.')));
+                }, icon: const Icon(Icons.copy_rounded, size: 16),
+                    label: const Text('Copy key')),
+              ])),
+            ],
+          )),
+          const Divider(height: 1),
+          Padding(padding: const EdgeInsets.all(12), child: Row(
+            mainAxisAlignment: MainAxisAlignment.end, children: [
+              TextButton(onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel')),
+              const SizedBox(width: 8),
+              FilledButton(onPressed: busy ? null : _confirm,
+                  child: Text(busy ? 'Checking…' : 'Turn on 2FA')),
+            ],
+          )),
+        ]),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (isWindowsPlatform) return _windowsTotp(context);
     final scheme = Theme.of(context).colorScheme;
     return AlertDialog(
       title: Text(tr('Set up 2FA')),

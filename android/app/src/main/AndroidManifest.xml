@@ -3,9 +3,8 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    <!-- QR/batch-code scanning & photos (damage proof, product images) -->
-    <uses-permission android:name="android.permission.CAMERA"/>
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <!-- Legacy gallery access for Android 12 and below; newer Android uses
+         the system Photo Picker and does not need broad media access. -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
     <!-- location stamp on dispatch entries (no live tracking) -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
@@ -14,8 +13,6 @@
     <uses-permission android:name="android.permission.VIBRATE"/>
     <!-- daily entry reminders that survive reboot -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-    <!-- keep alert polling alive on aggressive OEMs (Xiaomi/Oppo) -->
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <application
         android:usesCleartextTraffic="true"
         android:label="FlavorFlow ERP"

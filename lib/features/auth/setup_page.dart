@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../../core/company.dart';
 import '../../core/i18n.dart';
 import '../../core/permissions.dart';
+import '../../core/platform_support.dart';
+import '../../core/theme.dart';
 import '../../router.dart' show kNeedsFirstRunSetup;
 
 /// One-time first-run setup (fresh install only): pick the app language and
@@ -39,8 +41,8 @@ class _SetupPageState extends State<SetupPage> {
     ));
     await CompanyProfile.markSetupDone();
     kNeedsFirstRunSetup = false;
-    // Ask ALL app permissions in one flow right after setup (like big apps).
-    await AppPermissions.requestAllOnce();
+    // Ask for notification permission after setup; other access is contextual.
+    await AppPermissions.requestNotificationOnce();
     if (!mounted) return;
     context.go('/login');
   }
@@ -48,13 +50,9 @@ class _SetupPageState extends State<SetupPage> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(28),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 430),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+    final setupForm = ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 430),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               // brand
               Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                 Container(
@@ -151,10 +149,45 @@ class _SetupPageState extends State<SetupPage> {
                   ),
                 ]),
               ],
-            ]),
-          ),
-        ),
-      ),
+      ]),
+    );
+    final setupScroll = SingleChildScrollView(padding: const EdgeInsets.all(28), child: setupForm);
+    return Scaffold(
+      body: isWindowsPlatform
+          ? LayoutBuilder(builder: (context, constraints) {
+              if (constraints.maxWidth < 850) return Center(child: setupScroll);
+              return Row(children: [
+                Expanded(
+                  flex: 2,
+                  child: Container(
+                    color: Shell.bg,
+                    padding: const EdgeInsets.all(32),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+                      const Icon(Icons.tune_rounded, size: 30, color: Color(0xFF7FBFF0)),
+                      const SizedBox(height: 18),
+                      const Text('WORKSPACE SETUP', style: TextStyle(color: Shell.groupLabel, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1.6)),
+                      const SizedBox(height: 8),
+                      const Text('Start with the right language and industry profile.', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700, height: 1.25)),
+                      const SizedBox(height: 24),
+                      for (final item in [
+                        ('01', 'Language', step == 0),
+                        ('02', 'Industry', step == 1),
+                      ])
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Row(children: [
+                            Container(width: 26, height: 26, alignment: Alignment.center, decoration: BoxDecoration(color: item.$3 ? AppBrand.blue : Colors.white.withValues(alpha: .08), border: Border.all(color: Colors.white.withValues(alpha: .18)), borderRadius: BorderRadius.circular(3)), child: Text(item.$1, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700))),
+                            const SizedBox(width: 9),
+                            Text(item.$2, style: TextStyle(color: Colors.white.withValues(alpha: item.$3 ? 1 : .62), fontSize: 12, fontWeight: FontWeight.w600)),
+                          ]),
+                        ),
+                    ]),
+                  ),
+                ),
+                Expanded(flex: 3, child: Center(child: setupScroll)),
+              ]);
+            })
+          : Center(child: setupScroll),
     );
   }
 }

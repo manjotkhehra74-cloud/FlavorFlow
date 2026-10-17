@@ -4,11 +4,24 @@ import 'package:flutter/material.dart';
 import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../core/platform_support.dart';
+
 /// QR/barcode scan that works on EVERY phone (incl. Xiaomi/MIUI where live
 /// camera-preview scanners fail with genericError):
 /// the system camera app takes the photo, Google ML Kit reads the code from
 /// it on-device. No preview surface, no camera lifecycle bugs.
 Future<String?> scanImpl(BuildContext context, {String title = 'Scan code'}) async {
+  if (!isPhonePlatform) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text(
+          'On desktop, type the code or use a USB barcode scanner in the code field.',
+        ),
+      ));
+    }
+    return null;
+  }
+
   try {
     final shot = await ImagePicker().pickImage(
       source: ImageSource.camera,

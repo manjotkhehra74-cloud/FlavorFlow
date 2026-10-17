@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FlavorFlow UI Preview</title>
+  <style>
+    :root {
+      --blue: #214e6b;
+      --blue-2: #0a6ed1;
+      --ink: #26394a;
+      --muted: #667b8d;
+      --line: #c7d1db;
+      --canvas: #e9eef3;
+      --paper: #fff;
+      --green: #16845b;
+      --orange: #ba6b15;
+      --red: #bb3b3b;
+      --shadow: 0 20px 60px rgba(27, 49, 69, .18);
+      font-family: "Segoe UI", Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      color: var(--ink);
+      background: #edf2f6;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: linear-gradient(135deg, #f4f7fa, #e7edf3); }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+    .preview-bar {
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      min-height: 66px; padding: 12px clamp(16px, 3vw, 42px);
+      background: rgba(255,255,255,.9); border-bottom: 1px solid #d9e1e8;
+      box-shadow: 0 2px 10px rgba(34, 54, 72, .04); position: sticky; top: 0; z-index: 20;
+    }
+    .preview-brand { display: flex; align-items: center; gap: 11px; min-width: 210px; }
+    .preview-brand img { width: 34px; height: 34px; border-radius: 8px; object-fit: cover; box-shadow: 0 1px 3px #0002; }
+    .preview-brand strong { display: block; font-size: 14px; letter-spacing: -.2px; }
+    .preview-brand small { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; }
+    .mode-switch { display: flex; gap: 4px; padding: 4px; border-radius: 9px; background: #eaf0f5; border: 1px solid #d9e1e8; }
+    .mode-switch button { border: 0; background: transparent; color: #53697b; border-radius: 6px; padding: 8px 13px; font-size: 12px; font-weight: 700; }
+    .mode-switch button.active { color: #fff; background: var(--blue); box-shadow: 0 2px 5px #214e6b33; }
+    .preview-note { color: #738698; font-size: 11px; text-align: right; }
+    .stage { width: min(1600px, calc(100% - 48px)); margin: 22px auto 36px; }
+    .desktop-app { height: min(900px, calc(100vh - 115px)); min-height: 630px; background: var(--canvas); border: 1px solid #b8c5d0; box-shadow: var(--shadow); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; }
+    .titlebar { height: 36px; flex: 0 0 36px; background: var(--blue); color: #f7fbff; display: flex; align-items: center; padding: 0 12px; gap: 9px; }
+    .titlebar img { width: 22px; height: 22px; border-radius: 5px; object-fit: cover; background: white; }
+    .titlebar strong { font-size: 12px; letter-spacing: .1px; }
+    .titlebar .title-sub { color: #d0e1ef; font-size: 11px; margin-left: 2px; }
+    .titlebar .user-pill { margin-left: auto; display: flex; align-items: center; gap: 7px; font-size: 11px; color: #e5eef5; }
+    .avatar { display: grid; place-items: center; width: 21px; height: 21px; border-radius: 50%; background: #eaf3fa; color: var(--blue); font-size: 10px; font-weight: 800; }
+    .window-controls { margin-left: 18px; display: flex; gap: 15px; color: #d9e8f3; font-size: 12px; }
+    .menubar { height: 32px; flex: 0 0 32px; background: #f8fafc; border-bottom: 1px solid var(--line); display: flex; align-items: stretch; padding: 0 7px; gap: 2px; }
+    .menu-item { border: 0; background: transparent; padding: 0 10px; color: #3c5264; font-size: 11px; }
+    .menu-item:hover, .menu-item:focus { background: #e5edf4; outline: none; }
+    .toolbar { min-height: 45px; flex: 0 0 auto; padding: 5px 9px; display: flex; align-items: center; gap: 5px; background: #edf2f6; border-bottom: 1px solid var(--line); }
+    .tool-btn { border: 1px solid transparent; border-radius: 5px; background: transparent; color: #40586b; height: 32px; padding: 0 9px; display: inline-flex; align-items: center; gap: 7px; font-size: 11px; }
+    .tool-btn:hover { background: white; border-color: #c6d3de; }
+    .tool-btn .ico { font-size: 15px; line-height: 1; }
+    .tool-divider { width: 1px; height: 25px; background: #c8d3dc; margin: 0 5px; }
+    .module-search { height: 30px; width: 225px; display: flex; align-items: center; gap: 7px; border: 1px solid #c7d2dc; border-radius: 5px; background: #fff; padding: 0 8px; color: #778a99; }
+    .module-search input { width: 100%; border: 0; outline: 0; color: var(--ink); font-size: 11px; }
+    .toolbar .spacer { flex: 1; }
+    .toolbar-badge { color: #617587; font-size: 10px; padding: 5px 8px; border: 1px solid #d2dbe3; background: #f8fafb; border-radius: 4px; }
+    .work-area { display: flex; min-height: 0; flex: 1; }
+    .module-pane { width: 225px; flex: 0 0 225px; background: #f6f8fa; border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+    .module-pane-head { padding: 13px 13px 10px; border-bottom: 1px solid #d7e0e7; }
+    .eyebrow { color: #718596; text-transform: uppercase; letter-spacing: 1.2px; font-size: 9px; font-weight: 800; }
+    .module-pane-head strong { display: block; margin-top: 4px; font-size: 12px; }
+    .module-scroll { padding: 8px 6px 14px; overflow: auto; }
+    .module-group { padding: 9px 8px 5px; color: #8495a3; font-size: 9px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; }
+    .nav-entry { width: 100%; height: 34px; display: flex; align-items: center; gap: 9px; border: 0; border-left: 3px solid transparent; border-radius: 4px; background: transparent; padding: 0 8px; color: #455c6e; text-align: left; font-size: 11px; }
+    .nav-entry:hover { background: #ebf1f6; }
+    .nav-entry.active { background: #dceaf7; border-left-color: var(--blue-2); color: #26394a; font-weight: 750; }
+    .nav-entry .nav-icon { width: 17px; text-align: center; font-size: 15px; }
+    .nav-entry .chev { margin-left: auto; color: #718596; font-size: 13px; }
+    .work-main { min-width: 0; flex: 1; display: flex; flex-direction: column; background: #e8edf2; }
+    .document-head { min-height: 50px; flex: 0 0 auto; display: flex; align-items: center; padding: 7px 16px; gap: 10px; background: #e2e9ef; border-bottom: 1px solid #c7d1db; }
+    .document-icon { width: 26px; height: 26px; display: grid; place-items: center; color: var(--blue); background: #f6f9fb; border: 1px solid #ccd7e0; border-radius: 4px; font-size: 15px; }
+    .document-head .head-title { min-width: 0; }
+    .document-head h1 { margin: 0; font-size: 13px; line-height: 1.25; }
+    .document-head p { margin: 2px 0 0; color: var(--muted); font-size: 10px; }
+    .document-head .head-actions { margin-left: auto; display: flex; gap: 7px; align-items: center; }
+    .btn { border: 1px solid #aabac8; background: #fff; color: #29475e; border-radius: 4px; padding: 7px 10px; font-size: 10px; font-weight: 700; }
+    .btn:hover { border-color: var(--blue-2); background: #f8fbfd; }
+    .btn.primary { background: var(--blue-2); border-color: var(--blue-2); color: #fff; }
+    .btn.primary:hover { background: #075fb7; }
+    .cmd-strip { min-height: 40px; flex: 0 0 auto; padding: 5px 10px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; background: #edf2f6; border-bottom: 1px solid #c7d1db; }
+    .cmd-label { color: #677c8d; font-size: 10px; }
+    .cmd-strip select, .cmd-strip input { height: 28px; border: 1px solid #c4d0da; border-radius: 4px; background: #fff; padding: 0 8px; color: #384f62; font-size: 10px; }
+    .cmd-strip input { min-width: 195px; }
+    .filter-chip { display: inline-flex; align-items: center; gap: 5px; padding: 6px 8px; border: 1px solid #c6d1db; border-radius: 4px; color: #526b7e; background: white; font-size: 10px; }
+    .filter-chip.active { border-color: #87acd0; color: #215578; background: #e3eff9; }
+    .document-body { min-height: 0; flex: 1; overflow: auto; padding: 14px; }
+    .preview-footer { height: 25px; flex: 0 0 25px; display: flex; align-items: center; gap: 15px; padding: 0 10px; background: #f5f7f9; border-top: 1px solid #c7d1db; color: #6f8291; font-size: 9px; }
+    .preview-footer .online { color: #25815b; }
+    .preview-footer .right { margin-left: auto; }
+    .kpi-row { display: grid; grid-template-columns: repeat(4, minmax(150px, 1fr)); gap: 10px; margin-bottom: 12px; }
+    .kpi { min-height: 87px; padding: 12px 13px; background: #fff; border: 1px solid #cbd5de; border-radius: 4px; box-shadow: 0 1px 1px #1c374a08; position: relative; }
+    .kpi:before { content: ""; position: absolute; left: 0; top: 13px; bottom: 13px; width: 3px; background: var(--kpi-color, #0a6ed1); }
+    .kpi-top { display: flex; align-items: center; justify-content: space-between; color: #657a8b; text-transform: uppercase; letter-spacing: .7px; font-size: 9px; font-weight: 800; }
+    .kpi-top .kpi-icon { color: var(--kpi-color, #0a6ed1); font-size: 15px; }
+    .kpi-value { margin-top: 7px; font-size: 23px; line-height: 1.15; font-weight: 750; font-variant-numeric: tabular-nums; letter-spacing: -.5px; }
+    .kpi-sub { margin-top: 3px; color: #718393; font-size: 9px; }
+    .grid-two { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(260px, .8fr); gap: 12px; align-items: start; }
+    .panel { background: #fff; border: 1px solid #c7d1db; border-radius: 4px; overflow: hidden; margin-bottom: 12px; }
+    .panel-head { min-height: 36px; padding: 8px 11px; display: flex; align-items: center; gap: 8px; background: #f3f6f8; border-bottom: 1px solid #d1dbe3; }
+    .panel-head:before { content: ""; width: 3px; height: 15px; background: #0a6ed1; }
+    .panel-head strong { font-size: 11px; }
+    .panel-head small { margin-left: auto; color: #718393; font-size: 9px; }
+    .panel-body { padding: 11px; }
+    .table-wrap { width: 100%; overflow: auto; }
+    table { width: 100%; border-collapse: collapse; background: #fff; font-size: 10px; white-space: nowrap; }
+    th { height: 30px; padding: 0 9px; text-align: left; color: #64798a; background: #f7f9fa; border-bottom: 1px solid #cbd5de; font-size: 8px; letter-spacing: .7px; text-transform: uppercase; }
+    td { height: 33px; padding: 0 9px; border-bottom: 1px solid #e6ebef; color: #32495c; }
+    tr:last-child td { border-bottom: 0; }
+    tbody tr:hover td { background: #f5f9fc; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .status { display: inline-flex; border-radius: 3px; padding: 3px 6px; background: #e8f5ee; color: #19744e; font-size: 8px; font-weight: 800; letter-spacing: .4px; }
+    .status.warn { color: #9b6017; background: #fff2de; }
+    .status.blue { color: #1b5a91; background: #e8f1fa; }
+    .status.red { color: #a93333; background: #fdeaea; }
+    .link { color: #0868b4; font-weight: 700; }
+    .two-kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .mini-stat { padding: 10px; background: #f7f9fa; border: 1px solid #d7e0e7; border-radius: 4px; }
+    .mini-stat span { display: block; color: #718393; font-size: 9px; }
+    .mini-stat strong { display: block; margin-top: 4px; font-size: 17px; font-variant-numeric: tabular-nums; }
+    .shortcut-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; }
+    .shortcut { min-height: 57px; border: 1px solid #d2dce4; border-radius: 4px; background: #fbfcfd; color: #304c62; padding: 9px; text-align: left; font-size: 10px; font-weight: 700; }
+    .shortcut:hover { background: #eef5fa; border-color: #a7bfd3; }
+    .shortcut span { display: block; margin-bottom: 4px; font-size: 15px; color: var(--blue-2); }
+    .alert-row { display: flex; align-items: flex-start; gap: 8px; padding: 8px 0; border-bottom: 1px solid #edf0f3; font-size: 10px; }
+    .alert-row:last-child { border-bottom: 0; }
+    .alert-dot { width: 7px; height: 7px; margin-top: 3px; border-radius: 50%; background: #d78c20; flex: 0 0 7px; }
+    .alert-dot.red { background: #c34444; }
+    .alert-row small { display: block; margin-top: 3px; color: #768999; font-size: 9px; }
+    .detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .empty-preview { padding: 32px; text-align: center; color: #758999; background: #fff; border: 1px dashed #c7d1db; border-radius: 4px; font-size: 11px; }
+    .mobile-stage { display: none; }
+    .stage.mobile-mode .desktop-app { display: none; }
+    .stage.mobile-mode .mobile-stage { display: block; }
+    .mobile-app { width: min(390px, 100%); height: min(844px, calc(100vh - 115px)); min-height: 620px; margin: 0 auto; background: #f4f7fa; border: 7px solid #1e2934; border-radius: 34px; overflow: hidden; box-shadow: var(--shadow); display: flex; flex-direction: column; position: relative; }
+    .mobile-top { height: 62px; padding: 12px 16px; display: flex; align-items: center; gap: 10px; color: white; background: linear-gradient(115deg, #183e58, #23688f); }
+    .mobile-top img { width: 31px; height: 31px; border-radius: 8px; background: white; object-fit: cover; }
+    .mobile-top strong { display: block; font-size: 13px; }
+    .mobile-top small { display: block; margin-top: 2px; color: #d5e7f4; font-size: 9px; }
+    .mobile-top .bell { margin-left: auto; position: relative; font-size: 18px; }
+    .mobile-top .bell:after { content: ""; position: absolute; width: 6px; height: 6px; top: -1px; right: -2px; border-radius: 50%; background: #ffbf48; border: 1px solid #1d5577; }
+    .mobile-content { flex: 1; overflow: auto; padding: 14px; }
+    .mobile-greeting { padding: 16px; border-radius: 18px; color: white; background: linear-gradient(130deg, #17445f, #176f8e); box-shadow: 0 8px 18px #1d56742c; }
+    .mobile-greeting small { color: #d6e7f1; font-size: 10px; }
+    .mobile-greeting h2 { margin: 5px 0 3px; font-size: 20px; }
+    .mobile-greeting p { margin: 0; color: #dceaf2; font-size: 10px; }
+    .mobile-kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 11px; }
+    .mobile-kpi { padding: 11px; min-height: 79px; background: #fff; border: 1px solid #e3e9ee; border-radius: 13px; box-shadow: 0 3px 9px #1a354b0c; }
+    .mobile-kpi small { color: #718393; font-size: 9px; }
+    .mobile-kpi strong { display: block; margin-top: 5px; font-size: 19px; }
+    .mobile-section-title { margin: 18px 2px 8px; display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 800; }
+    .mobile-section-title a { color: #0a6ed1; font-size: 10px; }
+    .mobile-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .mobile-action { min-height: 64px; border: 1px solid #e1e8ed; border-radius: 13px; background: white; color: #314a5e; padding: 10px; text-align: left; font-size: 10px; font-weight: 700; box-shadow: 0 2px 7px #1a354b0a; }
+    .mobile-action span { display: block; margin-bottom: 5px; font-size: 17px; color: #1475a3; }
+    .mobile-card { padding: 12px; margin-bottom: 8px; background: white; border: 1px solid #e2e8ed; border-radius: 13px; box-shadow: 0 2px 7px #19384d0a; }
+    .mobile-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .mobile-card strong { font-size: 11px; }
+    .mobile-card p { margin: 5px 0 0; color: #748696; font-size: 9px; line-height: 1.45; }
+    .mobile-row { display: flex; justify-content: space-between; gap: 8px; padding: 9px 0; border-bottom: 1px solid #eff2f4; font-size: 10px; }
+    .mobile-row:last-child { border: 0; }
+    .mobile-bottom { height: 62px; flex: 0 0 62px; padding: 5px 8px 8px; display: grid; grid-template-columns: repeat(4,1fr); background: #fff; border-top: 1px solid #e1e7ec; }
+    .mobile-nav { border: 0; background: transparent; color: #7c8d9a; font-size: 9px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+    .mobile-nav span { font-size: 17px; }
+    .mobile-nav.active { color: #126a94; font-weight: 800; }
+    .mobile-more { display: none; }
+    @media (max-width: 1000px) {
+      .stage { width: calc(100% - 24px); margin-top: 12px; }
+      .desktop-app { min-height: 580px; }
+      .module-pane { width: 185px; flex-basis: 185px; }
+      .kpi-row { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
+      .grid-two { grid-template-columns: 1fr; }
+      .toolbar .tool-btn .label { display: none; }
+      .module-search { width: 180px; }
+    }
+    @media (max-width: 700px) {
+      .preview-bar { min-height: 58px; padding: 9px 12px; gap: 8px; }
+      .preview-brand { min-width: 0; }
+      .preview-brand img { width: 29px; height: 29px; }
+      .preview-brand small, .preview-note { display: none; }
+      .mode-switch button { padding: 7px 9px; font-size: 10px; }
+      .stage { width: calc(100% - 16px); margin: 9px auto 18px; }
+      .desktop-app { height: calc(100vh - 85px); min-height: 540px; }
+      .module-pane { width: 57px; flex-basis: 57px; }
+      .module-pane-head { padding: 11px 5px; text-align: center; }
+      .module-pane-head .eyebrow { display: none; }
+      .module-pane-head strong { font-size: 8px; }
+      .module-group { display: none; }
+      .nav-entry { justify-content: center; padding: 0; font-size: 0; }
+      .nav-entry .nav-icon { font-size: 16px; }
+      .nav-entry .chev { display: none; }
+      .menu-item { padding: 0 5px; font-size: 9px; }
+      .toolbar { gap: 2px; padding: 4px; }
+      .module-search { width: 130px; }
+      .toolbar-badge { display: none; }
+      .document-head { padding: 6px 8px; }
+      .document-head .head-actions { display: none; }
+      .document-body { padding: 8px; }
+      .kpi-row { gap: 6px; }
+      .kpi { padding: 9px; min-height: 78px; }
+      .kpi-value { font-size: 19px; }
+      .stage.mobile-mode .desktop-app { display: none; }
+      .stage.mobile-mode .mobile-stage { display: block; }
+      .mobile-app { height: calc(100vh - 85px); min-height: 560px; border-width: 5px; border-radius: 29px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="preview-bar">
+    <div class="preview-brand">
+      <img src="/assets/icon/app_icon.png" alt="FlavorFlow icon">
+      <div><strong>FlavorFlow UI preview</strong><small>Interactive concept · preview data only</small></div>
+    </div>
+    <div class="mode-switch" role="group" aria-label="Choose UI preview">
+      <button class="active" id="windowsMode">Windows workspace</button>
+      <button id="mobileMode">Mobile app</button>
+    </div>
+    <div class="preview-note">No build · No publishing<br>Switch views to compare layouts</div>
+  </header>
+
+  <main class="stage" id="stage">
+    <section class="desktop-app" aria-label="Windows FlavorFlow workspace">
+      <div class="titlebar">
+        <img src="/assets/icon/app_icon.png" alt="">
+        <strong>FlavorFlow ERP</strong>
+        <span class="title-sub">Manufacturing workspace</span>
+        <div class="user-pill"><span class="avatar">OP</span><span>Operations · Preview</span></div>
+        <div class="window-controls" aria-hidden="true"><span>—</span><span>□</span><span>×</span></div>
+      </div>
+      <nav class="menubar" aria-label="Application menus">
+        <button class="menu-item">File</button><button class="menu-item">Edit</button><button class="menu-item">View</button><button class="menu-item">Data</button><button class="menu-item">Go To</button><button class="menu-item">Modules</button><button class="menu-item">Tools</button><button class="menu-item">Window</button><button class="menu-item">Help</button>
+      </nav>
+      <div class="toolbar">
+        <button class="tool-btn" data-screen="dashboard"><span class="ico">⌂</span><span class="label">Main Menu</span></button>
+        <button class="tool-btn" onclick="renderCurrent()"><span class="ico">↻</span><span class="label">Refresh</span></button>
+        <button class="tool-btn" onclick="document.getElementById('moduleSearch').focus()"><span class="ico">☷</span><span class="label">Modules</span></button>
+        <span class="tool-divider"></span>
+        <label class="module-search"><span>⌕</span><input id="moduleSearch" placeholder="Find a module…" autocomplete="off"></label>
+        <span class="spacer"></span>
+        <span class="toolbar-badge">PREVIEW DATA</span>
+      </div>
+      <div class="work-area">
+        <aside class="module-pane">
+          <div class="module-pane-head"><span class="eyebrow">Modules</span><strong>Workspace</strong></div>
+          <div class="module-scroll" id="moduleNav">
+            <div class="module-group">Workspace</div>
+            <button class="nav-entry active" data-screen="dashboard"><span class="nav-icon">▦</span>Dashboard<span class="chev">›</span></button>
+            <div class="module-group">Operations</div>
+            <button class="nav-entry" data-screen="production"><span class="nav-icon">⚙</span>Production<span class="chev">›</span></button>
+            <button class="nav-entry" data-screen="dispatch"><span class="nav-icon">↗</span>Dispatch<span class="chev">›</span></button>
+            <button class="nav-entry" data-screen="packing"><span class="nav-icon">▤</span>Packing Materials<span class="chev">›</span></button>
+            <div class="module-group">Inventory</div>
+            <button class="nav-entry" data-screen="inventory"><span class="nav-icon">▣</span>Inventory<span class="chev">›</span></button>
+            <button class="nav-entry" data-screen="stock"><span class="nav-icon">⇄</span>Stock Ledger<span class="chev">›</span></button>
+            <div class="module-group">Finance</div>
+            <button class="nav-entry" data-screen="billing"><span class="nav-icon">▧</span>Billing<span class="chev">›</span></button>
+            <button class="nav-entry" data-screen="reports"><span class="nav-icon">▥</span>Reports<span class="chev">›</span></button>
+            <div class="module-group">Administration</div>
+            <button class="nav-entry" data-screen="users"><span class="nav-icon">♙</span>Users & Roles<span class="chev">›</span></button>
+            <button class="nav-entry" data-screen="settings"><span class="nav-icon">⚙</span>Settings<span class="chev">›</span></button>
+          </div>
+        </aside>
+        <section class="work-main">
+          <header class="document-head">
+            <div class="document-icon" id="screenIcon">▦</div>
+            <div class="head-title"><h1 id="screenTitle">Dashboard</h1><p id="screenSubtitle">Plant operations at a glance · Preview data only</p></div>
+            <div class="head-actions"><button class="btn" onclick="renderCurrent()">↻ Refresh</button><button class="btn primary" id="headAction">＋ New Batch</button></div>
+          </header>
+          <div class="cmd-strip" id="commandStrip"></div>
+          <div class="document-body" id="screenBody"></div>
+        </section>
+      </div>
+      <footer class="preview-footer"><span class="online">● Connected</span><span>Universal manufacturing workspace</span><span>All figures shown are illustrative</span><span class="right">FlavorFlow ERP · UI preview</span></footer>
+    </section>
+
+    <section class="mobile-stage" aria-label="Mobile FlavorFlow screen preview">
+      <div class="mobile-app">
+        <header class="mobile-top">
+          <img src="/assets/icon/app_icon.png" alt="">
+          <div><strong>FlavorFlow</strong><small id="mobileSection">Operations dashboard</small></div>
+          <div class="bell" aria-label="Notifications">♧</div>
+        </header>
+        <div class="mobile-content" id="mobileBody"></div>
+        <nav class="mobile-bottom" aria-label="Mobile navigation">
+          <button class="mobile-nav active" data-screen="dashboard"><span>⌂</span>Home</button>
+          <button class="mobile-nav" data-screen="inventory"><span>▣</span>Stock</button>
+          <button class="mobile-nav" data-screen="production"><span>⚙</span>Work</button>
+          <button class="mobile-nav" data-screen="more"><span>•••</span>More</button>
+        </nav>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const screens = {
+      dashboard: { title: 'Dashboard', subtitle: 'Plant operations at a glance · Preview data only', icon: '▦', action: '＋ New Batch' },
+      production: { title: 'Production Register', subtitle: 'Planned batches, execution status and output', icon: '⚙', action: '＋ Create Batch' },
+      dispatch: { title: 'Dispatch Register', subtitle: 'Vehicle loading, destination and dispatch status', icon: '↗', action: '＋ New Dispatch' },
+      packing: { title: 'Packing Materials', subtitle: 'Stock register, BOM consumption and movements', icon: '▤', action: '＋ Receive Stock' },
+      inventory: { title: 'Inventory Register', subtitle: 'Finished goods, stock on hand and low-stock controls', icon: '▣', action: '＋ Receive Stock' },
+      stock: { title: 'Stock Ledger', subtitle: 'Movements, period balances and source documents', icon: '⇄', action: 'Export CSV' },
+      billing: { title: 'Billing Workspace', subtitle: 'Sales, purchases, balances and tax registers', icon: '▧', action: '＋ New Invoice' },
+      reports: { title: 'Reports Library', subtitle: 'Role-authorized registers and export views', icon: '▥', action: 'Export PDF' },
+      users: { title: 'User Administration', subtitle: 'Accounts, role assignments and permissions', icon: '♙', action: '＋ Add User' },
+      settings: { title: 'Settings', subtitle: 'Preferences, access and company connection', icon: '⚙', action: 'Refresh access' },
+      more: { title: 'More', subtitle: 'Additional mobile modules', icon: '•••', action: 'Open module' }
+    };
+    let currentScreen = 'dashboard';
+    let previewMode = 'windows';
+
+    function kpi(label, value, sub, color, icon) {
+      return `<div class="kpi" style="--kpi-color:${color}"><div class="kpi-top"><span>${label}</span><span class="kpi-icon">${icon}</span></div><div class="kpi-value">${value}</div><div class="kpi-sub">${sub}</div></div>`;
+    }
+    function panel(title, body, trailing='') {
+      return `<section class="panel"><div class="panel-head"><strong>${title}</strong><small>${trailing}</small></div><div class="panel-body">${body}</div></section>`;
+    }
+    function table(headers, rows) {
+      return `<div class="table-wrap"><table><thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+    }
+    const status = (label, cls='') => `<span class="status ${cls}">${label}</span>`;
+
+    function desktopContent(screen) {
+      const commonKpis = `<div class="kpi-row">
+        ${kpi('Production today','1,248','units completed','#15936b','⚙')}
+        ${kpi('Finished stock','8,420','units on hand','#0a6ed1','▣')}
+        ${kpi('Open dispatches','12','3 awaiting confirmation','#bb7219','↗')}
+        ${kpi('Low stock alerts','4','materials below minimum','#c24646','!')}
+      </div>`;
+      const activityRows = [
+        ['B-2609-014','Product A','1,200','Completed','08:42'],
+        ['B-2609-013','Product B','960','In progress','08:18'],
+        ['B-2609-012','Product A','1,440','Planned','07:55'],
+        ['B-2609-011','Product C','720','Completed','Yesterday']
+      ].map((r,i)=>[`<span class="link">${r[0]}</span>`,r[1],`<span class="num">${r[2]}</span>`,status(r[3],r[3]==='In progress'?'blue':r[3]==='Planned'?'warn':''),r[4]]);
+      if (screen === 'dashboard') {
+        return `${commonKpis}<div class="grid-two">
+          ${panel('Production Activity', table(['Batch','Product','Planned Qty','Status','Updated'],activityRows), 'This shift · 4 records')}
+          <div>
+            ${panel('Quick Actions', `<div class="shortcut-grid"><button class="shortcut" data-screen="production"><span>＋</span>Create batch</button><button class="shortcut" data-screen="dispatch"><span>↗</span>New dispatch</button><button class="shortcut" data-screen="inventory"><span>▣</span>View inventory</button><button class="shortcut" data-screen="stock"><span>⇄</span>Stock ledger</button></div>`)}
+            ${panel('Operational Alerts', `<div class="alert-row"><i class="alert-dot red"></i><div>4 items are below minimum stock<small>Review inventory replenishment</small></div></div><div class="alert-row"><i class="alert-dot"></i><div>2 approvals need review<small>Stock adjustment requests</small></div></div><div class="alert-row"><i class="alert-dot"></i><div>Next month-end close is approaching<small>Packing loss report</small></div></div>`)}
+          </div>
+        </div><div class="detail-grid">${panel('Shift Summary',`<div class="two-kpis"><div class="mini-stat"><span>Completed batches</span><strong>8</strong></div><div class="mini-stat"><span>Open work orders</span><strong>5</strong></div></div>`)}${panel('Workspace Status',`<div class="alert-row"><i class="alert-dot" style="background:#25815b"></i><div>All services responding<small>Preview connection status</small></div></div>`)}</div>`;
+      }
+      if (screen === 'inventory') {
+        const rows = [['FG-001','Product A','2,480','1,120','3,600',status('IN STOCK')],['FG-002','Product B','1,960','840','2,800',status('IN STOCK')],['FG-003','Product C','1,320','520','1,840',status('LOW','warn')],['FG-004','Product D','980','340','1,320',status('IN STOCK')]];
+        return `<div class="kpi-row">${kpi('Items in stock','28','finished goods','#0a6ed1','▣')}${kpi('Total units','9,560','current balance','#15936b','▤')}${kpi('Low stock','4','below minimum','#c24646','!')}${kpi('Stock movement','136','this month','#7a63b3','⇄')}</div>
+          ${panel('Finished Goods Stock',table(['Item Code','Product','Cartons','Loose Units','Total Units','Status'],rows),'Stock on hand')}
+          ${panel('Desktop workflow',`<div class="alert-row"><i class="alert-dot"></i><div>Use the command strip to search, filter and open the stock ledger.<small>Illustrative preview values only</small></div></div>`)}`;
+      }
+      if (screen === 'production') {
+        const rows = [['B-2609-014','Product A','1,200','1,200',status('COMPLETED')],['B-2609-013','Product B','960','480',status('IN PROGRESS','blue')],['B-2609-012','Product A','1,440','—',status('PLANNED','warn')],['B-2609-011','Product C','720','720',status('COMPLETED')]];
+        return `<div class="kpi-row">${kpi('Planned','6','open batches','#0a6ed1','▦')}${kpi('In progress','2','active lines','#ba7219','⚙')}${kpi('Completed today','8','production batches','#16845b','✓')}${kpi('Produced units','4,320','this shift','#7a63b3','▤')}</div>${panel('Batch Register',table(['Batch Code','Product','Planned','Produced','Status'],rows),'6 open · 8 completed')}`;
+      }
+      if (screen === 'dispatch') {
+        const rows = [['D-2609-008','Vehicle 01','North route','840',status('READY','blue')],['D-2609-007','Vehicle 02','West route','1,120',status('DISPATCHED')],['D-2609-006','Vehicle 03','East route','560',status('DRAFT','warn')],['D-2609-005','Vehicle 04','Central route','920',status('DISPATCHED')]];
+        return `<div class="kpi-row">${kpi('Today’s dispatches','8','loading register','#0a6ed1','↗')}${kpi('Awaiting confirm','3','not yet dispatched','#ba7219','◷')}${kpi('Units loaded','3,440','across vehicles','#16845b','▤')}${kpi('Open invoices','2','billing follow-up','#7a63b3','▧')}</div><div class="grid-two">${panel('Dispatch Register',table(['Dispatch','Vehicle','Destination','Units','Status'],rows),'Latest first')}${panel('Dispatch Summary',`<div class="two-kpis"><div class="mini-stat"><span>Vehicles used</span><strong>6</strong></div><div class="mini-stat"><span>Destinations</span><strong>5</strong></div><div class="mini-stat"><span>Awaiting invoices</span><strong>2</strong></div><div class="mini-stat"><span>Voided today</span><strong>0</strong></div></div>`)}</div>`;
+      }
+      if (screen === 'packing') {
+        const rows = [['PM-001','Packing Material A','General','2,400','pcs',status('IN STOCK')],['PM-002','Packing Material B','General','760','pcs',status('LOW','warn')],['PM-003','Raw Material A','Raw Material','4,200','kg',status('IN STOCK')],['PM-004','Packing Material C','General','1,100','pcs',status('IN STOCK')]];
+        return `<div class="kpi-row">${kpi('Material items','42','active items','#0a6ed1','▣')}${kpi('Categories','6','current catalog','#15936b','▤')}${kpi('Low stock','3','replenishment needed','#c24646','!')}${kpi('Ledger movements','26','this week','#7a63b3','⇄')}</div>${panel('Material Stock Register',table(['Item Code','Material','Category','Balance','Unit','Status'],rows),'Search · filter · receive · consume')}`;
+      }
+      if (screen === 'stock') {
+        const rows = [['Today, 09:18','Product A',status('PRODUCTION','blue'),'+240 pcs','3,600 pcs','B-2609-014','Operations'],['Today, 08:56','Material A',status('RECEIPT'),'+500 kg','4,200 kg','PO-Preview-04','Stores'],['Today, 08:12','Product B',status('DISPATCH','warn'),'−180 pcs','2,800 pcs','D-2609-007','Dispatch'],['Yesterday','Material B',status('CONSUMED'),'−80 pcs','760 pcs','B-2609-011','Production']];
+        return `<div class="kpi-row">${kpi('Movements','136','selected period','#0a6ed1','⇄')}${kpi('Total in','+2,480','all units summed','#16845b','↙')}${kpi('Total out','−1,840','all units summed','#c24646','↗')}${kpi('Movement types','8','inward and outward','#7a63b3','▤')}</div>${panel('Movement Register',table(['Date','Item','Movement','In / Out','Quantity','Balance','Document','By'],rows),'From · To · Quick period · Export CSV')}`;
+      }
+      if (screen === 'billing') {
+        const rows = [['INV-Preview-014','Customer A','09 Sep 2026','₹ 84,600',status('ISSUED','warn')],['INV-Preview-013','Customer B','09 Sep 2026','₹ 52,300',status('PAID')],['INV-Preview-012','Customer C','08 Sep 2026','₹ 1,12,400',status('PART PAID','blue')],['INV-Preview-011','Customer D','08 Sep 2026','₹ 38,900',status('PAID')]];
+        return `<div class="kpi-row">${kpi('Sales this month','₹ 8.4L','illustrative total','#0a6ed1','▧')}${kpi('Tax collected','₹ 1.2L','illustrative total','#7a63b3','₹')}${kpi('Received','₹ 6.8L','illustrative total','#16845b','✓')}${kpi('Outstanding','₹ 1.6L','illustrative total','#ba7219','◷')}</div>${panel('Sales Invoice Register',table(['Invoice','Party','Date','Grand Total','Status'],rows),'Sales · Receivables · Purchases · GST Register')}`;
+      }
+      if (screen === 'reports') {
+        const rows = [['Stock on Hand','Current balances and minimum stock','Ready'],['Production Register','Completed and planned batches','Ready'],['Dispatch History','Confirmed dispatch records','Ready'],['Material Ledger','Receipts and consumption','Ready']];
+        return `<div class="grid-two"><div>${panel('Report Library',table(['Report','Description','Status'],rows),'Role authorized')}</div><div>${panel('Report Preview',`<div class="empty-preview">Select a report from the library to preview its rows.<br><br>PDF and spreadsheet exports are available where permitted.</div>`)}</div></div>`;
+      }
+      if (screen === 'users') {
+        const rows = [['Operations User','ops@example.invalid','Operator',status('ACTIVE'),'Default'],['Store User','store@example.invalid','Stores',status('ACTIVE'),'Default'],['Finance User','finance@example.invalid','Billing',status('ACTIVE'),'Custom']];
+        return `<div class="kpi-row">${kpi('Accounts','12','across assigned roles','#0a6ed1','♙')}${kpi('Active','11','enabled users','#16845b','✓')}${kpi('Roles','6','permission profiles','#7a63b3','♙')}${kpi('Access changes','2','this month','#ba7219','⚑')}</div><div class="grid-two">${panel('Users & Roles',table(['User','Login ID','Role','Status','Permissions'],rows),'Add · edit · deactivate')}${panel('Role Permission Matrix',`<div class="alert-row"><i class="alert-dot"></i><div>Operations<small>Production · dispatch · inventory</small></div></div><div class="alert-row"><i class="alert-dot"></i><div>Finance<small>Billing · receivables · reports</small></div></div><div class="alert-row"><i class="alert-dot"></i><div>Administration<small>Users · settings · audit</small></div></div>`)}</div>`;
+      }
+      if (screen === 'settings') {
+        return `<div class="detail-grid">${panel('Preferences',`<div class="alert-row"><i class="alert-dot"></i><div>Language and display<small>Application preferences</small></div></div><div class="alert-row"><i class="alert-dot"></i><div>Theme and text size<small>Per-user settings</small></div></div>`)}${panel('Security',`<div class="alert-row"><i class="alert-dot"></i><div>Two-factor authentication<small>Authenticator app</small></div></div><div class="alert-row"><i class="alert-dot"></i><div>Session policy<small>Access controls</small></div></div>`)}${panel('Connection',`<div class="alert-row"><i class="alert-dot" style="background:#25815b"></i><div>Server status<small>Connected · preview only</small></div></div>`)}${panel('About',`<div class="mini-stat"><span>Product</span><strong>FlavorFlow ERP</strong></div>`)}</div>`;
+      }
+      return `<div class="empty-preview">Select a workspace module.</div>`;
+    }
+
+    function commandMarkup(screen) {
+      const common = `<span class="cmd-label">Period</span><select aria-label="Date range"><option>This month</option><option>Last 7 days</option><option>This financial year</option></select>`;
+      if (screen === 'dashboard') return `<span class="cmd-label">Workspace overview</span><span class="filter-chip active">● Connected</span><span class="filter-chip">Today · Preview data</span>`;
+      if (screen === 'inventory' || screen === 'packing') return `<input aria-label="Search items" placeholder="⌕  Search name / item code…"><select aria-label="Category"><option>All categories</option><option>Active items</option><option>Low stock</option></select><button class="filter-chip active">▤ All stock</button><button class="filter-chip">⚠ Low stock only</button><span class="cmd-label">${screen === 'packing'?'Receive · Consume · Import':'Receive · Ledger · Export'}</span>`;
+      if (screen === 'production') return `<input aria-label="Search batches" placeholder="⌕  Search batch or product…"><select aria-label="Status"><option>All statuses</option><option>Planned</option><option>In progress</option><option>Completed</option></select><span class="filter-chip">Production board</span>`;
+      if (screen === 'dispatch') return `${common}<select aria-label="Dispatch status"><option>All statuses</option><option>Ready</option><option>Dispatched</option></select><input placeholder="Search vehicle / destination…">`;
+      if (screen === 'stock') return `${common}<select aria-label="Movement"><option>All movements</option><option>In</option><option>Out</option></select><select aria-label="Item type"><option>All items</option><option>Products</option><option>Materials</option></select><input placeholder="Document / party / note…">`;
+      if (screen === 'billing') return `<button class="filter-chip active">Sales Invoices</button><button class="filter-chip">Receivables</button><button class="filter-chip">Purchases</button><button class="filter-chip">Payables</button><button class="filter-chip">GST Register</button>`;
+      if (screen === 'reports') return `<span class="cmd-label">Reports</span><button class="filter-chip active">PDF export</button><button class="filter-chip">Spreadsheet export</button>`;
+      if (screen === 'users') return `<input placeholder="⌕  Search users…"><button class="filter-chip active">Accounts</button><button class="filter-chip">Roles and permissions</button>`;
+      if (screen === 'settings') return `<span class="cmd-label">User preferences · security · connection</span>`;
+      return `<span class="cmd-label">Preview workspace · no live data</span>`;
+    }
+
+    function renderCurrent() {
+      const info = screens[currentScreen] || screens.dashboard;
+      document.getElementById('screenTitle').textContent = info.title;
+      document.getElementById('screenSubtitle').textContent = info.subtitle;
+      document.getElementById('screenIcon').textContent = info.icon;
+      document.getElementById('headAction').textContent = info.action;
+      document.getElementById('commandStrip').innerHTML = commandMarkup(currentScreen);
+      document.getElementById('screenBody').innerHTML = desktopContent(currentScreen);
+      document.querySelectorAll('.nav-entry').forEach(btn => btn.classList.toggle('active', btn.dataset.screen === currentScreen));
+      document.querySelectorAll('.mobile-nav').forEach(btn => btn.classList.toggle('active', btn.dataset.screen === currentScreen || (btn.dataset.screen === 'more' && !['dashboard','inventory','production'].includes(currentScreen))));
+      document.getElementById('mobileSection').textContent = info.title;
+      renderMobile();
+      document.querySelectorAll('[data-screen]').forEach(btn => {
+        if (!btn.dataset.bound) {
+          btn.dataset.bound = '1';
+          btn.addEventListener('click', () => {
+            const next = btn.dataset.screen;
+            if (next === 'more') currentScreen = currentScreen === 'more' ? 'settings' : 'more';
+            else currentScreen = next;
+            renderCurrent();
+          });
+        }
+      });
+    }
+
+    function renderMobile() {
+      const body = document.getElementById('mobileBody');
+      const info = screens[currentScreen] || screens.dashboard;
+      if (currentScreen === 'dashboard' || currentScreen === 'more') {
+        body.innerHTML = `<section class="mobile-greeting"><small>Good day · Operations</small><h2>Plant overview</h2><p>Role-based workspace · Preview data only</p></section>
+          <div class="mobile-kpis"><div class="mobile-kpi"><small>Production today</small><strong>1,248</strong></div><div class="mobile-kpi"><small>Finished stock</small><strong>8,420</strong></div><div class="mobile-kpi"><small>Open dispatches</small><strong>12</strong></div><div class="mobile-kpi"><small>Low stock</small><strong>4</strong></div></div>
+          <div class="mobile-section-title">Quick actions <a>View all</a></div><div class="mobile-actions"><button class="mobile-action" data-screen="production"><span>＋</span>New batch</button><button class="mobile-action" data-screen="dispatch"><span>↗</span>New dispatch</button><button class="mobile-action" data-screen="inventory"><span>▣</span>Check stock</button><button class="mobile-action" data-screen="billing"><span>▧</span>Billing</button></div>
+          <div class="mobile-section-title">Recent activity <a>See more</a></div><article class="mobile-card"><div class="mobile-card-head"><strong>Production completed</strong>${status('DONE')}</div><p>Product A · Batch B-2609-014 · Preview only</p></article><article class="mobile-card"><div class="mobile-card-head"><strong>Dispatch ready</strong>${status('READY','blue')}</div><p>Vehicle 01 · North route · Preview only</p></article>`;
+      } else if (currentScreen === 'inventory' || currentScreen === 'packing' || currentScreen === 'stock') {
+        body.innerHTML = `<div class="mobile-section-title">${info.title}<a>Filter</a></div><div class="mobile-kpis"><div class="mobile-kpi"><small>Items</small><strong>28</strong></div><div class="mobile-kpi"><small>Low stock</small><strong>4</strong></div></div><div class="mobile-section-title">Stock items <a>Search</a></div>
+          ${['Product A','Product B','Material A','Material B'].map((n,i)=>`<article class="mobile-card"><div class="mobile-card-head"><strong>${n}</strong>${i===3?status('LOW','warn'):status('IN STOCK')}</div><p>Current balance · Unit details · Tap to open ledger</p><div class="mobile-row"><span>Available</span><b>${['3,600','2,800','4,200','760'][i]}</b></div></article>`).join('')}`;
+      } else {
+        body.innerHTML = `<div class="mobile-section-title">${info.title}<a>View all</a></div><div class="mobile-card"><div class="mobile-card-head"><strong>${info.subtitle}</strong>${status('PREVIEW','blue')}</div><p>Mobile layout uses compact cards and touch-first actions. This is illustrative preview data, not a live company account.</p></div>
+          <div class="mobile-section-title">Recent records <a>See more</a></div>${['Record A','Record B','Record C'].map((n,i)=>`<article class="mobile-card"><div class="mobile-card-head"><strong>${n}</strong>${status(i===0?'OPEN':'DONE',i===0?'warn':'')}</div><p>Example item · Updated recently · Preview only</p></article>`).join('')}`;
+      }
+      body.querySelectorAll('[data-screen]').forEach(btn => btn.addEventListener('click', () => { currentScreen = btn.dataset.screen; renderCurrent(); }));
+    }
+
+    document.getElementById('windowsMode').addEventListener('click', () => {
+      previewMode = 'windows'; document.getElementById('stage').classList.remove('mobile-mode');
+      document.getElementById('windowsMode').classList.add('active'); document.getElementById('mobileMode').classList.remove('active');
+    });
+    document.getElementById('mobileMode').addEventListener('click', () => {
+      previewMode = 'mobile'; document.getElementById('stage').classList.add('mobile-mode');
+      document.getElementById('mobileMode').classList.add('active'); document.getElementById('windowsMode').classList.remove('active');
+    });
+    document.getElementById('moduleSearch').addEventListener('input', event => {
+      const q = event.target.value.toLowerCase();
+      document.querySelectorAll('.nav-entry').forEach(item => item.style.display = item.textContent.toLowerCase().includes(q) ? 'flex' : 'none');
+      document.querySelectorAll('.module-group').forEach(group => group.style.display = q ? 'none' : 'block');
+    });
+    renderCurrent();
+  </script>
+</body>
+</html>

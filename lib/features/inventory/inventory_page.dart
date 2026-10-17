@@ -9,6 +9,7 @@ import '../../core/industry_pack.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../core/i18n.dart';
+import '../../core/platform_support.dart';
 import '../../core/item_code.dart';
 import '../../state/auth.dart';
 import '../../core/offline_queue.dart';
@@ -61,7 +62,7 @@ class _InventoryPageState extends State<InventoryPage> {
     setState(() => _exporting = true);
     try {
       final bytes = await context.read<AuthController>().api.getBytes('/inventory/stock.xlsx');
-      downloadBytes('flavorflow-stock-${todayYmd()}.xlsx', bytes,
+      await downloadBytes('flavorflow-stock-${todayYmd()}.xlsx', bytes,
           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     } catch (e) {
       if (mounted) showErr(context, e);
@@ -87,6 +88,140 @@ class _InventoryPageState extends State<InventoryPage> {
     }
   }
 
+  Widget _buildWindowsInventory({
+    required Map<String, dynamic> summary,
+    required List<Map<String, dynamic>> allItems,
+    required List<Map<String, dynamic>> items,
+    required bool hasCodes,
+    required AuthController auth,
+  }) {
+    final search = TextField(
+      controller: _q,
+      onChanged: (_) => setState(() {}),
+      decoration: InputDecoration(
+        isDense: true,
+        prefixIcon: const Icon(Icons.search_rounded, size: 18),
+        hintText: hasCodes ? tr('Search name / item code') : tr('Search product'),
+        suffixIcon: _q.text.isEmpty ? null : IconButton(icon: const Icon(Icons.clear_rounded, size: 18), onPressed: () => setState(_q.clear)),
+      ),
+    );
+    final filtersAndCommands = Wrap(spacing: 7, runSpacing: 7, crossAxisAlignment: WrapCrossAlignment.center, children: [
+      ChoiceChip(
+        label: Text(tr('All products')),
+        selected: !_lowOnly,
+        onSelected: (_) => setState(() { _lowOnly = false; _future = _load(); }),
+      ),
+      ChoiceChip(
+        label: Text(tr('Low stock only')),
+        selected: _lowOnly,
+        avatar: const Icon(Icons.warning_amber_rounded, size: 16),
+        onSelected: (_) => setState(() { _lowOnly = true; _future = _load(); }),
+      ),
+      if (auth.can('inventory.manage'))
+        FilledButton.icon(
+          onPressed: () async {
+            final saved = await showDialog<bool>(context: context, builder: (_) => const ReceiptDialog());
+            if (saved == true) _reload();
+          },
+          icon: const Icon(Icons.add_box_outlined, size: 17),
+          label: Text(tr('Receive Stock')),
+        ),
+      if (auth.canManageBilling)
+        OutlinedButton.icon(
+          onPressed: () async {
+            await context.push('/billing/purchases/new');
+            _reload();
+          },
+          icon: const Icon(Icons.receipt_long_outlined, size: 16),
+          label: Text(tr('Enter Supplier Bill')),
+        ),
+      OutlinedButton.icon(onPressed: () => context.push('/stock'), icon: const Icon(Icons.history_rounded, size: 16), label: Text(tr('Stock Ledger'))),
+      OutlinedButton.icon(
+        onPressed: _exporting ? null : _exportPdf,
+        icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
+        label: Text(tr('Stock PDF')),
+      ),
+      OutlinedButton.icon(
+        onPressed: _exporting ? null : _exportExcel,
+        icon: const Icon(Icons.table_view_outlined, size: 16),
+        label: Text(tr('Stock Excel')),
+      ),
+    ]);
+
+    final stockTable = SectionCard(
+      title: _lowOnly ? 'Low Stock Products' : 'Stock on Hand',
+      child: items.isEmpty
+          ? EmptyState(_q.text.isNotEmpty ? 'No matching products' : _lowOnly ? 'No products below minimum stock 🎉' : 'No inventory yet — add products in Products, then receive opening stock or complete a production batch.')
+          : AppDataTable(
+              columns: [if (hasCodes) 'Item Code', 'Product', '${U.carton} (${U.cb})', if (CompanyProfile.usesTrays) U.tray, 'Total ${U.piece}', 'Gross kg', 'Min (${U.cb})', 'Status', ''],
+              rows: [
+                for (final item in items)
+                  [
+                    if (hasCodes) ItemCodeChip(ItemCode.of(item)),
+                    Text(item['name'] as String, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    qtyInt(item['qty_cb']),
+                    if (CompanyProfile.usesTrays) qtyInt(item['qty_trays']),
+                    qtyInt(item['total_bottles']),
+                    qty(item['gross_kg']),
+                    qtyInt(item['min_stock_cb']),
+                    (item['low'] as int) == 1 ? const StatusChip('LOW') : const StatusChip('IN STOCK'),
+                    Row(mainAxisSize: MainAxisSize.min, children: [
+                      if (auth.canViewBilling)
+                        IconButton(
+                          tooltip: tr('Stock ledger (all in / out with doc numbers)'),
+                          icon: const Icon(Icons.history_rounded, size: 17),
+                          onPressed: () => showItemHistory(context, type: 'product', id: item['product_id'] as int, name: item['name'] as String),
+                        ),
+                      if (auth.can('inventory.manage'))
+                        IconButton(
+                          tooltip: 'Set exact stock',
+                          icon: const Icon(Icons.edit_outlined, size: 17),
+                          onPressed: () async {
+                            final saved = await showDialog<bool>(context: context, builder: (_) => SetStockDialog(item: item));
+                            if (saved == true) _reload();
+                          },
+                        ),
+                    ]),
+                  ],
+              ],
+            ),
+    );
+    const batchStock = _BatchStockSection();
+
+    return LayoutBuilder(builder: (context, constraints) {
+      final wide = constraints.maxWidth >= 1280;
+      return ListView(
+        padding: EdgeInsets.all(constraints.maxWidth < 640 ? 10 : 14),
+        children: [
+          _WindowsInventoryHeading(productCount: allItems.length, onRefresh: _reload),
+          const SizedBox(height: 10),
+          _WindowsInventoryMetrics(summary: summary, productCount: allItems.length),
+          const SizedBox(height: 10),
+          if (constraints.maxWidth >= 800)
+            Row(children: [
+              Expanded(flex: 3, child: search),
+              const SizedBox(width: 10),
+              Expanded(flex: 8, child: filtersAndCommands),
+            ])
+          else
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [search, const SizedBox(height: 8), filtersAndCommands]),
+          const SizedBox(height: 10),
+          if (wide)
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(flex: 6, child: stockTable),
+              const SizedBox(width: 12),
+              Expanded(flex: 5, child: batchStock),
+            ])
+          else ...[
+            batchStock,
+            const SizedBox(height: 10),
+            stockTable,
+          ],
+        ],
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthController>();
@@ -102,6 +237,9 @@ class _InventoryPageState extends State<InventoryPage> {
         final hasCodes = ItemCode.anyIn(allItems);
         final items = allItems.where((it) => ItemCode.matches(it, _q.text)).toList();
         final s = (snap.data!['summary'] as Map).cast<String, dynamic>();
+        if (isWindowsPlatform) {
+          return _buildWindowsInventory(summary: s, allItems: allItems, items: items, hasCodes: hasCodes, auth: auth);
+        }
         return ListView(padding: const EdgeInsets.all(20), children: [
           _InventoryHealthCard(summary: s, productCount: allItems.length),
           const SizedBox(height: 12),
@@ -229,6 +367,94 @@ class _InventoryPageState extends State<InventoryPage> {
           ),
         ]);
       },
+    );
+  }
+}
+
+class _WindowsInventoryHeading extends StatelessWidget {
+  final int productCount;
+  final VoidCallback onRefresh;
+  const _WindowsInventoryHeading({required this.productCount, required this.onRefresh});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        child: LayoutBuilder(builder: (context, constraints) {
+          final title = Row(children: [
+            Container(width: 4, height: 38, color: AppBrand.blue),
+            const SizedBox(width: 10),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Inventory Workspace', style: TextStyle(color: scheme.onSurface, fontSize: 18, fontWeight: FontWeight.w700)),
+              Text('$productCount active products · ${fmtDate(todayYmd())}', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5)),
+            ])),
+          ]);
+          final refresh = OutlinedButton.icon(onPressed: onRefresh, icon: const Icon(Icons.refresh_rounded, size: 16), label: Text(tr('Refresh')));
+          if (constraints.maxWidth < 520) {
+            return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [title, const SizedBox(height: 8), Align(alignment: Alignment.centerRight, child: refresh)]);
+          }
+          return Row(children: [Expanded(child: title), const SizedBox(width: 10), refresh]);
+        }),
+      ),
+    );
+  }
+}
+
+class _WindowsInventoryMetrics extends StatelessWidget {
+  final Map<String, dynamic> summary;
+  final int productCount;
+  const _WindowsInventoryMetrics({required this.summary, required this.productCount});
+
+  @override
+  Widget build(BuildContext context) {
+    final metrics = <(String, String, IconData, Color)>[
+      ('Low stock alerts', qtyInt(summary['low_count']), Icons.warning_amber_rounded, AppColors.red),
+      ('Products tracked', qtyInt(productCount), Icons.category_outlined, AppColors.blue),
+      ('${U.piece} on hand', qtyInt(summary['total_bottles']), Icons.inventory_2_outlined, AppColors.cyan),
+      if (CompanyProfile.usesTrays) ('${U.tray} on hand', qtyInt(summary['total_trays']), Icons.dinner_dining_outlined, AppColors.teal),
+    ];
+    return LayoutBuilder(builder: (context, constraints) {
+      final columns = constraints.maxWidth >= 900 ? metrics.length : constraints.maxWidth >= 540 ? 2 : 1;
+      const gap = 8.0;
+      final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+      return Wrap(spacing: gap, runSpacing: gap, children: [
+        for (final metric in metrics)
+          SizedBox(
+            width: width,
+            height: 62,
+            child: _WindowsInventoryMetric(label: metric.$1, value: metric.$2, icon: metric.$3, tint: metric.$4),
+          ),
+      ]);
+    });
+  }
+}
+
+class _WindowsInventoryMetric extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color tint;
+  const _WindowsInventoryMetric({required this.label, required this.value, required this.icon, required this.tint});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(color: scheme.surface, border: Border.all(color: scheme.outlineVariant), borderRadius: BorderRadius.circular(3)),
+      child: Row(children: [
+        Container(width: 3, height: double.infinity, color: tint),
+        const SizedBox(width: 10),
+        Icon(icon, size: 19, color: tint),
+        const SizedBox(width: 8),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w600)),
+          Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 17, fontWeight: FontWeight.w700, fontFeatures: const [FontFeature.tabularFigures()])),
+        ])),
+        const SizedBox(width: 8),
+      ]),
     );
   }
 }
@@ -374,7 +600,7 @@ class _BatchStockSectionState extends State<_BatchStockSection> {
         await Printing.sharePdf(bytes: bytes, filename: 'flavorflow-batch-stock-$date.pdf');
       } else {
         final bytes = await context.read<AuthController>().api.getBytes('/reports/batch-stock.xlsx');
-        downloadBytes('flavorflow-batch-stock-$date.xlsx', bytes,
+        await downloadBytes('flavorflow-batch-stock-$date.xlsx', bytes,
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         if (mounted) showOk(context, 'Excel file downloaded.');
       }
@@ -654,10 +880,13 @@ class _SetStockDialogState extends State<SetStockDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final desktopForm = isWindowsPlatform;
+    final referenceField = TextField(controller: reference, textCapitalization: TextCapitalization.characters, decoration: InputDecoration(labelText: tr('Reference / count sheet no (optional)'), hintText: 'e.g. PC-0912', prefixIcon: const Icon(Icons.tag_rounded, size: 18)));
+    final noteField = TextField(controller: note, decoration: InputDecoration(labelText: tr('Note (optional)'), hintText: 'e.g. Opening stock 04 Aug 2026'));
     return AlertDialog(
       title: Text('Set Stock — ${widget.item['name']}'),
       content: SizedBox(
-        width: 380,
+        width: desktopForm ? 720 : 380,
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(_hasTray
                   ? 'Current: ${qtyInt(widget.item['qty_cb'])} ${U.cb} + ${qtyInt(widget.item['qty_trays'])} ${U.trayLc}. Enter the exact real stock below — it replaces the current numbers.'
@@ -672,9 +901,17 @@ class _SetStockDialogState extends State<SetStockDialog> {
             ],
           ]),
           const SizedBox(height: 12),
-          TextField(controller: reference, textCapitalization: TextCapitalization.characters, decoration: InputDecoration(labelText: tr('Reference / count sheet no (optional)'), hintText: 'e.g. PC-0912', prefixIcon: const Icon(Icons.tag_rounded, size: 18))),
-          const SizedBox(height: 12),
-          TextField(controller: note, decoration: InputDecoration(labelText: tr('Note (optional)'), hintText: 'e.g. Opening stock 04 Aug 2026')),
+          if (desktopForm)
+            Row(children: [
+              Expanded(child: referenceField),
+              const SizedBox(width: 12),
+              Expanded(child: noteField),
+            ])
+          else ...[
+            referenceField,
+            const SizedBox(height: 12),
+            noteField,
+          ],
           const SizedBox(height: 8),
           Text(tr('The difference is posted to the stock ledger as "Stock set (physical count)" with this reference.'), style: TextStyle(fontSize: 11.5, color: Theme.of(context).colorScheme.onSurfaceVariant)),
         ]),
@@ -754,45 +991,60 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final desktopForm = isWindowsPlatform;
+    final productField = DropdownButtonFormField<int>(
+      key: ValueKey('rcpt-$productId'),
+      initialValue: productId,
+      isExpanded: true,
+      decoration: InputDecoration(labelText: tr('Product *'), suffixIcon: ScanPickButton(rows: products, onPicked: (p) => setState(() => productId = p['id'] as int))),
+      items: [for (final p in products) DropdownMenuItem(value: p['id'] as int, child: Text(ItemCode.pick(p), overflow: TextOverflow.ellipsis))],
+      onChanged: (v) => setState(() => productId = v),
+    );
+    final quantities = Row(children: [
+      Expanded(child: TextField(controller: cb, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('${U.carton} (${U.cb})')))),
+      if (_hasTray) ...[
+        const SizedBox(width: 12),
+        Expanded(child: TextField(controller: trays, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: U.tray))),
+      ],
+    ]);
+    final referenceField = TextField(controller: reference, textCapitalization: TextCapitalization.characters, decoration: InputDecoration(labelText: tr('GRN / challan / ref no'), hintText: 'e.g. GRN-0451', prefixIcon: const Icon(Icons.tag_rounded, size: 18)));
+    final partyField = TextField(controller: party, decoration: InputDecoration(labelText: tr('From (party / depot)'), hintText: tr('optional')));
+    final trayHint = _hasTray
+        ? Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text('1 ${U.trayLc} = ${_product!['bottles_per_tray']} ${U.piece.toLowerCase()}',
+                  style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            ),
+          )
+        : const SizedBox.shrink();
     return AlertDialog(
       title: Text(tr('Receive Stock')),
       content: SizedBox(
-        width: 400,
+        width: desktopForm ? 760 : 400,
         child: loadError != null
             ? Text(loadError!)
             : products.isEmpty
                 ? const SizedBox(height: 80, child: Center(child: CircularProgressIndicator()))
                 : Column(mainAxisSize: MainAxisSize.min, children: [
-                    DropdownButtonFormField<int>(
-                      key: ValueKey('rcpt-$productId'),
-                      initialValue: productId,
-                      isExpanded: true,
-                      decoration: InputDecoration(labelText: tr('Product *'), suffixIcon: ScanPickButton(rows: products, onPicked: (p) => setState(() => productId = p['id'] as int))),
-                      items: [for (final p in products) DropdownMenuItem(value: p['id'] as int, child: Text(ItemCode.pick(p), overflow: TextOverflow.ellipsis))],
-                      onChanged: (v) => setState(() => productId = v),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(children: [
-                      Expanded(child: TextField(controller: cb, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('${U.carton} (${U.cb})')))),
-                      if (_hasTray) ...[
+                    if (desktopForm)
+                      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Expanded(child: productField),
                         const SizedBox(width: 12),
-                        Expanded(child: TextField(controller: trays, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: U.tray))),
-                      ],
-                    ]),
-                    if (_hasTray)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text('1 ${U.trayLc} = ${_product!['bottles_per_tray']} ${U.piece.toLowerCase()}',
-                              style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                        ),
-                      ),
+                        Expanded(child: Column(children: [quantities, trayHint])),
+                      ])
+                    else ...[
+                      productField,
+                      const SizedBox(height: 12),
+                      quantities,
+                      if (_hasTray) trayHint,
+                    ],
                     const SizedBox(height: 12),
                     Row(children: [
-                      Expanded(child: TextField(controller: reference, textCapitalization: TextCapitalization.characters, decoration: InputDecoration(labelText: tr('GRN / challan / ref no'), hintText: 'e.g. GRN-0451', prefixIcon: const Icon(Icons.tag_rounded, size: 18)))),
+                      Expanded(child: referenceField),
                       const SizedBox(width: 12),
-                      Expanded(child: TextField(controller: party, decoration: InputDecoration(labelText: tr('From (party / depot)'), hintText: tr('optional')))),
+                      Expanded(child: partyField),
                     ]),
                     const SizedBox(height: 12),
                     TextField(controller: note, decoration: InputDecoration(labelText: tr('Note (optional)'))),

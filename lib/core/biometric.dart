@@ -5,8 +5,8 @@ import 'package:local_auth/local_auth.dart';
 /// Biometric / passkey-style quick sign-in.
 ///
 /// Flow: after the FIRST successful password login the app offers to enable
-/// quick login. If accepted, the credentials are stored in the device's
-/// hardware-encrypted keystore (flutter_secure_storage). From then on the
+/// quick login. If accepted, the credentials are stored with the platform's
+/// protected secure-storage implementation (flutter_secure_storage). From then on the
 /// login screen shows a fingerprint button — the OS biometric prompt
 /// (fingerprint / face / device PIN) unlocks the stored credentials and the
 /// app signs in automatically. Turning it off wipes the stored credentials.
@@ -45,7 +45,7 @@ class BiometricAuth {
 
   /// The device can show the OS unlock prompt — fingerprint/face OR the device
   /// PIN/pattern/password (local_auth allows device credentials when
-  /// `biometricOnly` is false). Needed for the MAN-13 offline unlock on phones
+  /// `biometricOnly` is false). Needed for the MAN-13 offline unlock on devices
   /// where biometric login was never registered. Web: never.
   static Future<bool> deviceLockAvailable() async {
     if (kIsWeb) return false;
@@ -73,7 +73,7 @@ class BiometricAuth {
 
   /// Register biometric login: the OS fingerprint/face/PIN prompt MUST be
   /// passed first — only then are the credentials stored in the encrypted
-  /// keystore. Returns false when the user cancels the verification.
+  /// secure storage. Returns false when the user cancels the verification.
   static Future<bool> enable(String email, String password) async {
     try {
       final ok = await _auth.authenticate(
