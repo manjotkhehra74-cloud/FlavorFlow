@@ -285,7 +285,7 @@ class _LoginPageState extends State<LoginPage> {
                   'A different dashboard for every role',
                   'Packing material consumed automatically per BOM',
                   'Stock adjustments with approval & audit trail',
-                  'Truck loading calculator with PDF docket',
+                  'Dispatch weights calculated with PDF docket',
                   'Every report exports to PDF and Excel',
                 ])
                   Padding(

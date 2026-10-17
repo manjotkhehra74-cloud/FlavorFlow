@@ -29,7 +29,7 @@ import 'destination_field.dart';
 /// (purged once from other companies' phones on upgrade — see loadSavedDests).
 const kLegacyDestinations = ['NEEMRANA', 'MATIALA'];
 
-/// Dedicated Dispatch Module: entry · truck loading calculator · history · reports.
+/// Dedicated Dispatch Module: entry · history · reports.
 class DispatchPage extends StatefulWidget {
   final String? tab;
   const DispatchPage({super.key, this.tab});
@@ -43,11 +43,10 @@ class _DispatchPageState extends State<DispatchPage> with SingleTickerProviderSt
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 5, vsync: this);
-    if (widget.tab == 'calculator') _tab.index = 1;
-    if (widget.tab == 'history') _tab.index = 2;
-    if (widget.tab == 'reports') _tab.index = 3;
-    if (widget.tab == 'trucks') _tab.index = 4;
+    _tab = TabController(length: 4, vsync: this);
+    if (widget.tab == 'history') _tab.index = 1;
+    if (widget.tab == 'reports') _tab.index = 2;
+    if (widget.tab == 'trucks') _tab.index = 3;
   }
 
   @override
@@ -62,14 +61,12 @@ class _DispatchPageState extends State<DispatchPage> with SingleTickerProviderSt
     final entryTitle = canManage ? 'Dispatch Entry' : 'Dispatch Entry (view only)';
     final tabs = <WindowsModuleTab>[
       WindowsModuleTab(entryTitle, Icons.local_shipping_outlined),
-      const WindowsModuleTab('Truck Loading Calculator', Icons.calculate_outlined),
       const WindowsModuleTab('Dispatch History', Icons.history_rounded),
       const WindowsModuleTab('Reports', Icons.bar_chart_rounded),
       const WindowsModuleTab('Trucks', Icons.local_shipping_outlined),
     ];
     final content = TabBarView(controller: _tab, children: [
       _EntryTab(readOnly: !canManage),
-      const _CalculatorTab(),
       const _HistoryTab(),
       const _ReportsTab(),
       _TrucksTab(readOnly: !canManage),
@@ -79,7 +76,7 @@ class _DispatchPageState extends State<DispatchPage> with SingleTickerProviderSt
         animation: _tab,
         builder: (context, _) => WindowsModuleWorkspace(
           title: 'Dispatch',
-          subtitle: 'Entry, loading, history and transport reports',
+          subtitle: 'Entry, history and transport reports',
           tabs: tabs,
           selectedIndex: _tab.index,
           onSelect: _tab.animateTo,
@@ -98,7 +95,6 @@ class _DispatchPageState extends State<DispatchPage> with SingleTickerProviderSt
             tabAlignment: TabAlignment.start,
             tabs: [
               Tab(text: tr(entryTitle)),
-              Tab(text: tr('Truck Loading Calculator')),
               Tab(text: tr('Dispatch History')),
               Tab(text: tr('Reports')),
               Tab(text: tr('Trucks')),
@@ -1051,119 +1047,6 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
           const SizedBox(height: 8),
           Text(tr('Date & day are stamped automatically. Stock is deducted and the team is notified.'),
               style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
-        ]));
-        if (wide) {
-          return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(flex: 3, child: form), const SizedBox(width: 16), Expanded(flex: 2, child: side)]);
-        }
-        return Column(children: [form, const SizedBox(height: 16), side]);
-      }),
-    ]);
-  }
-}
-
-/* ----------------------------- calculator tab ----------------------------- */
-
-class _CalculatorTab extends StatefulWidget {
-  const _CalculatorTab();
-  @override
-  State<_CalculatorTab> createState() => _CalculatorTabState();
-}
-
-class _CalculatorTabState extends State<_CalculatorTab> with _CalcMixin {
-  final truck = TextEditingController();
-  final destination = TextEditingController();
-  List<String> get _savedDests => _EntryTabState._savedDests;
-  DateTime date = DateTime.now();
-  bool exporting = false;
-
-  @override
-  void initState() {
-    super.initState();
-    loadProducts();
-  }
-
-  @override
-  void dispose() {
-    disposeLines();
-    truck.dispose();
-    destination.dispose();
-    super.dispose();
-  }
-
-  Future<void> _exportPdf() async {
-    if (calc == null) return;
-    setState(() => exporting = true);
-    try {
-      final dest = normalizeDispatchDestination(destination.text);
-      final bytes = await DispatchPdf.estimate(
-        lines: (calc!['lines'] as List).cast<Map<String, dynamic>>(),
-        totals: (calc!['totals'] as Map).cast<String, dynamic>(),
-        truckNumber: truck.text.trim(),
-        destination: dest,
-        dispatchDate: ymd(date),
-      );
-      await Printing.sharePdf(bytes: bytes, filename: 'truck-loading-${truck.text.trim().isEmpty ? 'plan' : truck.text.trim()}.pdf');
-    } catch (e) {
-      if (mounted) showErr(context, e);
-    } finally {
-      if (mounted) setState(() => exporting = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return ListView(padding: const EdgeInsets.all(20), children: [
-      LayoutBuilder(builder: (context, c) {
-        final wide = isWindowsPlatform ? c.maxWidth >= 760 : c.maxWidth > 900;
-        final compact = isWindowsPlatform ? c.maxWidth < 540 : c.maxWidth < 600;
-        final truckField = TextField(controller: truck, textCapitalization: TextCapitalization.characters, decoration: InputDecoration(labelText: tr('Truck number'), hintText: 'PB-08-AB-1234'));
-        final dateField = _DateField(date: date, onPick: (d) => setState(() => date = d));
-        final form = SectionCard(title: 'Truck Loading Calculator', child: Column(children: [
-          if (compact) ...[
-            truckField,
-            const SizedBox(height: 12),
-            dateField,
-          ] else
-            Row(children: [Expanded(child: truckField), const SizedBox(width: 12), Expanded(child: dateField)]),
-          const SizedBox(height: 12),
-          DispatchDestinationField(
-            controller: destination,
-            suggestions: _savedDests,
-            required: false,
-            onChanged: (_) => setState(() {}),
-          ),
-          const SizedBox(height: 16),
-          products.isEmpty
-              ? (productsLoaded
-                  ? _NoProductsHint(onAdd: () => context.go('/products'))
-                  : const SizedBox(height: 60, child: Center(child: CircularProgressIndicator())))
-              : _LinesEditor(products: products, lines: lines, onAdd: addLine, onRemove: removeLine, onChanged: recalcDebounced, onProductChanged: selectProduct),
-        ]));
-        final side = SectionCard(title: 'Calculated Weights', child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          if (calc != null) ...[
-            _SummaryCard(totals: (calc!['totals'] as Map).cast<String, dynamic>(), lines: (calc!['lines'] as List).cast<Map<String, dynamic>>()),
-            const SizedBox(height: 14),
-            FilledButton.icon(
-              onPressed: exporting ? null : _exportPdf,
-              icon: const Icon(Icons.picture_as_pdf_rounded, size: 19),
-              label: Text(exporting ? 'Preparing PDF…' : 'Export Loading Plan (PDF)'),
-            ),
-            const SizedBox(height: 8),
-            Text('Shares/prints a pre-dispatch loading plan with per-line and total weights.',
-                style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
-          ] else
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              child: Column(children: [
-                Icon(Icons.calculate_outlined, size: 38, color: scheme.outline),
-                const SizedBox(height: 8),
-                Text(CompanyProfile.usesTrays
-                        ? 'Enter ${U.carton.toLowerCase()} / ${U.trayLc} to auto-calculate\nweights, ${U.piece.toLowerCase()} and ${U.carton.toLowerCase()} counts.'
-                        : 'Enter ${U.carton.toLowerCase()} to auto-calculate\nweights and ${U.piece.toLowerCase()} counts.',
-                    textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
-              ]),
-            ),
         ]));
         if (wide) {
           return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(flex: 3, child: form), const SizedBox(width: 16), Expanded(flex: 2, child: side)]);
