@@ -354,46 +354,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final editing = widget.user != null;
-    return AlertDialog(
-      title: Text(editing ? 'Edit User' : 'Add User'),
-      content: SingleChildScrollView(
-        child: SizedBox(
-          width: isWindowsPlatform ? 760 : 420,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-          if (isWindowsPlatform)
-            Row(children: [
-              Expanded(child: TextField(controller: name, decoration: InputDecoration(labelText: tr('Full name *')))),
-              const SizedBox(width: 12),
-              Expanded(child: TextField(controller: email, enabled: !editing, keyboardType: TextInputType.emailAddress, decoration: InputDecoration(labelText: tr('Login ID *')))),
-            ])
-          else ...[
-            TextField(controller: name, decoration: InputDecoration(labelText: tr('Full name *'))),
-            const SizedBox(height: 12),
-            TextField(controller: email, enabled: !editing, keyboardType: TextInputType.emailAddress, decoration: InputDecoration(labelText: tr('Login ID *'))),
-          ],
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: role,
-            decoration: InputDecoration(labelText: tr('Role *')),
-            items: [
-              for (final r in widget.roles)
-                DropdownMenuItem(value: r['id'] as String, child: Text(r['label'] as String)),
-            ],
-            onChanged: (v) {
-              if (v == null) return;
-              setState(() {
-                role = v;
-                customPerms = _defaultPermsFor(v);
-              });
-            },
-          ),
-          const SizedBox(height: 8),
-          // Permissions — grouped by module, auto-registers new permissions from kPermissionGroups
-          // Super Admin gets all, others default-deny for new perms until explicitly granted
-          Builder(
+  Widget _permissionsEditor() => Builder(
             builder: (ctx) {
               final r = widget.roles.firstWhere((x) => x['id'] == role, orElse: () => <String, dynamic>{});
               final color = hexColor(r['color'] as String? ?? '#4f46e5');
@@ -476,7 +437,126 @@ class _UserFormDialogState extends State<UserFormDialog> {
                 ),
               );
             },
+          );
+
+  Widget _windowsForm(BuildContext context) {
+    final editing = widget.user != null;
+    return Dialog(
+      insetPadding: const EdgeInsets.all(24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1050, maxHeight: 760),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            color: const Color(0xFFE2E9EF),
+            child: Text('Users & Roles  /  ${editing ? 'Edit User' : 'Add User'}',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
           ),
+          Flexible(child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: LayoutBuilder(builder: (context, constraints) {
+              final details = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('Account details', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                TextField(controller: name, decoration: InputDecoration(labelText: tr('Full name *'))),
+                const SizedBox(height: 12),
+                TextField(controller: email, enabled: !editing,
+                    decoration: InputDecoration(labelText: tr('Login ID *'))),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: widget.roles.any((r) => r['id'] == role) ? role : null,
+                  decoration: InputDecoration(labelText: tr('Role *')),
+                  items: [for (final r in widget.roles)
+                    DropdownMenuItem(value: r['id'] as String, child: Text(r['label'] as String))],
+                  onChanged: (v) {
+                    if (v == null) return;
+                    setState(() { role = v; customPerms = _defaultPermsFor(v); });
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(controller: password, obscureText: true,
+                    decoration: InputDecoration(labelText: editing
+                        ? 'Reset password (leave blank to keep)' : 'Password *',
+                        hintText: 'min 6 characters')),
+                if (editing) SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(tr('Account active')),
+                  subtitle: Text(tr('Deactivated users lose access immediately')),
+                  value: active, onChanged: (v) => setState(() => active = v),
+                ),
+              ]);
+              final permissions = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('Permissions', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                const Text('Permissions default to the selected role; changes are custom.',
+                    style: TextStyle(fontSize: 12)),
+                const SizedBox(height: 8),
+                _permissionsEditor(),
+              ]);
+              if (constraints.maxWidth < 720) return Column(children: [details,
+                const SizedBox(height: 20), permissions]);
+              return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(flex: 4, child: details), const SizedBox(width: 20),
+                Expanded(flex: 6, child: permissions),
+              ]);
+            }),
+          )),
+          const Divider(height: 1),
+          Padding(padding: const EdgeInsets.all(12), child: Row(
+            mainAxisAlignment: MainAxisAlignment.end, children: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+              const SizedBox(width: 8),
+              FilledButton(onPressed: busy ? null : _save,
+                  child: Text(busy ? 'Saving…' : editing ? 'Save Changes' : 'Save User')),
+            ],
+          )),
+        ]),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (isWindowsPlatform) return _windowsForm(context);
+    final editing = widget.user != null;
+    return AlertDialog(
+      title: Text(editing ? 'Edit User' : 'Add User'),
+      content: SingleChildScrollView(
+        child: SizedBox(
+          width: isWindowsPlatform ? 760 : 420,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+          if (isWindowsPlatform)
+            Row(children: [
+              Expanded(child: TextField(controller: name, decoration: InputDecoration(labelText: tr('Full name *')))),
+              const SizedBox(width: 12),
+              Expanded(child: TextField(controller: email, enabled: !editing, keyboardType: TextInputType.emailAddress, decoration: InputDecoration(labelText: tr('Login ID *')))),
+            ])
+          else ...[
+            TextField(controller: name, decoration: InputDecoration(labelText: tr('Full name *'))),
+            const SizedBox(height: 12),
+            TextField(controller: email, enabled: !editing, keyboardType: TextInputType.emailAddress, decoration: InputDecoration(labelText: tr('Login ID *'))),
+          ],
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: role,
+            decoration: InputDecoration(labelText: tr('Role *')),
+            items: [
+              for (final r in widget.roles)
+                DropdownMenuItem(value: r['id'] as String, child: Text(r['label'] as String)),
+            ],
+            onChanged: (v) {
+              if (v == null) return;
+              setState(() {
+                role = v;
+                customPerms = _defaultPermsFor(v);
+              });
+            },
+          ),
+          const SizedBox(height: 8),
+          // Permissions — grouped by module, auto-registers new permissions from kPermissionGroups
+          // Super Admin gets all, others default-deny for new perms until explicitly granted
+          _permissionsEditor(),
           const SizedBox(height: 10),
           TextField(
             controller: password,
