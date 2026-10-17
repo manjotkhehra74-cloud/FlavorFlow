@@ -1198,8 +1198,115 @@ class _DailyLabourDialogState extends State<_DailyLabourDialog> {
 
   String _ymd(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
+  Widget _windowsForm(BuildContext context) {
+    Widget dateField() => OutlinedButton.icon(
+      onPressed: () async {
+        final picked = await showDatePicker(context: context, initialDate: date,
+          firstDate: DateTime(2020), lastDate: DateTime.now().add(const Duration(days: 365)));
+        if (picked != null) setState(() => date = picked);
+      }, icon: const Icon(Icons.calendar_today, size: 17), label: Text(fmtDate(_ymd(date))),
+    );
+    return Dialog(
+      insetPadding: const EdgeInsets.all(24),
+      child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 880, maxHeight: 680),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(width: double.infinity, padding: const EdgeInsets.all(16),
+            color: const Color(0xFFE2E9EF),
+            child: Text(widget.entry == null ? 'Daily Labour Entry' : 'Edit Daily Labour Entry',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
+          Flexible(child: SingleChildScrollView(padding: const EdgeInsets.all(20),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [const Text('Date'), dateField()])),
+                const SizedBox(width: 16),
+                Expanded(child: DropdownButtonFormField<String>(initialValue: shift,
+                  decoration: const InputDecoration(labelText: 'Shift'),
+                  items: const [DropdownMenuItem(value: 'Day', child: Text('Day')),
+                    DropdownMenuItem(value: 'Night', child: Text('Night'))],
+                  onChanged: (v) => setState(() => shift = v ?? 'Day'))),
+              ]),
+              const SizedBox(height: 16),
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(child: TextField(controller: line,
+                  decoration: const InputDecoration(labelText: 'Production line *'))),
+                const SizedBox(width: 16),
+                Expanded(child: Column(children: [
+                  if (products.isNotEmpty) DropdownButtonFormField<String>(
+                    initialValue: product == _manualSkuChoice ||
+                      products.any((p) => '${p['id']}' == product) ? product : null,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'SKU / Product *'),
+                    items: [for (final p in products)
+                      DropdownMenuItem(value: '${p['id']}', child: Text('${p['name']}')),
+                      const DropdownMenuItem(value: _manualSkuChoice,
+                        child: Text('Type SKU / product manually'))],
+                    onChanged: (v) {
+                      final selected = products.where((p) => '${p['id']}' == v).toList();
+                      final inferredName = selected.isNotEmpty
+                        ? '${selected.first['name']}' : manualSku.text.trim();
+                      final inferred = _lineForSku(inferredName);
+                      setState(() {
+                        product = v;
+                        if (selected.isNotEmpty) manualSku.text = inferredName;
+                        if (_isUnassignedLine(line.text) && inferred != null) line.text = inferred;
+                      });
+                    },
+                  ),
+                  if (products.isEmpty || product == _manualSkuChoice) ...[
+                    if (products.isEmpty) const Text(
+                      'Product list unavailable offline. Type an existing SKU; it will be checked when synced.'),
+                    TextField(controller: manualSku,
+                      decoration: const InputDecoration(labelText: 'SKU / Product *'),
+                      onChanged: (value) {
+                        final inferred = _lineForSku(value);
+                        if (_isUnassignedLine(line.text) && inferred != null) line.text = inferred;
+                      }),
+                  ],
+                ])),
+              ]),
+              const SizedBox(height: 16),
+              Row(children: [
+                Expanded(child: TextField(controller: workers,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'Workers *'))),
+                const SizedBox(width: 16),
+                Expanded(child: TextField(controller: hours,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'Actual hours *'))),
+              ]),
+              const SizedBox(height: 16),
+              Row(children: [
+                Expanded(child: TextField(controller: supervisor,
+                  decoration: const InputDecoration(labelText: 'Supervisor'))),
+                const SizedBox(width: 16),
+                Expanded(child: TextField(controller: remarks,
+                  decoration: const InputDecoration(labelText: 'Remarks (optional)'))),
+              ]),
+              const SizedBox(height: 14),
+              const Text('Offline entries are queued on this device for later sync. '
+                'Older servers may only support local storage.',
+                style: TextStyle(fontSize: 11)),
+            ]),
+          )),
+          const Divider(height: 1),
+          Padding(padding: const EdgeInsets.all(12), child: Row(
+            mainAxisAlignment: MainAxisAlignment.end, children: [
+              TextButton(onPressed: busy ? null : () => Navigator.pop(context),
+                child: const Text('Cancel')),
+              const SizedBox(width: 8),
+              FilledButton(onPressed: busy ? null : _save,
+                child: Text(busy ? 'Saving…' : widget.entry == null ? 'Save Entry' : 'Update Entry')),
+            ],
+          )),
+        ]),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (isWindowsPlatform) return _windowsForm(context);
     return AlertDialog(
       title: Text(widget.entry == null ? 'Daily Labour Entry' : 'Edit Daily Labour Entry'),
       content: SizedBox(
