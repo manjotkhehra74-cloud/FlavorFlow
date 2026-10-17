@@ -360,6 +360,39 @@ class _HistoryList extends StatelessWidget {
   final VoidCallback onRetry;
   const _HistoryList({required this.future, required this.onRetry});
 
+  void _inspectWindows(BuildContext context, Map<String, dynamic> a) {
+    showDialog<void>(context: context, builder: (ctx) => AlertDialog(
+      title: Text('${a['code'] ?? 'Adjustment'} · Decision history'),
+      content: SizedBox(width: 600, child: SingleChildScrollView(
+        child: Column(mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start, children: [
+            for (final field in [
+              ('Product', a['product_name']),
+              ('Type', a['adj_type']),
+              ('Quantity (${U.cb})', a['qty_cb']),
+              ('Reason', a['reason']),
+              ('Decision', a['status']),
+              ('Approved by', a['approved_by_name']),
+              ('Approved on', fmtDateTime(a['approved_at'])),
+              ('Rejected by', a['rejected_by_name']),
+              ('Rejected on', fmtDateTime(a['rejected_at'])),
+              ('Reject reason', a['reject_reason']),
+              ('Remarks', a['approval_remarks']),
+            ]) Padding(padding: const EdgeInsets.only(bottom: 9),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                SizedBox(width: 145, child: Text(field.$1,
+                  style: const TextStyle(fontWeight: FontWeight.w700))),
+                Expanded(child: SelectableText('${field.$2 ?? '—'}')),
+              ]),
+            ),
+          ],
+        ),
+      )),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx),
+        child: const Text('Close'))],
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<Map<String, dynamic>>>(
@@ -369,11 +402,12 @@ class _HistoryList extends StatelessWidget {
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
         final rows = snap.data!;
         if (rows.isEmpty) return const EmptyState('No decisions recorded yet');
-        return ListView(padding: const EdgeInsets.all(20), children: [
+        return ListView(padding: EdgeInsets.all(isWindowsPlatform ? 12 : 20), children: [
           SectionCard(
             title: 'Decision History & Audit Trail',
             child: AppDataTable(
               columns: ['Code', 'Product', 'Type', U.cb, 'Reason', 'Decision', 'Approved By', 'Approved Date', 'Rejected By', 'Rejected Date', 'Reject Reason', 'Remarks'],
+              onRowTap: isWindowsPlatform ? (i) => _inspectWindows(context, rows[i]) : null,
               rows: [
                 for (final a in rows)
                   [
