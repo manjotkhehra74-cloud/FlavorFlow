@@ -9,7 +9,14 @@ on:
       - arena/b7695262-flavorflow
     paths-ignore:
       - .github/workflows/**
+      - docs/**
   workflow_dispatch:
+    inputs:
+      deploy_web:
+        description: Deploy the GitHub-built web app to app.flavorflow.co.in
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -174,6 +181,98 @@ jobs:
             build/app/outputs/bundle/release/app-release.aab
           if-no-files-found: error
           retention-days: 14
+
+  deploy-web:
+    name: Deploy Flutter web to production VPS
+    needs: build
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_web == true && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/arena/b7695262-flavorflow') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DEPLOY_HOST: ${{ secrets.FLAVORFLOW_DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.FLAVORFLOW_DEPLOY_USER }}
+      DEPLOY_SSH_KEY: ${{ secrets.FLAVORFLOW_DEPLOY_SSH_KEY }}
+      DEPLOY_PORT: ${{ secrets.FLAVORFLOW_DEPLOY_PORT }}
+      DEPLOY_PATH: ${{ vars.FLAVORFLOW_DEPLOY_PATH || '/opt/flavorflow-saas/web' }}
+
+    steps:
+      - name: Download the GitHub-built web artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: flavorflow-web
+          path: build/web
+
+      - name: Validate artifact and configure SSH
+        id: ssh-config
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s build/web/index.html || { echo "::error::GitHub web artifact is missing index.html."; exit 1; }
+          if [[ "$DEPLOY_PATH" != /* || "$DEPLOY_PATH" == *".."* || "$DEPLOY_PATH" == *[[:space:]]* ]]; then
+            echo '::error::FLAVORFLOW_DEPLOY_PATH must be an absolute path without whitespace or parent-directory segments.'
+            exit 1
+          fi
+          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY; do
+            if [[ -z "${!name}" ]]; then
+              echo '::error::Configure FLAVORFLOW_DEPLOY_HOST, FLAVORFLOW_DEPLOY_USER, and FLAVORFLOW_DEPLOY_SSH_KEY in GitHub Actions secrets before deploying.'
+              exit 1
+            fi
+          done
+          port="${DEPLOY_PORT:-22}"
+          key_file="$RUNNER_TEMP/flavorflow-deploy-key"
+          known_hosts="$RUNNER_TEMP/flavorflow-known-hosts"
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$key_file"
+          chmod 600 "$key_file"
+          ssh-keyscan -p "$port" -H "$DEPLOY_HOST" > "$known_hosts" 2>/dev/null
+          test -s "$known_hosts" || { echo "::error::Could not verify the server SSH host key."; exit 1; }
+          echo "key_file=$key_file" >> "$GITHUB_OUTPUT"
+          echo "known_hosts=$known_hosts" >> "$GITHUB_OUTPUT"
+          echo "port=$port" >> "$GITHUB_OUTPUT"
+
+      - name: Back up and deploy to the production web root
+        shell: bash
+        env:
+          SSH_KEY_FILE: ${{ steps.ssh-config.outputs.key_file }}
+          SSH_KNOWN_HOSTS: ${{ steps.ssh-config.outputs.known_hosts }}
+          SSH_PORT: ${{ steps.ssh-config.outputs.port }}
+        run: |
+          set -euo pipefail
+          remote_tmp="/tmp/flavorflow-web-${GITHUB_SHA}"
+          ssh_opts=(-i "$SSH_KEY_FILE" -p "$SSH_PORT" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$SSH_KNOWN_HOSTS")
+          tar -C build/web -czf - . | ssh "${ssh_opts[@]}" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "mkdir -p '$remote_tmp' && tar -xzf - -C '$remote_tmp'"
+          ssh "${ssh_opts[@]}" "$DEPLOY_USER@$DEPLOY_HOST" bash -s -- "$remote_tmp" "$DEPLOY_PATH" "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          staging="$1"
+          web="$2"
+          sha="$3"
+          backup_dir="$(dirname "$web")/backups"
+          run_root() {
+            if [[ "$(id -u)" -eq 0 ]]; then "$@"; else sudo -n "$@"; fi
+          }
+          [[ -s "$staging/index.html" ]] || { echo 'Staged index.html is missing.' >&2; exit 1; }
+          run_root mkdir -p "$web" "$backup_dir"
+          run_root tar -czf "$backup_dir/web-before-$sha.tgz" -C "$web" .
+          run_root cp -a "$staging"/. "$web"/
+          printf '%s %s\n' "$sha" "$(date -u +%FT%TZ)" | run_root tee "$web/ff-web-version.txt" >/dev/null
+          run_root rm -rf "$staging"
+          echo "Deployed GitHub web build $sha to $web; backup saved under $backup_dir."
+          REMOTE
+
+      - name: Verify the production bundle contains the dispatch fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/production-main.dart.js"
+          status=$(curl --silent --show-error --location --retry 5 --retry-delay 3 --max-time 30 \
+            --output "$bundle" --write-out '%{http_code}' \
+            "https://app.flavorflow.co.in/main.dart.js?build=$GITHUB_SHA")
+          [[ "$status" == 200 ]] || { echo "::error::Production main.dart.js returned HTTP $status."; exit 1; }
+          if ! grep -Fq 'Could not load available batches.' "$bundle"; then
+            echo '::error::Production bundle does not contain the dispatch batch-code fix.'
+            exit 1
+          fi
+          echo 'Production web app is serving the dispatch batch-code fix.'
 
   build-windows:
     name: Build Windows desktop portable x64
