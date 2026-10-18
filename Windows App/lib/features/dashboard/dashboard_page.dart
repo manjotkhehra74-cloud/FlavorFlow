@@ -199,55 +199,60 @@ class _DashboardPageState extends State<DashboardPage> {
     required String role,
     required Color background,
   }) {
-    return Container(
+    return ColoredBox(
       color: background,
       child: RefreshIndicator(
         onRefresh: () async => _reload(),
         child: LayoutBuilder(builder: (context, constraints) {
-          final twoColumns = constraints.maxWidth >= 980;
+          final wide = constraints.maxWidth >= 940;
           final quickActions = actions == null ? null : _DashboardQuickActions(widget: actions, windows: true);
           final alertPanel = alerts == null ? null : _buildWidget(alerts);
-          final left = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            if (quickActions != null) ...[quickActions, const SizedBox(height: 12)],
-            if (alertPanel != null) alertPanel,
-          ]);
-          final right = _WindowsDashboardActivity(kpis: kpis);
-
           return ListView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: EdgeInsets.all(constraints.maxWidth < 720 ? 12 : 20),
+            padding: EdgeInsets.fromLTRB(wide ? 28 : 16, 24, wide ? 28 : 16, 32),
             children: [
               _WindowsDashboardHeading(greeting: greeting, name: name, role: role, onRefresh: _reload),
+              const SizedBox(height: 24),
+              _WindowsDashboardSectionLabel(title: 'LIVE OPERATIONS', subtitle: 'The numbers that matter right now'),
               const SizedBox(height: 12),
               _WindowsDashboardKpiGrid(items: coreKpis),
-              if (additionalKpis.isNotEmpty) ...[
-                const SizedBox(height: 14),
-                SectionCard(
-                  title: 'Workspace Snapshot',
-                  padding: const EdgeInsets.all(10),
-                  child: _WindowsDashboardKpiGrid(items: additionalKpis),
-                ),
-              ],
-              const SizedBox(height: 14),
-              if (twoColumns)
+              if (wide && (additionalKpis.isNotEmpty || quickActions != null || alertPanel != null)) ...[
+                const SizedBox(height: 24),
                 Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Expanded(flex: 3, child: left),
-                  const SizedBox(width: 14),
-                  Expanded(flex: 2, child: right),
-                ])
-              else
-                Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  left,
-                  const SizedBox(height: 12),
-                  right,
+                  Expanded(flex: 3, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    if (additionalKpis.isNotEmpty) ...[
+                      const _WindowsDashboardSectionLabel(title: 'AT A GLANCE', subtitle: 'Your workspace in one view'),
+                      const SizedBox(height: 12),
+                      _WindowsDashboardKpiGrid(items: additionalKpis),
+                      const SizedBox(height: 22),
+                    ],
+                    if (quickActions != null) quickActions,
+                  ])),
+                  if (alertPanel != null) ...[
+                    const SizedBox(width: 18),
+                    Expanded(flex: 2, child: alertPanel),
+                  ],
                 ]),
+              ] else ...[
+                if (additionalKpis.isNotEmpty) ...[
+                  const SizedBox(height: 24),
+                  const _WindowsDashboardSectionLabel(title: 'AT A GLANCE', subtitle: 'Your workspace in one view'),
+                  const SizedBox(height: 12),
+                  _WindowsDashboardKpiGrid(items: additionalKpis),
+                ],
+                if (quickActions != null) ...[const SizedBox(height: 18), quickActions],
+                if (alertPanel != null) ...[const SizedBox(height: 18), alertPanel],
+              ],
               if (detailWidgets.isNotEmpty) ...[
-                const SizedBox(height: 14),
+                const SizedBox(height: 26),
+                const _WindowsDashboardSectionLabel(title: 'MORE INSIGHTS', subtitle: 'Detailed reports from your workspace'),
+                const SizedBox(height: 12),
                 for (final widgetData in detailWidgets) ...[
                   _buildWidget(widgetData),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 14),
                 ],
               ],
+              const SizedBox(height: 16),
               const SubscriptionBanner(),
             ],
           );
@@ -662,6 +667,25 @@ class _DashboardKpiTile extends StatelessWidget {
   }
 }
 
+class _WindowsDashboardSectionLabel extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  const _WindowsDashboardSectionLabel({required this.title, required this.subtitle});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(children: [
+      Container(width: 24, height: 2, color: const Color(0xFF0D9488)),
+      const SizedBox(width: 10),
+      Text(title, style: TextStyle(color: scheme.onSurface, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.4)),
+      const SizedBox(width: 12),
+      Expanded(child: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis,
+        style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11))),
+    ]);
+  }
+}
+
 class _WindowsDashboardHeading extends StatelessWidget {
   final String greeting;
   final String name;
@@ -671,41 +695,35 @@ class _WindowsDashboardHeading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final firstName = name.trim().split(RegExp(r'\s+')).first;
-    Widget copy() => Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-          Text('$greeting, $firstName', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 20, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 2),
-          Text('$role  ·  ${fmtDateWithDay(todayYmd())}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5)),
-        ]);
-
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        child: LayoutBuilder(builder: (context, constraints) {
-          final identity = Row(children: [
-            Container(width: 4, height: 38, decoration: BoxDecoration(color: AppBrand.blue, borderRadius: BorderRadius.circular(1))),
-            const SizedBox(width: 10),
-            Expanded(child: copy()),
-          ]);
-          if (constraints.maxWidth < 500) {
-            return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              identity,
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: OutlinedButton.icon(onPressed: onRefresh, icon: const Icon(Icons.refresh_rounded, size: 16), label: Text(tr('Refresh'))),
-              ),
-            ]);
-          }
-          return Row(children: [
-            Expanded(child: identity),
-            const SizedBox(width: 12),
-            OutlinedButton.icon(onPressed: onRefresh, icon: const Icon(Icons.refresh_rounded, size: 16), label: Text(tr('Refresh'))),
-          ]);
-        }),
+    final light = Theme.of(context).brightness == Brightness.light;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 25),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(colors: [Color(0xFF123047), Color(0xFF1E5060), Color(0xFF0C736B)]),
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [BoxShadow(color: const Color(0xFF123047).withValues(alpha: light ? .16 : .06), blurRadius: 22, offset: const Offset(0, 9))],
       ),
+      child: LayoutBuilder(builder: (context, constraints) {
+        final copy = Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+          const Text('OPERATIONS OVERVIEW', style: TextStyle(color: Color(0xFF8EE6D6), fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 2)),
+          const SizedBox(height: 13),
+          Text('$greeting, $firstName', maxLines: 2, overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 7),
+          Text('$role   ·   ${fmtDateWithDay(todayYmd())}',
+            style: const TextStyle(color: Color(0xFFD5E7E8), fontSize: 12)),
+        ]);
+        final refresh = OutlinedButton.icon(
+          onPressed: onRefresh,
+          style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Color(0xFF80B3B3))),
+          icon: const Icon(Icons.refresh_rounded, size: 17), label: Text(tr('Refresh')),
+        );
+        if (constraints.maxWidth < 570) {
+          return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [copy, const SizedBox(height: 16), refresh]);
+        }
+        return Row(children: [Expanded(child: copy), const SizedBox(width: 16), refresh]);
+      }),
     );
   }
 }
@@ -718,16 +736,12 @@ class _WindowsDashboardKpiGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     if (items.isEmpty) return const SizedBox.shrink();
     return LayoutBuilder(builder: (context, constraints) {
-      final columns = constraints.maxWidth >= 900 ? 4 : constraints.maxWidth >= 540 ? 2 : 1;
-      final gap = 9.0;
+      final columns = constraints.maxWidth >= 880 ? 4 : constraints.maxWidth >= 500 ? 2 : 1;
+      const gap = 12.0;
       final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
       return Wrap(spacing: gap, runSpacing: gap, children: [
         for (final item in items)
-          SizedBox(
-            width: width,
-            height: 74,
-            child: _WindowsDashboardKpiTile(item: item),
-          ),
+          SizedBox(width: width, height: 130, child: _WindowsDashboardKpiTile(item: item)),
       ]);
     });
   }
@@ -744,43 +758,26 @@ class _WindowsDashboardKpiTile extends StatelessWidget {
     final value = item['display'] as String? ?? (item['money'] == true ? inr(item['value']) : qtyInt(item['value']));
     final icon = item['iconData'] as IconData? ?? iconFor(item['icon'] as String?);
     return Container(
-      decoration: BoxDecoration(color: scheme.surface, border: Border.all(color: scheme.outlineVariant), borderRadius: BorderRadius.circular(3)),
-      child: Row(children: [
-        Container(width: 3, height: double.infinity, color: tint),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
-            child: Row(children: [
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
-                Text('${item['label'] ?? ''}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 4),
-                Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 19, fontWeight: FontWeight.w700, fontFeatures: const [FontFeature.tabularFigures()])),
-              ])),
-              const SizedBox(width: 7),
-              Icon(icon, size: 18, color: tint),
-            ]),
-          ),
-        ),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: .7)),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(child: Text('${item['label'] ?? ''}'.toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: .8))),
+          Container(width: 32, height: 32,
+            decoration: BoxDecoration(color: tint.withValues(alpha: .12), borderRadius: BorderRadius.circular(9)),
+            child: Icon(icon, size: 17, color: tint)),
+        ]),
+        const Spacer(),
+        Text(value, maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: scheme.onSurface, fontSize: 28, fontWeight: FontWeight.w800, fontFeatures: const [FontFeature.tabularFigures()])),
+        const SizedBox(height: 3),
+        Container(width: 30, height: 3, decoration: BoxDecoration(color: tint, borderRadius: BorderRadius.circular(3))),
       ]),
-    );
-  }
-}
-
-class _WindowsDashboardActivity extends StatelessWidget {
-  final List<Map<String, dynamic>> kpis;
-  const _WindowsDashboardActivity({required this.kpis});
-
-  @override
-  Widget build(BuildContext context) {
-    final rows = <List<dynamic>>[
-      ['Production batches', _liveKpiValue(kpis, ['production today', 'production'])],
-      ['Dispatches', _liveKpiValue(kpis, ['dispatch today', 'dispatch'])],
-      ['Stock updates', _liveKpiValue(kpis, ['stock updates', 'updates'])],
-    ];
-    return SectionCard(
-      title: "Today's Activity",
-      padding: EdgeInsets.zero,
-      child: AppDataTable(columns: const ['Activity', 'Today'], rows: rows),
     );
   }
 }
