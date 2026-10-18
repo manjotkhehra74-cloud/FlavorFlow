@@ -17,7 +17,7 @@ In the repository's **Settings → Secrets and variables → Actions**, add thes
 - `FLAVORFLOW_DEPLOY_SSH_KEY` — private key for that user.
 - `FLAVORFLOW_DEPLOY_PORT` — optional; defaults to `22`.
 
-The SSH user must be able to use non-interactive `sudo` for the backup and copy operations under the web root, or be the root user. The workflow uses `ssh-keyscan` to populate a per-run `known_hosts` file. If the actual web root differs from `/opt/flavorflow-saas/web`, set the Actions variable `FLAVORFLOW_DEPLOY_PATH` to the correct absolute path.
+The SSH user must own or otherwise have write access to the web root and its sibling `backups` directory; the workflow intentionally does not use `sudo`. For the default paths, run this one-time ownership setup in the VPS SSH terminal (it may prompt for the VPS sudo password): `sudo chown -R "$(id -un):$(id -gn)" /opt/flavorflow-saas/web /opt/flavorflow-saas/backups`. This leaves the server and application data untouched. The workflow uses `ssh-keyscan` to populate a per-run `known_hosts` file. If the actual web root differs from `/opt/flavorflow-saas/web`, set the Actions variable `FLAVORFLOW_DEPLOY_PATH` to the correct absolute path and grant the SSH user write access to it and its sibling `backups` directory.
 
 Do not put private keys or passwords in chat or in the repository.
 

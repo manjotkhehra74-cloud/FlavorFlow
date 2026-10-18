@@ -247,15 +247,26 @@ jobs:
           web="$2"
           sha="$3"
           backup_dir="$(dirname "$web")/backups"
-          run_root() {
-            if [[ "$(id -u)" -eq 0 ]]; then "$@"; else sudo -n "$@"; fi
-          }
+          deploy_user="$(id -un)"
           [[ -s "$staging/index.html" ]] || { echo 'Staged index.html is missing.' >&2; exit 1; }
-          run_root mkdir -p "$web" "$backup_dir"
-          run_root tar -czf "$backup_dir/web-before-$sha.tgz" -C "$web" .
-          run_root cp -a "$staging"/. "$web"/
-          printf '%s %s\n' "$sha" "$(date -u +%FT%TZ)" | run_root tee "$web/ff-web-version.txt" >/dev/null
-          run_root rm -rf "$staging"
+          if [[ "$(id -u)" -ne 0 ]]; then
+            for deploy_dir in "$web" "$backup_dir"; do
+              if [[ -d "$deploy_dir" ]]; then
+                writable_path="$deploy_dir"
+              else
+                writable_path="$(dirname "$deploy_dir")"
+              fi
+              if [[ ! -d "$writable_path" || ! -w "$writable_path" ]]; then
+                echo "::error::SSH user $deploy_user cannot write $deploy_dir. Give the SSH user ownership of the web and backups directories once; the workflow intentionally does not use sudo."
+                exit 1
+              fi
+            done
+          fi
+          mkdir -p "$web" "$backup_dir"
+          tar -czf "$backup_dir/web-before-$sha.tgz" -C "$web" .
+          cp -a "$staging"/. "$web"/
+          printf '%s %s\n' "$sha" "$(date -u +%FT%TZ)" > "$web/ff-web-version.txt"
+          rm -rf "$staging"
           echo "Deployed GitHub web build $sha to $web; backup saved under $backup_dir."
           REMOTE
 
