@@ -21,6 +21,7 @@ import '../../ui/scan_page.dart';
 import '../../core/offline_queue.dart';
 import '../../ui/widgets.dart';
 import '../../ui/windows_widgets.dart';
+import 'batch_code.dart';
 import 'destination_field.dart';
 
 /// Destinations that older builds hard-coded for the original sauce factory
@@ -136,10 +137,15 @@ String _batchAvailability(Map<String, dynamic> batch) {
   return '$cb ${U.cb}';
 }
 
+int _batchNumber(Object? value) {
+  if (value is num) return value.toInt();
+  return int.tryParse('${value ?? ''}') ?? 0;
+}
+
 class _LinesEditor extends StatelessWidget {
   final List<Map<String, dynamic>> products;
   final List<_Line> lines;
-  final VoidCallback onAdd, onChanged;
+  final VoidCallback onAdd, onChanged, onBatchChanged;
   final void Function(int) onRemove;
   /// Product changes clear the previous batch and load the new product's
   /// available batches. This avoids dispatching a code belonging to another
@@ -148,16 +154,21 @@ class _LinesEditor extends StatelessWidget {
   final bool showBatch;
   final Map<int, List<Map<String, dynamic>>> batchOptions;
   final Set<int> batchLoading;
+  final Set<int> batchLoadFailed;
+  final void Function(int productId) onRetryBatches;
   const _LinesEditor({
     required this.products,
     required this.lines,
     required this.onAdd,
     required this.onRemove,
     required this.onChanged,
+    required this.onBatchChanged,
     required this.onProductChanged,
     this.showBatch = false,
     this.batchOptions = const {},
     this.batchLoading = const {},
+    this.batchLoadFailed = const {},
+    required this.onRetryBatches,
   });
 
   @override
@@ -205,11 +216,16 @@ class _LinesEditor extends StatelessWidget {
                   line: lines[i],
                   batches: batchOptions[lines[i].productId] ?? const [],
                   loading: lines[i].productId != null && batchLoading.contains(lines[i].productId),
+                  loadFailed: lines[i].productId != null && batchLoadFailed.contains(lines[i].productId),
+                  onRetry: () {
+                    final productId = lines[i].productId;
+                    if (productId != null) onRetryBatches(productId);
+                  },
                   onChanged: (value) {
-                    final code = '${value?['code'] ?? ''}'.toUpperCase();
+                    final code = normalizeDispatchBatchCode(value?['code'] ?? value?['batch_code'] ?? value?['batchCode']);
                     if (lines[i].batchCode.text != code) lines[i].batchCode.text = code;
-                    lines[i].batchId = value?['id'] as int?;
-                    onChanged();
+                    lines[i].batchId = dispatchBatchId(value);
+                    onBatchChanged();
                   },
                 ),
               ),
@@ -254,16 +270,32 @@ class _BatchField extends StatelessWidget {
   final _Line line;
   final List<Map<String, dynamic>> batches;
   final bool loading;
+  final bool loadFailed;
+  final VoidCallback onRetry;
   final ValueChanged<Map<String, dynamic>?> onChanged;
 
-  const _BatchField({required this.line, required this.batches, required this.loading, required this.onChanged});
+  const _BatchField({
+    required this.line,
+    required this.batches,
+    required this.loading,
+    required this.loadFailed,
+    required this.onRetry,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final selected = line.batchCode.text.trim().toUpperCase();
-    final hasSelected = line.batchId != null
-        ? batches.any((b) => b['id'] == line.batchId)
-        : batches.any((b) => '${b['code'] ?? ''}'.trim().toUpperCase() == selected);
+    final selectedCode = normalizeDispatchBatchCode(line.batchCode.text);
+    Map<String, dynamic>? selectedById;
+    if (line.batchId != null) {
+      for (final batch in batches) {
+        if (dispatchBatchId(batch) == line.batchId) {
+          selectedById = batch;
+          break;
+        }
+      }
+    }
+    final selectedBatch = selectedById ?? dispatchBatchByCode(batches, selectedCode);
     if (loading) {
       return TextField(
         readOnly: true,
@@ -284,13 +316,29 @@ class _BatchField extends StatelessWidget {
           icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
           onPressed: () async {
             final value = await ScanPage.scan(context, title: U.ize('Scan batch code'));
-            if (value != null) onChanged({'code': value.toUpperCase()});
+            if (value == null) return;
+            final code = normalizeDispatchBatchCode(value);
+            onChanged(
+              code.isEmpty ? null : (dispatchBatchByCode(batches, code) ?? {'code': code}),
+            );
           },
         );
+    Widget? suffixIcon() {
+      if (!isPhonePlatform && !loadFailed) return null;
+      return Row(mainAxisSize: MainAxisSize.min, children: [
+        if (loadFailed)
+          IconButton(
+            tooltip: U.ize('Retry loading batches'),
+            icon: const Icon(Icons.refresh_rounded, size: 19),
+            onPressed: onRetry,
+          ),
+        if (isPhonePlatform) cameraButton(),
+      ]);
+    }
 
     if (batches.isEmpty) {
-      // Opening stock / older servers can legitimately have no production
-      // batch list. Keep manual entry available on every platform.
+      // Opening stock can legitimately have no production batch list. If both
+      // batch endpoints failed, make that explicit and require a manual code.
       return TextField(
         controller: line.batchCode,
         inputFormatters: codeFormatters,
@@ -298,55 +346,53 @@ class _BatchField extends StatelessWidget {
         textInputAction: TextInputAction.done,
         decoration: InputDecoration(
           labelText: U.ize('Batch code · date · available stock'),
-          hintText: 'No batch list — enter code if known',
-          helperText: isDesktopPlatform
-              ? 'Type a code or scan it with a USB barcode scanner.'
-              : U.ize('Stock deducts batch-wise'),
+          hintText: loadFailed ? 'Batch list unavailable — enter code' : 'No batch list — enter code if known',
+          helperText: loadFailed
+              ? U.ize('Could not load available batches. Enter the exact code or retry before dispatch.')
+              : isDesktopPlatform
+                  ? 'Type a code or scan it with a USB barcode scanner.'
+                  : U.ize('Stock deducts batch-wise'),
           helperMaxLines: 2,
-          suffixIcon: isPhonePlatform ? cameraButton() : null,
+          suffixIcon: suffixIcon(),
         ),
-        onChanged: (_) => onChanged({'code': line.batchCode.text}),
+        onChanged: (_) {
+          final code = normalizeDispatchBatchCode(line.batchCode.text);
+          onChanged(code.isEmpty ? null : {'code': code});
+        },
       );
     }
-    final selectedBatch = hasSelected
-        ? (line.batchId != null
-            ? batches.firstWhere((b) => b['id'] == line.batchId)
-            : batches.firstWhere((b) => '${b['code'] ?? ''}'.trim().toUpperCase() == selected))
-        : null;
     final optionsKey = batches
-        .map((b) => '${b['id']}:${b['code']}:${b['planned_date'] ?? b['plannedDate']}')
+        .map((b) => '${dispatchBatchId(b)}:${b['code'] ?? b['batch_code']}:${b['planned_date'] ?? b['plannedDate']}')
         .join('|');
     final dropdown = DropdownButtonFormField<int>(
-      key: ValueKey('batch-${line.productId}-${selectedBatch?['id'] ?? 'none'}-$optionsKey'),
-      initialValue: hasSelected ? selectedBatch!['id'] as int : null,
+      key: ValueKey('batch-${line.productId}-${dispatchBatchId(selectedBatch) ?? 'none'}-$optionsKey'),
+      initialValue: dispatchBatchId(selectedBatch),
       isExpanded: true,
       decoration: InputDecoration(
         labelText: U.ize('Batch code · date · available stock'),
-        helperText: selectedBatch == null ? U.ize('Select batch to deduct stock') : 'Available: ${_batchAvailability(selectedBatch)}',
+        helperText: selectedBatch == null
+            ? selectedCode.isEmpty
+                ? U.ize('Select batch to deduct stock')
+                : 'No available batch exactly matches "$selectedCode".'
+            : 'Available: ${_batchAvailability(selectedBatch)}',
         helperMaxLines: 1,
         suffixIcon: isPhonePlatform ? cameraButton() : null,
       ),
       items: [
-        for (final batch in batches)
+        for (final batch in batches.where((b) => dispatchBatchId(b) != null))
           DropdownMenuItem<int>(
-            value: batch['id'] as int,
+            value: dispatchBatchId(batch)!,
             child: Text(
-              '${batch['code']} · ${_shortBatchDate(batch['planned_date'] ?? batch['plannedDate'])} · ${_batchAvailability(batch)}',
+              '${batch['code'] ?? batch['batch_code'] ?? batch['batchCode']} · ${_shortBatchDate(batch['planned_date'] ?? batch['plannedDate'])} · ${_batchAvailability(batch)}',
               overflow: TextOverflow.ellipsis,
             ),
           ),
       ],
-      onChanged: (id) => onChanged(id == null ? null : batches.firstWhere((b) => b['id'] == id)),
+      onChanged: (id) => onChanged(id == null ? null : batches.firstWhere((b) => dispatchBatchId(b) == id)),
     );
     if (!isDesktopPlatform) return dropdown;
 
-    Map<String, dynamic>? matchingBatch(String code) {
-      final normalized = code.trim().toUpperCase();
-      for (final batch in batches) {
-        if ('${batch['code'] ?? ''}'.trim().toUpperCase() == normalized) return batch;
-      }
-      return null;
-    }
+    Map<String, dynamic>? matchingBatch(String code) => dispatchBatchByCode(batches, code);
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       dropdown,
@@ -367,12 +413,8 @@ class _BatchField extends StatelessWidget {
           helperMaxLines: 2,
         ),
         onChanged: (raw) {
-          final code = raw.trim().toUpperCase();
-          if (code.isEmpty) {
-            onChanged(null);
-          } else {
-            onChanged(matchingBatch(code) ?? {'code': code});
-          }
+          final code = normalizeDispatchBatchCode(raw);
+          onChanged(code.isEmpty ? null : (matchingBatch(code) ?? {'code': code}));
         },
       ),
     ]);
@@ -477,12 +519,15 @@ mixin _CalcMixin<T extends StatefulWidget> on State<T> {
   /// make Dispatch fire dozens of requests on open.
   final Map<int, List<Map<String, dynamic>>> batchOptions = {};
   final Set<int> batchLoading = {};
+  final Set<int> batchLoadFailed = {};
+  final Map<int, int> _batchRequestVersions = {};
   /// true once /products answered — an empty master then shows a hint
   /// instead of spinning forever (new companies start with zero products).
   bool productsLoaded = false;
   final List<_Line> lines = [_Line()];
   Map<String, dynamic>? calc;
   Timer? _debounce;
+  int _calcRequestVersion = 0;
 
   Future<void> loadProducts() async {
     try {
@@ -505,20 +550,89 @@ mixin _CalcMixin<T extends StatefulWidget> on State<T> {
     }
   }
 
+  List<Map<String, dynamic>> _batchRows(dynamic response) {
+    if (response is! Map || response['batches'] is! List) return const [];
+    return (response['batches'] as List)
+        .whereType<Map>()
+        .map((row) {
+          final batch = row.cast<String, dynamic>();
+          final code = batch['code'] ?? batch['batch_code'] ?? batch['batchCode'];
+          return code == null ? batch : {...batch, 'code': code};
+        })
+        .toList();
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchBatchOptions(int productId) async {
+    final api = context.read<AuthController>().api;
+    List<Map<String, dynamic>>? dispatchRows;
+    Object? dispatchError;
+    try {
+      dispatchRows = _batchRows(await api.get('/dispatch/batches?productId=$productId'));
+      if (dispatchRows.isNotEmpty) return dispatchRows;
+    } catch (e) {
+      dispatchError = e;
+    }
+
+    // Some older factory servers do not expose the dispatch-specific batch
+    // route (or return no rows for a product that does have completed stock).
+    // Fall back to the production register and derive the remaining quantity.
+    try {
+      final completed = _batchRows(await api.get('/production/batches?status=COMPLETED'));
+      final available = <Map<String, dynamic>>[];
+      for (final batch in completed) {
+        if ('${batch['status'] ?? ''}'.toUpperCase() != 'COMPLETED') continue;
+        if (_batchNumber(batch['product_id'] ?? batch['productId']) != productId) continue;
+        final code = normalizeDispatchBatchCode(batch['code']);
+        if (code.isEmpty) continue;
+        final remainingCb = _batchNumber(batch['produced_cb'] ?? batch['producedCb']) -
+            _batchNumber(batch['used_cb'] ?? batch['usedCb']);
+        final remainingTrays = _batchNumber(batch['produced_trays'] ?? batch['producedTrays']) -
+            _batchNumber(batch['used_trays'] ?? batch['usedTrays']);
+        if (remainingCb <= 0 && remainingTrays <= 0) continue;
+        available.add({
+          ...batch,
+          'code': code,
+          'remaining_cb': remainingCb > 0 ? remainingCb : 0,
+          'remaining_trays': remainingTrays > 0 ? remainingTrays : 0,
+        });
+      }
+      if (available.isNotEmpty || dispatchRows == null) return available;
+      return dispatchRows;
+    } catch (_) {
+      // A successful empty dispatch response is still useful (e.g. this
+      // product has opening/unassigned stock only). Only mark loading as failed
+      // when neither endpoint could be read.
+      if (dispatchRows != null) return dispatchRows;
+      throw dispatchError ?? StateError('Could not load available batches.');
+    }
+  }
+
   Future<void> loadBatches(int productId, {bool refresh = false}) async {
     if (!refresh && (batchOptions.containsKey(productId) || batchLoading.contains(productId))) return;
-    if (mounted) setState(() => batchLoading.add(productId));
+    if (!mounted) return;
+    final requestVersion = (_batchRequestVersions[productId] ?? 0) + 1;
+    _batchRequestVersions[productId] = requestVersion;
+    setState(() {
+      batchLoading.add(productId);
+      batchLoadFailed.remove(productId);
+    });
     try {
-      final json = await context.read<AuthController>().api.get('/dispatch/batches?productId=$productId');
-      final raw = (json as Map)['batches'];
-      final rows = raw is List ? raw.cast<Map<String, dynamic>>() : <Map<String, dynamic>>[];
-      if (mounted) setState(() => batchOptions[productId] = rows);
+      final rows = await _fetchBatchOptions(productId);
+      if (!mounted || _batchRequestVersions[productId] != requestVersion) return;
+      setState(() {
+        batchOptions[productId] = rows;
+        batchLoadFailed.remove(productId);
+      });
     } catch (_) {
-      // Older servers simply leave the manual batch field available. The
-      // dispatch route still validates the code and stock on submit.
-      if (mounted) setState(() => batchOptions[productId] = const []);
+      if (!mounted || _batchRequestVersions[productId] != requestVersion) return;
+      setState(() {
+        batchOptions[productId] = const [];
+        batchLoadFailed.add(productId);
+      });
     } finally {
-      if (mounted) setState(() => batchLoading.remove(productId));
+      if (mounted && _batchRequestVersions[productId] == requestVersion) {
+        setState(() => batchLoading.remove(productId));
+      }
     }
   }
 
@@ -540,7 +654,8 @@ mixin _CalcMixin<T extends StatefulWidget> on State<T> {
             'productId': l.productId,
             'cartons': int.tryParse(l.cartons.text) ?? 0,
             'trays': int.tryParse(l.trays.text) ?? 0,
-            if (l.batchCode.text.trim().isNotEmpty) 'batchCode': l.batchCode.text.trim().toUpperCase(),
+            if (normalizeDispatchBatchCode(l.batchCode.text).isNotEmpty)
+              'batchCode': normalizeDispatchBatchCode(l.batchCode.text),
             if (l.batchId != null) 'batchId': l.batchId,
           },
       ];
@@ -549,21 +664,25 @@ mixin _CalcMixin<T extends StatefulWidget> on State<T> {
       items().where((l) => (l['cartons'] as int) > 0 || (l['trays'] as int) > 0).toList();
 
   void recalcDebounced() {
+    _calcRequestVersion++; // invalidate an older calculation immediately
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 280), recalc);
   }
 
   Future<void> recalc() async {
+    final requestVersion = ++_calcRequestVersion;
     final list = nonZeroItems();
     if (list.isEmpty || !mounted) {
-      setState(() => calc = null);
+      if (mounted && calc != null) setState(() => calc = null);
       return;
     }
     try {
       final json = await context.read<AuthController>().api.post('/dispatch/calculate', {'items': list});
-      if (mounted) setState(() => calc = (json as Map).cast<String, dynamic>());
+      if (mounted && requestVersion == _calcRequestVersion) {
+        setState(() => calc = (json as Map).cast<String, dynamic>());
+      }
     } catch (_) {
-      if (mounted) setState(() => calc = null);
+      if (mounted && requestVersion == _calcRequestVersion) setState(() => calc = null);
     }
   }
 
@@ -573,9 +692,14 @@ mixin _CalcMixin<T extends StatefulWidget> on State<T> {
     if (line.productId != null) loadBatches(line.productId!);
   }
 
-  void removeLine(int i) => setState(() { lines.removeAt(i).dispose(); recalc(); });
+  void removeLine(int i) {
+    setState(() => lines.removeAt(i).dispose());
+    recalcDebounced();
+  }
+
   void disposeLines() {
     _debounce?.cancel();
+    _calcRequestVersion++;
     for (final l in lines) { l.dispose(); }
   }
 }
@@ -714,19 +838,27 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
     SharedPreferences.getInstance().then((p) => p.remove(_draftKey)).catchError((_) => false);
   }
 
-  /// Wipe the form fields AND the saved draft (Delete draft button).
-  void _deleteDraftAndReset() {
-    truck.clear();
-    destination.clear();
-    remarks.clear();
-    date = DateTime.now();
-    for (final l in lines) { l.dispose(); }
-    lines
-      ..clear()
-      ..add(_Line()..productId = products.isNotEmpty ? products.first['id'] as int : null);
+  /// Return to a clean entry after a successful dispatch or explicit draft
+  /// deletion. The next form starts with one blank product line.
+  void _resetEntryForm() {
     _clearDraft();
-    setState(() { _hasDraft = false; calc = null; });
+    setState(() {
+      truck.clear();
+      destination.clear();
+      remarks.clear();
+      date = DateTime.now();
+      for (final l in lines) { l.dispose(); }
+      lines
+        ..clear()
+        ..add(_Line()..productId = products.isNotEmpty ? products.first['id'] as int : null);
+      _debounce?.cancel();
+      _calcRequestVersion++;
+      calc = null;
+      _hasDraft = false;
+    });
   }
+
+  void _deleteDraftAndReset() => _resetEntryForm();
 
   /// Load the draft saved on disk (app was closed) if the in-memory one is gone.
   Future<void> _restorePersistedDraft() async {
@@ -838,11 +970,14 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
       return;
     }
     final list = nonZeroItems();
+    if (list.isEmpty) {
+      showErr(context, 'Add at least one quantity before dispatch.');
+      return;
+    }
     // A product with production batches must never be dispatched without a
-    // batch. Previously the inventory quantity was reduced but used_cb stayed
-    // untouched, which is exactly why old dispatched stock kept appearing in
-    // the batch register. Products that only have opening/unassigned stock
-    // remain dispatchable through the manual field.
+    // matching code; otherwise inventory falls while its batch still looks full.
+    // If both batch-list endpoints are unavailable, require an exact manual
+    // code rather than silently creating an un-attributed dispatch line.
     for (final item in list) {
       final pid = item['productId'] as int?;
       if (pid == null) continue;
@@ -850,17 +985,18 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
         showErr(context, 'Batch stock is still loading. Please select a batch and try again.');
         return;
       }
+      final code = normalizeDispatchBatchCode(item['batchCode']);
+      if (batchLoadFailed.contains(pid) && code.isEmpty) {
+        showErr(context, 'Could not load available batches. Enter the exact batch code or retry loading batches.');
+        return;
+      }
       final availableBatches = batchOptions[pid] ?? const <Map<String, dynamic>>[];
       if (availableBatches.isNotEmpty) {
-        final code = (item['batchCode'] as String?)?.trim().toUpperCase();
-        if (code == null || code.isEmpty) {
+        if (code.isEmpty) {
           showErr(context, 'Select or enter a batch code for every product line before dispatch.');
           return;
         }
-        final matchesAvailableBatch = availableBatches.any(
-          (batch) => '${batch['code'] ?? ''}'.trim().toUpperCase() == code,
-        );
-        if (!matchesAvailableBatch) {
+        if (dispatchBatchByCode(availableBatches, code) == null) {
           showErr(context, 'No available batch matches "$code". Choose a batch with remaining stock.');
           return;
         }
@@ -886,22 +1022,17 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
       if (!mounted) return;
       if (sent.queued) {
         rememberDest(dispatchDestination);
-        _clearDraft();
-        _hasDraft = false;
-        for (final l in lines) { l.cartons.clear(); l.trays.clear(); l.batchCode.clear(); l.batchId = null; }
-        destination.clear();
-        remarks.clear();
+        _resetEntryForm();
         showOk(context, 'Dispatch saved on this device — it will sync automatically when internet returns.');
         return;
       }
       final json = sent.json;
       final id = (json as Map)['id'];
       rememberDest(dispatchDestination); // company's own list grows automatically
-      _clearDraft(); // success — draft is no longer needed (memory + disk)
-      _hasDraft = false;
-      for (final l in lines) { l.cartons.clear(); l.trays.clear(); l.batchCode.clear(); l.batchId = null; }
-      destination.clear();
-      remarks.clear();
+      _resetEntryForm();
+      for (final productId in list.map((item) => item['productId']).whereType<int>().toSet()) {
+        unawaited(loadBatches(productId, refresh: true));
+      }
       showOk(context, '${json['code']} dispatched to $dispatchDestination · ${qty(json['totals']['grossWeight'])} kg gross (${json['weekday']}).');
       context.push('/dispatch/$id');
     } catch (e) {
@@ -1018,7 +1149,23 @@ class _EntryTabState extends State<_EntryTab> with _CalcMixin {
               ? (productsLoaded
                   ? _NoProductsHint(onAdd: () => context.go('/products'))
                   : const SizedBox(height: 60, child: Center(child: CircularProgressIndicator())))
-              : _LinesEditor(products: products, lines: lines, onAdd: addLine, onRemove: removeLine, onChanged: recalcDebounced, onProductChanged: selectProduct, batchOptions: batchOptions, batchLoading: batchLoading, showBatch: true),
+              : _LinesEditor(
+                  products: products,
+                  lines: lines,
+                  onAdd: addLine,
+                  onRemove: removeLine,
+                  onChanged: recalcDebounced,
+                  onBatchChanged: () {
+                    setState(() {});
+                    recalcDebounced();
+                  },
+                  onProductChanged: selectProduct,
+                  batchOptions: batchOptions,
+                  batchLoading: batchLoading,
+                  batchLoadFailed: batchLoadFailed,
+                  onRetryBatches: (productId) => loadBatches(productId, refresh: true),
+                  showBatch: true,
+                ),
         ]));
         final side = SectionCard(title: 'Before you dispatch', child: Column(children: [
           if (calc != null) ...[

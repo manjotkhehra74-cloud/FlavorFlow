@@ -3,8 +3,10 @@ name: FlavorFlow build
 on:
   push:
     branches:
+      - main
       - arena/01a0dc70-flavorflow
       - arena/02900f8a-flavorflow
+      - arena/b7695262-flavorflow
   workflow_dispatch:
 
 permissions:

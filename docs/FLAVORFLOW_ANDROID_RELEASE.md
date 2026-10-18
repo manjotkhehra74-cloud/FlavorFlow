@@ -9,7 +9,7 @@
 
 ## CI checks and artifacts
 
-The GitHub Actions workflow runs `flutter analyze --no-fatal-infos lib test` (errors and warnings fail; legacy info-level lint hints are non-blocking), `flutter test`, builds the web app, a release APK and a release AAB, then checks the archive/signature outputs. A push to the release branch triggers the build; download the Android artifact from the completed run's **Artifacts** section.
+The GitHub Actions workflow runs `flutter analyze --no-fatal-infos lib test` (errors and warnings fail; legacy info-level lint hints are non-blocking), `flutter test`, builds the web app, a release APK and a release AAB, then checks the archive/signature outputs. Pushes to `main` and the configured Arena release branches trigger the build; download the Android artifact from the completed run's **Artifacts** section. Builds run through GitHub Actions only; this repository has no CircleCI build configuration.
 
 For a store-upload-signed build, configure these Actions secrets with the existing FlavorFlow upload key:
 
