@@ -4,9 +4,7 @@ All Flutter builds run in **GitHub Actions**; the VPS only receives the finished
 
 ## Production target
 
-The app is currently served at `https://app.flavorflow.co.in`. The repository's SaaS VPS setup uses `/opt/flavorflow-saas/web` as Caddy's web root; the GitHub deploy job uses that path by default. The older `tools/ff-webdeploy.sh` is for the separate `flavorflow.duckdns.org` VM and `/opt/flavorflow/web`—do not use it for the app domain.
-
-The Caddy setup script in this repository points both `flavorflow.co.in` and `app.flavorflow.co.in` at the same web root. Confirm the VPS's current Caddy configuration before deploying if that has changed.
+The app is currently served at `https://app.flavorflow.co.in`. Its active Nginx vhost proxies to the FlavorFlow service on `127.0.0.1:4000`; the existing deployment script for that service uses `/opt/flavorflow/web` as its web root. The GitHub deploy job defaults to `/opt/flavorflow/web`. The separate Caddy SaaS setup's `/opt/flavorflow-saas/web` is not the web root used by this Nginx vhost.
 
 ## Configure GitHub Actions access
 
@@ -17,7 +15,7 @@ In the repository's **Settings → Secrets and variables → Actions**, add thes
 - `FLAVORFLOW_DEPLOY_SSH_KEY` — private key for that user.
 - `FLAVORFLOW_DEPLOY_PORT` — optional; defaults to `22`.
 
-The SSH user must own or otherwise have write access to the web root and its sibling `backups` directory; the workflow intentionally does not use `sudo`. For the default paths, run this one-time ownership setup in the VPS SSH terminal (it may prompt for the VPS sudo password): `sudo chown -R "$(id -un):$(id -gn)" /opt/flavorflow-saas/web /opt/flavorflow-saas/backups`. This leaves the server and application data untouched. The workflow uses `ssh-keyscan` to populate a per-run `known_hosts` file. If the actual web root differs from `/opt/flavorflow-saas/web`, set the Actions variable `FLAVORFLOW_DEPLOY_PATH` to the correct absolute path and grant the SSH user write access to it and its sibling `backups` directory.
+The SSH user must own or otherwise have write access to the web root and its sibling `backups` directory; the workflow intentionally does not use `sudo`. For the default paths, run this one-time ownership setup in the VPS SSH terminal (it may prompt for the VPS sudo password): `sudo chown -R "$(id -un):$(id -gn)" /opt/flavorflow/web /opt/flavorflow/backups`. This leaves the server and application data untouched. The workflow uses `ssh-keyscan` to populate a per-run `known_hosts` file. If the actual web root differs from `/opt/flavorflow/web`, set the Actions variable `FLAVORFLOW_DEPLOY_PATH` to the correct absolute path and grant the SSH user write access to it and its sibling `backups` directory.
 
 Do not put private keys or passwords in chat or in the repository.
 

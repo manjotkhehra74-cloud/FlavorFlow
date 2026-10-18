@@ -184,7 +184,7 @@ jobs:
       DEPLOY_USER: ${{ secrets.FLAVORFLOW_DEPLOY_USER }}
       DEPLOY_SSH_KEY: ${{ secrets.FLAVORFLOW_DEPLOY_SSH_KEY }}
       DEPLOY_PORT: ${{ secrets.FLAVORFLOW_DEPLOY_PORT }}
-      DEPLOY_PATH: ${{ vars.FLAVORFLOW_DEPLOY_PATH || '/opt/flavorflow-saas/web' }}
+      DEPLOY_PATH: ${{ vars.FLAVORFLOW_DEPLOY_PATH || '/opt/flavorflow/web' }}
 
     steps:
       - name: Check whether production deployment is configured
