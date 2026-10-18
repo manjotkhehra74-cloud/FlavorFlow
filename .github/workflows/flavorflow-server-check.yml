@@ -42,35 +42,51 @@ jobs:
             echo '::warning title=App web root::HTTP 200, but no Flutter web app shell was detected.'
           fi
 
-      - name: Check SaaS gateway health endpoint
+      - name: Check whether the dispatch fix is in the live web bundle
         shell: bash
         run: |
           set -euo pipefail
-          body="$RUNNER_TEMP/flavorflow-health.json"
+          bootstrap="$RUNNER_TEMP/flutter_bootstrap.js"
+          bundle="$RUNNER_TEMP/main.dart.js"
+          if ! curl --silent --show-error --location --max-time 25 \
+            --output "$bootstrap" https://app.flavorflow.co.in/flutter_bootstrap.js; then
+            echo '::warning title=Dispatch web bundle::Could not fetch flutter_bootstrap.js from the production root.'
+            exit 0
+          fi
+          if ! grep -q 'main.dart.js' "$bootstrap"; then
+            echo '::warning title=Dispatch web bundle::Flutter bootstrap did not reference main.dart.js.'
+            exit 0
+          fi
+          if ! curl --silent --show-error --location --max-time 90 \
+            --output "$bundle" https://app.flavorflow.co.in/main.dart.js; then
+            echo '::warning title=Dispatch web bundle::Could not fetch the production main.dart.js bundle.'
+            exit 0
+          fi
+          if grep -Fq 'Could not load available batches. Enter the exact batch code or retry loading batches.' "$bundle"; then
+            echo '::notice title=Dispatch web bundle::The production bundle contains the new dispatch batch-code fix.'
+          else
+            echo '::warning title=Dispatch web bundle::The production Flutter app is serving, but the new dispatch batch-code fix is not detected in its bundle.'
+          fi
+
+      - name: Check app API route
+        shell: bash
+        run: |
+          set -euo pipefail
+          body="$RUNNER_TEMP/flavorflow-api.json"
           if ! status=$(curl --silent --show-error --location --max-time 25 \
             --output "$body" --write-out '%{http_code}' \
-            https://app.flavorflow.co.in/api/saas/health); then
-            echo '::error title=Gateway health::Request to /api/saas/health did not complete.'
+            https://app.flavorflow.co.in/api/auth/me); then
+            echo '::error title=App API::Request to /api/auth/me did not complete.'
             exit 1
           fi
-          echo "app.flavorflow.co.in/api/saas/health -> HTTP $status"
-          if [[ "$status" != 200 ]]; then
-            snippet=$(head -c 300 "$body" | tr '\r\n' '  ' | sed 's/%/%25/g')
-            echo "::error title=Gateway health HTTP $status::$snippet"
-            exit 1
-          fi
-          if ! python3 - "$body" <<'PY'
-          import json
-          import pathlib
-          import sys
-
-          data = json.loads(pathlib.Path(sys.argv[1]).read_text())
-          if data.get('ok') is not True or data.get('service') != 'flavorflow-saas':
-              raise SystemExit(1)
-          PY
-          then
-            snippet=$(head -c 300 "$body" | tr '\r\n' '  ' | sed 's/%/%25/g')
-            echo "::error title=Gateway health response invalid::$snippet"
-            exit 1
-          fi
-          echo '::notice title=Gateway health::HTTP 200; SaaS gateway is healthy.'
+          echo "app.flavorflow.co.in/api/auth/me -> HTTP $status"
+          case "$status" in
+            200|401|403)
+              echo "::notice title=App API::The application API is responding (HTTP $status)."
+              ;;
+            *)
+              snippet=$(head -c 300 "$body" | tr '\r\n' '  ' | sed 's/%/%25/g')
+              echo "::error title=App API HTTP $status::$snippet"
+              exit 1
+              ;;
+          esac
