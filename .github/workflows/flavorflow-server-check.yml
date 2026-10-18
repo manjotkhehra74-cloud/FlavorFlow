@@ -20,19 +20,26 @@ jobs:
         run: |
           set -euo pipefail
           page="$RUNNER_TEMP/flavorflow-app.html"
-          status=$(curl --silent --show-error --location --max-time 25 \
+          if ! status=$(curl --silent --show-error --location --max-time 25 \
             --output "$page" --write-out '%{http_code}' \
-            https://app.flavorflow.co.in/)
-          echo "app.flavorflow.co.in/ -> HTTP $status"
-          [[ "$status" == 200 ]] || { head -c 500 "$page" || true; exit 1; }
-          grep -qiE '<!doctype html|<html' "$page" || {
-            echo 'The app root did not return an HTML document.' >&2
+            https://app.flavorflow.co.in/); then
+            echo '::error title=App web root::Request to https://app.flavorflow.co.in/ did not complete.'
             exit 1
-          }
+          fi
+          echo "app.flavorflow.co.in/ -> HTTP $status"
+          if [[ "$status" != 200 ]]; then
+            snippet=$(head -c 300 "$page" | tr '\r\n' '  ' | sed 's/%/%25/g')
+            echo "::error title=App web root HTTP $status::$snippet"
+            exit 1
+          fi
+          if ! grep -qiE '<!doctype html|<html' "$page"; then
+            echo '::error title=App web root::HTTP 200, but response is not HTML.'
+            exit 1
+          fi
           if grep -qiE 'flutter_bootstrap\.js|main\.dart\.js' "$page"; then
-            echo 'Flutter web app shell detected.'
+            echo '::notice title=App web root::HTTP 200; Flutter web app shell detected.'
           else
-            echo 'HTTP 200, but the response does not look like a Flutter web app shell.'
+            echo '::warning title=App web root::HTTP 200, but no Flutter web app shell was detected.'
           fi
 
       - name: Check SaaS gateway health endpoint
@@ -40,18 +47,30 @@ jobs:
         run: |
           set -euo pipefail
           body="$RUNNER_TEMP/flavorflow-health.json"
-          status=$(curl --silent --show-error --location --max-time 25 \
+          if ! status=$(curl --silent --show-error --location --max-time 25 \
             --output "$body" --write-out '%{http_code}' \
-            https://app.flavorflow.co.in/api/saas/health)
+            https://app.flavorflow.co.in/api/saas/health); then
+            echo '::error title=Gateway health::Request to /api/saas/health did not complete.'
+            exit 1
+          fi
           echo "app.flavorflow.co.in/api/saas/health -> HTTP $status"
-          [[ "$status" == 200 ]] || { head -c 500 "$body" || true; exit 1; }
-          python3 - "$body" <<'PY'
+          if [[ "$status" != 200 ]]; then
+            snippet=$(head -c 300 "$body" | tr '\r\n' '  ' | sed 's/%/%25/g')
+            echo "::error title=Gateway health HTTP $status::$snippet"
+            exit 1
+          fi
+          if ! python3 - "$body" <<'PY'
           import json
           import pathlib
           import sys
 
           data = json.loads(pathlib.Path(sys.argv[1]).read_text())
           if data.get('ok') is not True or data.get('service') != 'flavorflow-saas':
-              raise SystemExit(f'Unexpected health response: {data!r}')
-          print('SaaS gateway is healthy.')
+              raise SystemExit(1)
           PY
+          then
+            snippet=$(head -c 300 "$body" | tr '\r\n' '  ' | sed 's/%/%25/g')
+            echo "::error title=Gateway health response invalid::$snippet"
+            exit 1
+          fi
+          echo '::notice title=Gateway health::HTTP 200; SaaS gateway is healthy.'

@@ -7,6 +7,8 @@ on:
       - arena/01a0dc70-flavorflow
       - arena/02900f8a-flavorflow
       - arena/b7695262-flavorflow
+    paths-ignore:
+      - .github/workflows/**
   workflow_dispatch:
 
 permissions:
