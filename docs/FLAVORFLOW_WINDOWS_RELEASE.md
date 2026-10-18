@@ -6,10 +6,22 @@ a Windows-specific company, database, or sample business dataset.
 
 ## Build artifact
 
-The **FlavorFlow build** GitHub Actions workflow produces a portable ZIP named
-`FlavorFlow-Windows-x64-portable`. It contains the complete Flutter release
-folder. The workflow artifact is retained for 14 days; it is a build download,
-not an installer or a published Windows Store release.
+The **FlavorFlow build** GitHub Actions workflow produces both a portable ZIP
+(`FlavorFlow-Windows-x64-portable`) and, after the Windows installer job succeeds,
+an installable `FlavorFlow-Windows-x64-Setup.exe` artifact
+(`FlavorFlow-Windows-x64-Setup-unsigned`). Both are retained for 14 days.
+Download the setup artifact from the successful workflow run, extract its outer
+GitHub Actions artifact ZIP, then double-click the Setup EXE to install into the
+current Windows user's profile. It creates a Start Menu shortcut, offers an
+optional desktop shortcut and supports uninstall through Windows Settings.
+This is **not** a Microsoft Store release or an automatically updated app. The
+installer is not code-signed: SmartScreen may warn until a trusted signing
+certificate is configured. The Microsoft Visual C++ 2015–2022 x64 runtime may
+still be required on the target PC. GitHub Actions smoke-tests silent install
+and uninstall, but a real-device UI/login/peripheral test is still required.
+
+The portable ZIP contains the complete Flutter release folder and is a separate
+option for users who do not want to install.
 
 To run it:
 

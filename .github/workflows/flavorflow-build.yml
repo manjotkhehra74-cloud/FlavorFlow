@@ -172,7 +172,7 @@ jobs:
           retention-days: 14
 
   build-windows:
-    name: Build Windows desktop portable x64
+    name: Build Windows desktop portable x64 and installer
     runs-on: windows-latest
     timeout-minutes: 45
 
@@ -238,10 +238,45 @@ jobs:
           Compress-Archive -Path (Join-Path $releaseDir '*') -DestinationPath $zipPath -CompressionLevel Optimal
           if ((Get-Item $zipPath).Length -lt 1000000) { throw 'Windows portable ZIP is unexpectedly small.' }
 
+      - name: Build and smoke-test installable Windows setup
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          choco install innosetup --yes --no-progress --limit-output
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup installation failed ($LASTEXITCODE)." }
+          $compiler = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $compiler)) { throw "Inno Setup compiler not found: $compiler" }
+          $version = ((Select-String -Path pubspec.yaml -Pattern '^version:\s*([^+\s]+)' | Select-Object -First 1).Matches.Groups[1].Value)
+          if (-not $version) { throw 'App version was not found in pubspec.yaml.' }
+          & $compiler "/DAppVersion=$version" windows\installer\FlavorFlow.iss
+          if ($LASTEXITCODE -ne 0) { throw "Installer compilation failed ($LASTEXITCODE)." }
+          $installer = Join-Path $PWD 'build\windows-installer\FlavorFlow-Windows-x64-Setup.exe'
+          if (-not (Test-Path $installer) -or (Get-Item $installer).Length -lt 1000000) {
+            throw 'Windows installer is missing or unexpectedly small.'
+          }
+          $smokeDir = Join-Path $env:RUNNER_TEMP 'FlavorFlow Install Smoke'
+          $installed = Start-Process -FilePath $installer -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$smokeDir`"") -Wait -PassThru
+          if ($installed.ExitCode -ne 0 -or -not (Test-Path (Join-Path $smokeDir 'flavorflow_erp.exe'))) {
+            throw "Silent install failed ($($installed.ExitCode))."
+          }
+          $uninstaller = Join-Path $smokeDir 'unins000.exe'
+          if (-not (Test-Path $uninstaller)) { throw 'Windows uninstaller was not installed.' }
+          $removed = Start-Process -FilePath $uninstaller -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -Wait -PassThru
+          if ($removed.ExitCode -ne 0) { throw "Silent uninstall failed ($($removed.ExitCode))." }
+          Write-Host "Installer smoke test passed: $installer"
+
       - name: Upload Windows portable artifact
         uses: actions/upload-artifact@v4
         with:
           name: FlavorFlow-Windows-x64-portable
           path: build/FlavorFlow-Windows-x64-portable.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Windows installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlavorFlow-Windows-x64-Setup-unsigned
+          path: build/windows-installer/FlavorFlow-Windows-x64-Setup.exe
           if-no-files-found: error
           retention-days: 14
