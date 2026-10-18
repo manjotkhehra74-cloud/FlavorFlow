@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -40,7 +41,36 @@ class _PurchaseDetailPageState extends State<PurchaseDetailPage> {
   Future<void> _deletePayment(Map<String, dynamic> pay) async {
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => !kIsWeb && defaultTargetPlatform == TargetPlatform.windows
+          ? Dialog(alignment: Alignment.centerRight, insetPadding: EdgeInsets.zero,
+              shape: const RoundedRectangleBorder(),
+              child: SizedBox(width: 420, height: double.infinity,
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Container(color: const Color(0xFFE2E9EF), padding: const EdgeInsets.all(20),
+                    child: Text(tr('Delete this payment?'),
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
+                  Expanded(child: Padding(padding: const EdgeInsets.all(22),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('${inr(pay['amount'])} · ${(pay['mode'] ?? '').toString().toUpperCase()}'),
+                      const SizedBox(height: 8),
+                      Text('${pay['ref_no'] ?? ''}'),
+                      const SizedBox(height: 20),
+                      Text(tr('The bill balance goes back up.'),
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    ]))),
+                  const Divider(height: 1),
+                  Padding(padding: const EdgeInsets.all(16), child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end, children: [
+                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('Keep'))),
+                      const SizedBox(width: 8),
+                      FilledButton(style: FilledButton.styleFrom(backgroundColor: AppColors.red),
+                        onPressed: () => Navigator.pop(ctx, true), child: Text(tr('Delete'))),
+                    ],
+                  )),
+                ]),
+              ),
+            )
+          : AlertDialog(
         title: Text(tr('Delete this payment?')),
         content: Text('${inr(pay['amount'])} · ${(pay['mode'] ?? '').toString().toUpperCase()} ${pay['ref_no'] ?? ''}\n${tr('The bill balance goes back up.')}'),
         actions: [
@@ -62,7 +92,40 @@ class _PurchaseDetailPageState extends State<PurchaseDetailPage> {
     final reason = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => !kIsWeb && defaultTargetPlatform == TargetPlatform.windows
+          ? StatefulBuilder(builder: (ctx, refresh) => Dialog(child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 580),
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Container(color: const Color(0xFFE2E9EF), padding: const EdgeInsets.all(18),
+                  child: Row(children: [
+                    const Icon(Icons.warning_amber_outlined, color: AppColors.red),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text('${tr('Cancel purchase')} ${p['entry_no']}?',
+                      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700))),
+                  ])),
+                Padding(padding: const EdgeInsets.all(20), child: Column(
+                  mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(p['stock_added'] == 1
+                      ? tr('The quantities added by this bill are taken back out of stock and the ledger entries are removed. The entry stays in the register marked CANCELLED. This cannot be undone.')
+                      : tr('The entry stays in the register marked CANCELLED. This cannot be undone.')),
+                    const SizedBox(height: 16),
+                    TextField(controller: reason, autofocus: true,
+                      decoration: InputDecoration(labelText: tr('Reason *')),
+                      onChanged: (_) => refresh(() {})),
+                  ])),
+                const Divider(height: 1),
+                Padding(padding: const EdgeInsets.all(12), child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end, children: [
+                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('Keep'))),
+                    const SizedBox(width: 8),
+                    FilledButton(style: FilledButton.styleFrom(backgroundColor: AppColors.red),
+                      onPressed: reason.text.trim().length < 3 ? null : () => Navigator.pop(ctx, true),
+                      child: Text(tr('Cancel purchase'))),
+                  ],
+                )),
+              ]),
+            )))
+          : AlertDialog(
         title: Text('${tr('Cancel purchase')} ${p['entry_no']}?'),
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(p['stock_added'] == 1
@@ -440,6 +503,63 @@ class _PayDialogState extends State<_PayDialog> {
 
   @override
   Widget build(BuildContext context) {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+      return Dialog(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 700),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Container(color: const Color(0xFF243B50), padding: const EdgeInsets.all(18),
+            child: Text(tr('Record payment'),
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700))),
+          Flexible(child: SingleChildScrollView(padding: const EdgeInsets.all(20),
+            child: Column(mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('${tr('To')} ${widget.supplier}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                Text('${tr('Balance to pay')}: ${inr(widget.balance)}'),
+                const SizedBox(height: 16),
+                TextField(controller: amount, autofocus: true,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(labelText: '${tr('Amount')} ₹ *')),
+                const SizedBox(height: 18),
+                Text(tr('Mode'), style: const TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                Wrap(spacing: 7, runSpacing: 6, children: [
+                  for (final e in modes.entries)
+                    ChoiceChip(label: Text(tr(e.value)), selected: mode == e.key,
+                      onSelected: busy ? null : (_) => setState(() => mode = e.key)),
+                ]),
+                const SizedBox(height: 16),
+                Row(children: [
+                  Expanded(child: TextField(controller: ref,
+                    decoration: InputDecoration(labelText: mode == 'cheque'
+                      ? tr('Cheque number *') : tr('UTR / reference')))),
+                  const SizedBox(width: 12),
+                  Expanded(child: InkWell(onTap: busy ? null : () async {
+                    final d = await showDatePicker(context: context, initialDate: paidOn,
+                      firstDate: DateTime(2020), lastDate: DateTime.now().add(const Duration(days: 60)));
+                    if (d != null) setState(() => paidOn = d);
+                  }, child: InputDecorator(
+                    decoration: InputDecoration(labelText: mode == 'cheque'
+                      ? tr('Cheque date') : tr('Paid on')),
+                    child: Text(fmtDate(ymd(paidOn)))))),
+                ]),
+                if (mode == 'cheque' || mode == 'neft') ...[
+                  const SizedBox(height: 12),
+                  TextField(controller: bank, decoration: InputDecoration(labelText: tr('Bank'))),
+                ],
+                const SizedBox(height: 12),
+                TextField(controller: note, decoration: InputDecoration(labelText: tr('Note'))),
+              ]))),
+          const Divider(height: 1),
+          Padding(padding: const EdgeInsets.all(12), child: Row(mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(onPressed: busy ? null : () => Navigator.pop(context), child: Text(tr('Cancel'))),
+              const SizedBox(width: 8),
+              FilledButton(onPressed: busy ? null : _save,
+                child: Text(busy ? tr('Saving…') : tr('Save payment'))),
+            ])),
+        ]),
+      ));
+    }
     return AlertDialog(
       title: Text(tr('Record payment')),
       content: SizedBox(

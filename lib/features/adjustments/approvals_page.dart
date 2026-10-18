@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:provider/provider.dart';
 
 import '../../core/company.dart';
@@ -285,9 +286,53 @@ class _PendingList extends StatelessWidget {
 
 Future<void> _approve(BuildContext context, Map<String, dynamic> a, VoidCallback onDone) async {
   final remarks = TextEditingController();
+  var submitting = false;
   final ok = await showDialog<bool>(
     context: context,
-    builder: (dialogCtx) => AlertDialog(
+    builder: (dialogCtx) => !kIsWeb && defaultTargetPlatform == TargetPlatform.windows
+        ? StatefulBuilder(builder: (dialogCtx, refresh) => Dialog(
+            child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 560),
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Container(color: const Color(0xFFE2E9EF), padding: const EdgeInsets.all(18),
+                  child: Text('Approve ${a['code']}?',
+                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700))),
+                Padding(padding: const EdgeInsets.all(20),
+                  child: Column(mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('${a['product_name']} · ${a['adj_type']} · ${qtyInt(a['qty_cb'])} ${U.cb}',
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 12),
+                      const Text('Approval updates stock immediately and records the decision.'),
+                      const SizedBox(height: 14),
+                      TextField(controller: remarks, maxLines: 2,
+                        decoration: InputDecoration(labelText: tr('Remarks (optional)'))),
+                    ])),
+                const Divider(height: 1),
+                Padding(padding: const EdgeInsets.all(12), child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end, children: [
+                    TextButton(onPressed: submitting ? null : () => Navigator.pop(dialogCtx, false),
+                      child: const Text('Cancel')),
+                    const SizedBox(width: 8),
+                    FilledButton(style: FilledButton.styleFrom(backgroundColor: AppColors.green),
+                      onPressed: submitting ? null : () async {
+                        refresh(() => submitting = true);
+                        try {
+                          await dialogCtx.read<AuthController>().api.post(
+                            '/adjustments/${a['id']}/approve', {'remarks': remarks.text.trim()});
+                          if (dialogCtx.mounted) Navigator.pop(dialogCtx, true);
+                        } catch (e) {
+                          if (dialogCtx.mounted) {
+                            refresh(() => submitting = false);
+                            showErr(dialogCtx, e);
+                          }
+                        }
+                      }, child: Text(submitting ? 'Approving…' : tr('Approve'))),
+                  ],
+                )),
+              ]),
+            ),
+          ))
+        : AlertDialog(
       title: Text('Approve ${a['code']}?'),
       content: SizedBox(width: 380, child: Column(mainAxisSize: MainAxisSize.min, children: [
         Text('${a['product_name']} — ${a['adj_type']} ${qtyInt(a['qty_cb'])} ${U.cb}. Stock will be updated immediately.'),
@@ -318,9 +363,58 @@ Future<void> _approve(BuildContext context, Map<String, dynamic> a, VoidCallback
 Future<void> _reject(BuildContext context, Map<String, dynamic> a, VoidCallback onDone) async {
   final reason = TextEditingController();
   final remarks = TextEditingController();
+  var submitting = false;
   final ok = await showDialog<bool>(
     context: context,
-    builder: (dialogCtx) => AlertDialog(
+    builder: (dialogCtx) => !kIsWeb && defaultTargetPlatform == TargetPlatform.windows
+        ? StatefulBuilder(builder: (dialogCtx, refresh) => Dialog(
+            child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 560),
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Container(color: const Color(0xFFE2E9EF), padding: const EdgeInsets.all(18),
+                  child: Text('Reject ${a['code']}?',
+                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700))),
+                Padding(padding: const EdgeInsets.all(20),
+                  child: Column(mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('${a['product_name']} · ${a['adj_type']} · ${qtyInt(a['qty_cb'])} ${U.cb}',
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 12),
+                      const Text('Rejection does not change stock; the requester is notified.'),
+                      const SizedBox(height: 14),
+                      TextField(controller: reason, maxLines: 2, autofocus: true,
+                        decoration: InputDecoration(labelText: tr('Reason for rejection *')),
+                        onChanged: (_) => refresh(() {})),
+                      const SizedBox(height: 12),
+                      TextField(controller: remarks, maxLines: 2,
+                        decoration: InputDecoration(labelText: tr('Remarks (optional)'))),
+                    ])),
+                const Divider(height: 1),
+                Padding(padding: const EdgeInsets.all(12), child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end, children: [
+                    TextButton(onPressed: submitting ? null : () => Navigator.pop(dialogCtx, false),
+                      child: const Text('Cancel')),
+                    const SizedBox(width: 8),
+                    FilledButton(style: FilledButton.styleFrom(backgroundColor: AppColors.red),
+                      onPressed: submitting || reason.text.trim().isEmpty ? null : () async {
+                        refresh(() => submitting = true);
+                        try {
+                          await dialogCtx.read<AuthController>().api.post(
+                            '/adjustments/${a['id']}/reject',
+                            {'reason': reason.text.trim(), 'remarks': remarks.text.trim()});
+                          if (dialogCtx.mounted) Navigator.pop(dialogCtx, true);
+                        } catch (e) {
+                          if (dialogCtx.mounted) {
+                            refresh(() => submitting = false);
+                            showErr(dialogCtx, e);
+                          }
+                        }
+                      }, child: Text(submitting ? 'Rejecting…' : tr('Reject'))),
+                  ],
+                )),
+              ]),
+            ),
+          ))
+        : AlertDialog(
       title: Text('Reject ${a['code']}?'),
       content: SizedBox(width: 380, child: Column(mainAxisSize: MainAxisSize.min, children: [
         Text('${a['product_name']} — ${a['adj_type']} ${qtyInt(a['qty_cb'])} ${U.cb}. The stock will NOT change and the requester will be notified.'),

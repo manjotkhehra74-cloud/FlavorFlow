@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:go_router/go_router.dart';
 import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
@@ -53,7 +54,31 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
   Future<void> _deleteReceipt(Map<String, dynamic> p) async {
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => !kIsWeb && defaultTargetPlatform == TargetPlatform.windows
+          ? Dialog(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 540),
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Container(color: const Color(0xFFE2E9EF), padding: const EdgeInsets.all(16),
+                  child: Row(children: [
+                    const Icon(Icons.warning_amber_outlined, color: AppColors.red),
+                    const SizedBox(width: 10),
+                    Text(tr('Delete this receipt?'),
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                  ])),
+                Padding(padding: const EdgeInsets.all(20),
+                  child: Text('${inr(p['amount'])} · ${(p['mode'] ?? '').toString().toUpperCase()} '
+                    '${p['ref_no'] ?? ''}\n\n${tr('The invoice balance goes back up.')}')),
+                const Divider(height: 1),
+                Padding(padding: const EdgeInsets.all(12), child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end, children: [
+                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('Keep receipt'))),
+                    const SizedBox(width: 8),
+                    FilledButton(style: FilledButton.styleFrom(backgroundColor: AppColors.red),
+                      onPressed: () => Navigator.pop(ctx, true), child: Text(tr('Delete'))),
+                  ],
+                )),
+              ]),
+            ))
+          : AlertDialog(
         title: Text(tr('Delete this receipt?')),
         content: Text('${inr(p['amount'])} · ${(p['mode'] ?? '').toString().toUpperCase()} ${p['ref_no'] ?? ''}\n${tr('The invoice balance goes back up.')}'),
         actions: [
@@ -75,7 +100,39 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
     final reason = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => !kIsWeb && defaultTargetPlatform == TargetPlatform.windows
+          ? StatefulBuilder(builder: (ctx, refresh) => Dialog(child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 580),
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Container(color: const Color(0xFFE2E9EF), padding: const EdgeInsets.all(18),
+                  child: Row(children: [
+                    const Icon(Icons.warning_amber_outlined, color: AppColors.red),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text('${tr('Cancel invoice')} ${inv['number']}?',
+                      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700))),
+                  ])),
+                Padding(padding: const EdgeInsets.all(20), child: Column(
+                  mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(tr('The number stays in the register marked CANCELLED (GST rules). Stock deducted by this invoice is put back. This cannot be undone.')),
+                    const SizedBox(height: 16),
+                    TextField(controller: reason, autofocus: true,
+                      decoration: InputDecoration(labelText: tr('Reason *')),
+                      onChanged: (_) => refresh(() {})),
+                  ])),
+                const Divider(height: 1),
+                Padding(padding: const EdgeInsets.all(12), child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end, children: [
+                    TextButton(onPressed: () => Navigator.pop(ctx, false),
+                      child: Text(tr('Keep invoice'))),
+                    const SizedBox(width: 8),
+                    FilledButton(style: FilledButton.styleFrom(backgroundColor: AppColors.red),
+                      onPressed: reason.text.trim().length < 3 ? null : () => Navigator.pop(ctx, true),
+                      child: Text(tr('Cancel invoice'))),
+                  ],
+                )),
+              ]),
+            )))
+          : AlertDialog(
         title: Text('${tr('Cancel invoice')} ${inv['number']}?'),
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(tr('The number stays in the register marked CANCELLED (GST rules). Stock deducted by this invoice is put back. This cannot be undone.')),
@@ -434,6 +491,62 @@ class _ReceiptDialogState extends State<_ReceiptDialog> {
 
   @override
   Widget build(BuildContext context) {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+      return Dialog(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 700),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Container(color: const Color(0xFF243B50), padding: const EdgeInsets.all(18),
+            child: Text(tr('Record receipt'),
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700))),
+          Flexible(child: SingleChildScrollView(padding: const EdgeInsets.all(20),
+            child: Column(mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('${tr('Balance due')}: ${inr(widget.balance)}',
+                  style: const TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 16),
+                TextField(controller: amount, autofocus: true,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(labelText: '${tr('Amount')} ₹ *')),
+                const SizedBox(height: 18),
+                Text(tr('Mode'), style: const TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                Wrap(spacing: 7, runSpacing: 6, children: [
+                  for (final e in modes.entries)
+                    ChoiceChip(label: Text(tr(e.value)), selected: mode == e.key,
+                      onSelected: busy ? null : (_) => setState(() => mode = e.key)),
+                ]),
+                const SizedBox(height: 16),
+                Row(children: [
+                  Expanded(child: TextField(controller: ref,
+                    decoration: InputDecoration(labelText: mode == 'cheque'
+                      ? tr('Cheque number *') : tr('UTR / reference')))),
+                  const SizedBox(width: 12),
+                  Expanded(child: InkWell(onTap: busy ? null : () async {
+                    final d = await showDatePicker(context: context, initialDate: paidOn,
+                      firstDate: DateTime(2020), lastDate: DateTime.now().add(const Duration(days: 60)));
+                    if (d != null) setState(() => paidOn = d);
+                  }, child: InputDecorator(
+                    decoration: InputDecoration(labelText: mode == 'cheque'
+                      ? tr('Cheque date') : tr('Received on')),
+                    child: Text(fmtDate(ymd(paidOn)))))),
+                ]),
+                if (mode == 'cheque' || mode == 'neft') ...[
+                  const SizedBox(height: 12),
+                  TextField(controller: bank, decoration: InputDecoration(labelText: tr('Bank (drawn on)'))),
+                ],
+                const SizedBox(height: 12),
+                TextField(controller: note, decoration: InputDecoration(labelText: tr('Note'))),
+              ]))),
+          const Divider(height: 1),
+          Padding(padding: const EdgeInsets.all(12), child: Row(mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(onPressed: busy ? null : () => Navigator.pop(context), child: Text(tr('Cancel'))),
+              const SizedBox(width: 8),
+              FilledButton(onPressed: busy ? null : _save,
+                child: Text(busy ? tr('Saving…') : tr('Save receipt'))),
+            ])),
+        ]),
+      ));
+    }
     return AlertDialog(
       title: Text(tr('Record receipt')),
       content: SizedBox(
