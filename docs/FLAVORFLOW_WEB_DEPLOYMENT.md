@@ -23,9 +23,6 @@ Do not put private keys or passwords in chat or in the repository.
 
 ## Deploy
 
-1. Open **Actions → FlavorFlow build → Run workflow**.
-2. Select `arena/b7695262-flavorflow` for this change (after it is merged, use `main`).
-3. Check **Deploy the GitHub-built web app to app.flavorflow.co.in**.
-4. Start the run. Analyze/tests and the GitHub web build must pass before deployment begins.
+After the secrets are configured, pushes to `main` or `arena/b7695262-flavorflow` automatically run the GitHub build. A successful web build is then deployed over SSH; no manual workflow run and no Flutter build on the VPS are needed. If the secrets are absent, the deployment job reports that it skipped.
 
-Deployment backs up the current web root to a sibling `backups` directory, overlays the new Flutter web files without deleting other files such as APK downloads, writes `ff-web-version.txt`, and verifies that the live bundle contains the dispatch batch-code fix. It does not run Flutter on the VPS.
+Deployment backs up the current web root to a sibling `backups` directory, overlays the new Flutter web files without deleting other files such as APK downloads, writes `ff-web-version.txt`, and verifies that the live bundle contains the dispatch batch-code fix.

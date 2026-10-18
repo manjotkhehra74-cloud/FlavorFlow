@@ -7,16 +7,7 @@ on:
       - arena/01a0dc70-flavorflow
       - arena/02900f8a-flavorflow
       - arena/b7695262-flavorflow
-    paths-ignore:
-      - .github/workflows/**
-      - docs/**
   workflow_dispatch:
-    inputs:
-      deploy_web:
-        description: Deploy the GitHub-built web app to app.flavorflow.co.in
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: read
@@ -185,7 +176,7 @@ jobs:
   deploy-web:
     name: Deploy Flutter web to production VPS
     needs: build
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_web == true && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/arena/b7695262-flavorflow') }}
+    if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/arena/b7695262-flavorflow') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -196,13 +187,27 @@ jobs:
       DEPLOY_PATH: ${{ vars.FLAVORFLOW_DEPLOY_PATH || '/opt/flavorflow-saas/web' }}
 
     steps:
+      - name: Check whether production deployment is configured
+        id: deploy-config
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$DEPLOY_HOST" || -z "$DEPLOY_USER" || -z "$DEPLOY_SSH_KEY" ]]; then
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo '::notice title=Web deployment skipped::Add FLAVORFLOW_DEPLOY_HOST, FLAVORFLOW_DEPLOY_USER, and FLAVORFLOW_DEPLOY_SSH_KEY in GitHub Actions secrets to enable automatic deployment.'
+            exit 0
+          fi
+          echo 'ready=true' >> "$GITHUB_OUTPUT"
+
       - name: Download the GitHub-built web artifact
+        if: steps.deploy-config.outputs.ready == 'true'
         uses: actions/download-artifact@v4
         with:
           name: flavorflow-web
           path: build/web
 
       - name: Validate artifact and configure SSH
+        if: steps.deploy-config.outputs.ready == 'true'
         id: ssh-config
         shell: bash
         run: |
@@ -212,12 +217,6 @@ jobs:
             echo '::error::FLAVORFLOW_DEPLOY_PATH must be an absolute path without whitespace or parent-directory segments.'
             exit 1
           fi
-          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY; do
-            if [[ -z "${!name}" ]]; then
-              echo '::error::Configure FLAVORFLOW_DEPLOY_HOST, FLAVORFLOW_DEPLOY_USER, and FLAVORFLOW_DEPLOY_SSH_KEY in GitHub Actions secrets before deploying.'
-              exit 1
-            fi
-          done
           port="${DEPLOY_PORT:-22}"
           key_file="$RUNNER_TEMP/flavorflow-deploy-key"
           known_hosts="$RUNNER_TEMP/flavorflow-known-hosts"
@@ -230,6 +229,7 @@ jobs:
           echo "port=$port" >> "$GITHUB_OUTPUT"
 
       - name: Back up and deploy to the production web root
+        if: steps.deploy-config.outputs.ready == 'true'
         shell: bash
         env:
           SSH_KEY_FILE: ${{ steps.ssh-config.outputs.key_file }}
@@ -260,6 +260,7 @@ jobs:
           REMOTE
 
       - name: Verify the production bundle contains the dispatch fix
+        if: steps.deploy-config.outputs.ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
