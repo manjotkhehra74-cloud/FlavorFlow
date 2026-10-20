@@ -8,8 +8,10 @@ import '../../core/i18n.dart';
 import '../../core/offline_queue.dart';
 import '../../core/item_code.dart';
 import '../../core/theme.dart';
+import '../../core/platform_support.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
+import '../../ui/windows_widgets.dart';
 import 'billing_page.dart' show PartyFormDialog, gstStateName;
 import 'invoice_form.dart' show kGstSlabs;
 
@@ -245,10 +247,10 @@ class _PurchaseFormPageState extends State<PurchaseFormPage> {
     final tax = lines.fold<num>(0, (s, l) => s + l.tax);
     final raw = subtotal + tax;
     final total = settings['roundOff'] == false ? raw : raw.round();
-    final wide = MediaQuery.sizeOf(context).width > 820;
+    final wide = isWindowsPlatform || MediaQuery.sizeOf(context).width > 820;
     final stockLines = lines.where((l) => l.q > 0 && l.itemType != 'other' && l.itemId != null).length;
 
-    return ListView(padding: const EdgeInsets.all(20), children: [
+    final form = ListView(padding: const EdgeInsets.all(20), children: [
       Row(children: [
         IconButton(onPressed: () => context.canPop() ? context.pop(false) : context.go('/billing?tab=purchases'), icon: const Icon(Icons.arrow_back_rounded)),
         const SizedBox(width: 4),
@@ -380,6 +382,20 @@ class _PurchaseFormPageState extends State<PurchaseFormPage> {
       ),
       const SizedBox(height: 40),
     ]);
+    if (isWindowsPlatform) {
+      return WindowsDocumentWorkspace(
+        title: 'Enter Supplier Bill',
+        subtitle: '${tr('Inward stock document')} · ${nextNumber.isEmpty ? tr('Number pending') : nextNumber}',
+        icon: Icons.move_to_inbox_outlined,
+        commandBar: WindowsCommandStrip(children: [
+          const StatusChip('DRAFT'),
+          if (nextNumber.isNotEmpty) Text('${tr('Entry number')}: $nextNumber'),
+          Text('· $stockLines ${tr('stock lines')}'),
+        ]),
+        content: form,
+      );
+    }
+    return form;
   }
 
   Widget _dateField(String label, DateTime value, ValueChanged<DateTime> onPick, bool wide) => SizedBox(

@@ -111,13 +111,12 @@ jobs:
               return 1
             }
 
-            # Prefer a complete platform already bundled in the Flutter image.
-            # The runner's Google archive for android-35 is currently returning
-            # corrupt zips, so downloading a platform is only the last resort.
+            # Play submissions after 2026-08-31 must target API 36, so require
+            # Android Platform 36 or newer for the release build.
             PLATFORM_JAR=$(find "$SDK_ROOT/platforms" -mindepth 2 -maxdepth 2 -type f -name android.jar -print 2>/dev/null | sort -V | tail -1 || true)
             if [ -n "$PLATFORM_JAR" ]; then
               PLATFORM_API=$(basename "$(dirname "$PLATFORM_JAR")" | sed 's/^android-//')
-              if [ "$PLATFORM_API" -ge 35 ]; then
+              if [ "$PLATFORM_API" -ge 36 ]; then
                 echo "Using bundled Android Platform $PLATFORM_API"
                 printf 'flavorflow.compileSdk=%s\n' "$PLATFORM_API" >> android/gradle.properties
               else
@@ -125,17 +124,19 @@ jobs:
               fi
             fi
             if [ -z "$PLATFORM_JAR" ]; then
-              install_sdk_package "platforms;android-35"
-              package_ready "platforms;android-35"
-              printf '%s\n' 'flavorflow.compileSdk=35' >> android/gradle.properties
+              install_sdk_package "platforms;android-36"
+              package_ready "platforms;android-36"
+              printf '%s\n' 'flavorflow.compileSdk=36' >> android/gradle.properties
             fi
 
             BUILD_TOOLS_DIR=$(find "$SDK_ROOT/build-tools" -mindepth 2 -maxdepth 2 -type f -name aapt2 -print 2>/dev/null | sort -V | tail -1 || true)
-            if [ -z "$BUILD_TOOLS_DIR" ]; then
-              install_sdk_package "build-tools;35.0.0"
-              package_ready "build-tools;35.0.0"
+            BUILD_TOOLS_VERSION=${BUILD_TOOLS_DIR:+$(basename "$(dirname "$BUILD_TOOLS_DIR")")}
+            BUILD_TOOLS_MAJOR=${BUILD_TOOLS_VERSION%%.*}
+            if [ -z "$BUILD_TOOLS_DIR" ] || [ "${BUILD_TOOLS_MAJOR:-0}" -lt 36 ]; then
+              install_sdk_package "build-tools;36.0.0"
+              package_ready "build-tools;36.0.0"
             else
-              echo "Using bundled Android build tools: $(basename "$(dirname "$BUILD_TOOLS_DIR")")"
+              echo "Using bundled Android build tools: $BUILD_TOOLS_VERSION"
             fi
 
             CMAKE_BIN=$(find "$SDK_ROOT/cmake" -mindepth 2 -maxdepth 3 -type f -path '*/bin/cmake' -print 2>/dev/null | sort -V | tail -1 || true)
@@ -284,6 +285,7 @@ workflows:
                 - arena/01a01af5-flavorflow
                 - arena/01a0858b-flavorflow
                 - arena/01a0dc70-flavorflow
+                - arena/02900f8a-flavorflow
       - build-web:
           filters:
             branches:
@@ -292,3 +294,4 @@ workflows:
                 - arena/01a01af5-flavorflow
                 - arena/01a0858b-flavorflow
                 - arena/01a0dc70-flavorflow
+                - arena/02900f8a-flavorflow

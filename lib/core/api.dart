@@ -65,8 +65,48 @@ class ApiClient {
       final prefs = await SharedPreferences.getInstance();
       _readCacheEpoch = prefs.getInt(_rcEpochKey) ?? 0;
       final v = prefs.getString(_prefsKey);
-      _savedBase = (v != null && v.isNotEmpty) ? v : null;
+      if (v == null || v.isEmpty) {
+        _savedBase = null;
+        return;
+      }
+
+      // Existing installations may have the factory DuckDNS URL saved in
+      // preferences. A release update must migrate that saved override too;
+      // otherwise it would win over the new API_BASE forever. Only the direct
+      // factory /api URL is rewritten. Custom hosts and tenant paths are left
+      // alone, so this cannot redirect another company's server accidentally.
+      final migrated = migrateLegacyServerBase(v);
+      if (migrated != null) {
+        _savedBase = migrated;
+        await prefs.setString(_prefsKey, migrated);
+      } else {
+        _savedBase = v;
+      }
     } catch (_) {/* storage unavailable */}
+  }
+
+  /// Returns the official API base for the old direct factory URL, or null
+  /// when the saved URL is not a safe match for this one-time migration.
+  static String? migrateLegacyServerBase(String input) {
+    final normalized = normalizeBase(input);
+    final uri = Uri.tryParse(normalized);
+    if (uri == null) return null;
+
+    final host = uri.host.toLowerCase().replaceFirst(RegExp(r'\.$'), '');
+    if ((uri.scheme != 'http' && uri.scheme != 'https') ||
+        host != 'flavorflow.duckdns.org' ||
+        uri.userInfo.isNotEmpty ||
+        uri.hasQuery ||
+        uri.hasFragment ||
+        (uri.hasPort && uri.port != 80 && uri.port != 443)) {
+      return null;
+    }
+
+    final segments = uri.pathSegments.where((part) => part.isNotEmpty).toList();
+    if (segments.isNotEmpty && !(segments.length == 1 && segments.single == 'api')) {
+      return null;
+    }
+    return 'https://app.flavorflow.co.in/api';
   }
 
   /// Persist (or clear, when null) a custom server address.

@@ -7,6 +7,7 @@ import '../../core/company.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../core/i18n.dart';
+import '../../core/platform_support.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 import '../billing/subscription_banner.dart';
@@ -117,8 +118,22 @@ class _DashboardPageState extends State<DashboardPage> {
         final session = context.read<AuthController>().session;
         final scheme = Theme.of(context).colorScheme;
         final dashboardBackground = Theme.of(context).brightness == Brightness.light
-            ? const Color(0xFFF3F8FC)
+            ? (isWindowsPlatform ? const Color(0xFFE9EEF3) : const Color(0xFFF3F8FC))
             : scheme.surfaceContainerLow;
+        if (isWindowsPlatform) {
+          return _buildWindowsDashboard(
+            kpis: kpis,
+            coreKpis: coreKpis,
+            additionalKpis: additionalKpis,
+            actions: actions,
+            alerts: alerts,
+            detailWidgets: detailWidgets,
+            greeting: (data['greeting'] as String?) ?? 'Good day',
+            name: (data['name'] as String?) ?? session?.name ?? 'there',
+            role: session?.roleLabel ?? 'Team',
+            background: dashboardBackground,
+          );
+        }
         return Container(
           // Match the approved mobile preview: a soft blue-gray canvas in light
           // mode, while retaining the user's dark theme without white flashes.
@@ -169,6 +184,80 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildWindowsDashboard({
+    required List<Map<String, dynamic>> kpis,
+    required List<Map<String, dynamic>> coreKpis,
+    required List<Map<String, dynamic>> additionalKpis,
+    required Map<String, dynamic>? actions,
+    required Map<String, dynamic>? alerts,
+    required List<Map<String, dynamic>> detailWidgets,
+    required String greeting,
+    required String name,
+    required String role,
+    required Color background,
+  }) {
+    return ColoredBox(
+      color: background,
+      child: RefreshIndicator(
+        onRefresh: () async => _reload(),
+        child: LayoutBuilder(builder: (context, constraints) {
+          final wide = constraints.maxWidth >= 940;
+          final quickActions = actions == null ? null : _DashboardQuickActions(widget: actions, windows: true);
+          final alertPanel = alerts == null ? null : _buildWidget(alerts);
+          return ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.fromLTRB(wide ? 28 : 16, 24, wide ? 28 : 16, 32),
+            children: [
+              _WindowsDashboardHeading(greeting: greeting, name: name, role: role, onRefresh: _reload),
+              const SizedBox(height: 24),
+              _WindowsDashboardSectionLabel(title: 'LIVE OPERATIONS', subtitle: 'The numbers that matter right now'),
+              const SizedBox(height: 12),
+              _WindowsDashboardKpiGrid(items: coreKpis),
+              if (wide && (additionalKpis.isNotEmpty || quickActions != null || alertPanel != null)) ...[
+                const SizedBox(height: 24),
+                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Expanded(flex: 3, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    if (additionalKpis.isNotEmpty) ...[
+                      const _WindowsDashboardSectionLabel(title: 'AT A GLANCE', subtitle: 'Your workspace in one view'),
+                      const SizedBox(height: 12),
+                      _WindowsDashboardKpiGrid(items: additionalKpis),
+                      const SizedBox(height: 22),
+                    ],
+                    if (quickActions != null) quickActions,
+                  ])),
+                  if (alertPanel != null) ...[
+                    const SizedBox(width: 18),
+                    Expanded(flex: 2, child: alertPanel),
+                  ],
+                ]),
+              ] else ...[
+                if (additionalKpis.isNotEmpty) ...[
+                  const SizedBox(height: 24),
+                  const _WindowsDashboardSectionLabel(title: 'AT A GLANCE', subtitle: 'Your workspace in one view'),
+                  const SizedBox(height: 12),
+                  _WindowsDashboardKpiGrid(items: additionalKpis),
+                ],
+                if (quickActions != null) ...[const SizedBox(height: 18), quickActions],
+                if (alertPanel != null) ...[const SizedBox(height: 18), alertPanel],
+              ],
+              if (detailWidgets.isNotEmpty) ...[
+                const SizedBox(height: 26),
+                const _WindowsDashboardSectionLabel(title: 'MORE INSIGHTS', subtitle: 'Detailed reports from your workspace'),
+                const SizedBox(height: 12),
+                for (final widgetData in detailWidgets) ...[
+                  _buildWidget(widgetData),
+                  const SizedBox(height: 14),
+                ],
+              ],
+              const SizedBox(height: 16),
+              const SubscriptionBanner(),
+            ],
+          );
+        }),
+      ),
     );
   }
 
@@ -342,7 +431,8 @@ List<Map<String, dynamic>> _referenceKpis(List<Map<String, dynamic>> items, Map<
 
 class _DashboardQuickActions extends StatelessWidget {
   final Map<String, dynamic> widget;
-  const _DashboardQuickActions({required this.widget});
+  final bool windows;
+  const _DashboardQuickActions({required this.widget, this.windows = false});
 
   @override
   Widget build(BuildContext context) {
@@ -376,6 +466,24 @@ class _DashboardQuickActions extends StatelessWidget {
       });
     }
 
+    if (windows) {
+      return SectionCard(
+        title: 'Quick Actions',
+        padding: const EdgeInsets.all(6),
+        child: Wrap(spacing: 8, runSpacing: 8, children: [
+          for (final item in items)
+            _DashboardActionChip(
+              label: item['label'] as String,
+              icon: item['icon'] as IconData,
+              route: item['route'] as String,
+              color: item['color'] as Color,
+              filled: false,
+              windows: true,
+            ),
+        ]),
+      );
+    }
+
     final scheme = Theme.of(context).colorScheme;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text('Quick Actions', style: TextStyle(color: scheme.onSurface, fontSize: 17, fontWeight: FontWeight.w800)),
@@ -400,10 +508,34 @@ class _DashboardActionChip extends StatelessWidget {
   final String route;
   final Color color;
   final bool filled;
-  const _DashboardActionChip({required this.label, required this.icon, required this.route, required this.color, required this.filled});
+  final bool windows;
+  const _DashboardActionChip({required this.label, required this.icon, required this.route, required this.color, required this.filled, this.windows = false});
 
   @override
   Widget build(BuildContext context) {
+    if (windows) {
+      final scheme = Theme.of(context).colorScheme;
+      return SizedBox(
+        width: 176,
+        height: 36,
+        child: Material(
+          color: scheme.surface,
+          child: InkWell(
+            onTap: () => context.go(route),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: BoxDecoration(border: Border.all(color: scheme.outlineVariant), borderRadius: BorderRadius.circular(3)),
+              child: Row(children: [
+                Icon(icon, size: 16, color: color),
+                const SizedBox(width: 7),
+                Expanded(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 11.5, fontWeight: FontWeight.w600))),
+                Icon(Icons.chevron_right_rounded, size: 16, color: scheme.onSurfaceVariant),
+              ]),
+            ),
+          ),
+        ),
+      );
+    }
     return Material(
       color: filled ? color : Colors.transparent,
       borderRadius: BorderRadius.circular(22),
@@ -535,36 +667,118 @@ class _DashboardKpiTile extends StatelessWidget {
   }
 }
 
-class _KpiGrid extends StatelessWidget {
-  final List<Map<String, dynamic>> items;
-  const _KpiGrid({required this.items});
+class _WindowsDashboardSectionLabel extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  const _WindowsDashboardSectionLabel({required this.title, required this.subtitle});
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, c) {
-      // The Play Store mobile layout uses compact 2-column metric tiles,
-      // matching the module-card rhythm while retaining 3/4 columns on web.
-      final cols = c.maxWidth > 1300 ? 4 : c.maxWidth > 900 ? 3 : c.maxWidth < 340 ? 1 : 2;
-      final ratio = ((c.maxWidth - (cols - 1) * 12) / cols / 100).clamp(1.38, 4.5);
-      return GridView.count(
-        crossAxisCount: cols,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        mainAxisSpacing: 12, crossAxisSpacing: 12,
-        childAspectRatio: ratio,
-        children: [
-          for (final it in items)
-            KpiCard(
-              // Server labels are written for the default industry (CB/Trays/
-              // Bottles) — swap in the active industry's unit names.
-              label: _unitize(it['label'] as String),
-              value: (it['money'] == true) ? inr(it['value']) : qtyInt(it['value']),
-              icon: iconFor(it['icon'] as String?),
-              tint: hexColor(it['tint'] as String?),
-            ),
-        ],
-      );
+    final scheme = Theme.of(context).colorScheme;
+    return Row(children: [
+      Container(width: 24, height: 2, color: const Color(0xFF0D9488)),
+      const SizedBox(width: 10),
+      Text(title, style: TextStyle(color: scheme.onSurface, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.4)),
+      const SizedBox(width: 12),
+      Expanded(child: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis,
+        style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11))),
+    ]);
+  }
+}
+
+class _WindowsDashboardHeading extends StatelessWidget {
+  final String greeting;
+  final String name;
+  final String role;
+  final VoidCallback onRefresh;
+  const _WindowsDashboardHeading({required this.greeting, required this.name, required this.role, required this.onRefresh});
+
+  @override
+  Widget build(BuildContext context) {
+    final firstName = name.trim().split(RegExp(r'\s+')).first;
+    final light = Theme.of(context).brightness == Brightness.light;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 25),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(colors: [Color(0xFF123047), Color(0xFF1E5060), Color(0xFF0C736B)]),
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [BoxShadow(color: const Color(0xFF123047).withValues(alpha: light ? .16 : .06), blurRadius: 22, offset: const Offset(0, 9))],
+      ),
+      child: LayoutBuilder(builder: (context, constraints) {
+        final copy = Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+          const Text('OPERATIONS OVERVIEW', style: TextStyle(color: Color(0xFF8EE6D6), fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 2)),
+          const SizedBox(height: 13),
+          Text('$greeting, $firstName', maxLines: 2, overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 7),
+          Text('$role   ·   ${fmtDateWithDay(todayYmd())}',
+            style: const TextStyle(color: Color(0xFFD5E7E8), fontSize: 12)),
+        ]);
+        final refresh = OutlinedButton.icon(
+          onPressed: onRefresh,
+          style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Color(0xFF80B3B3))),
+          icon: const Icon(Icons.refresh_rounded, size: 17), label: Text(tr('Refresh')),
+        );
+        if (constraints.maxWidth < 570) {
+          return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [copy, const SizedBox(height: 16), refresh]);
+        }
+        return Row(children: [Expanded(child: copy), const SizedBox(width: 16), refresh]);
+      }),
+    );
+  }
+}
+
+class _WindowsDashboardKpiGrid extends StatelessWidget {
+  final List<Map<String, dynamic>> items;
+  const _WindowsDashboardKpiGrid({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) return const SizedBox.shrink();
+    return LayoutBuilder(builder: (context, constraints) {
+      final columns = constraints.maxWidth >= 880 ? 4 : constraints.maxWidth >= 500 ? 2 : 1;
+      const gap = 12.0;
+      final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+      return Wrap(spacing: gap, runSpacing: gap, children: [
+        for (final item in items)
+          SizedBox(width: width, height: 130, child: _WindowsDashboardKpiTile(item: item)),
+      ]);
     });
+  }
+}
+
+class _WindowsDashboardKpiTile extends StatelessWidget {
+  final Map<String, dynamic> item;
+  const _WindowsDashboardKpiTile({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final tint = item['tintColor'] as Color? ?? hexColor(item['tint'] as String?);
+    final value = item['display'] as String? ?? (item['money'] == true ? inr(item['value']) : qtyInt(item['value']));
+    final icon = item['iconData'] as IconData? ?? iconFor(item['icon'] as String?);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: .7)),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(child: Text('${item['label'] ?? ''}'.toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: .8))),
+          Container(width: 32, height: 32,
+            decoration: BoxDecoration(color: tint.withValues(alpha: .12), borderRadius: BorderRadius.circular(9)),
+            child: Icon(icon, size: 17, color: tint)),
+        ]),
+        const Spacer(),
+        Text(value, maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: scheme.onSurface, fontSize: 28, fontWeight: FontWeight.w800, fontFeatures: const [FontFeature.tabularFigures()])),
+        const SizedBox(height: 3),
+        Container(width: 30, height: 3, decoration: BoxDecoration(color: tint, borderRadius: BorderRadius.circular(3))),
+      ]),
+    );
   }
 }
 

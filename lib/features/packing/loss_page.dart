@@ -7,8 +7,16 @@ import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../core/i18n.dart';
 import '../../state/auth.dart';
+import '../../core/platform_support.dart';
 import '../../ui/widgets.dart';
+import '../../ui/windows_widgets.dart';
 import '../reports/report_pdf.dart';
+
+num _lossNumber(Object? value) => value is num ? value : num.tryParse('${value ?? ''}') ?? 0;
+
+num _lossClosingTotal(List<Map<String, dynamic>> top) => top
+    .where((row) => row['productId'] != 0)
+    .fold<num>(0, (sum, row) => sum + _lossNumber(row['closing']));
 
 /// Packing LOSS% — factory sheet:
 ///  Top: Product · Projection · Opening · Actual · Opening+Actual ·
@@ -49,11 +57,24 @@ class _LossPageState extends State<LossPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(label),
-        content: TextField(
-          controller: ctl,
-          autofocus: true,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(labelText: tr('Value')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (key.startsWith('act:'))
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: Text(
+                  'Saving Actual recalculates this product’s BOM-based material CB and resets any manual CB overrides for this product.',
+                ),
+              ),
+            TextField(
+              controller: ctl,
+              autofocus: true,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(labelText: tr('Value')),
+            ),
+          ],
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
@@ -76,8 +97,13 @@ class _LossPageState extends State<LossPage> {
       final ym = data['ym'];
       final columns = ['Product / Material', 'Projection·${U.cb}', 'Opening·Extra', 'Actual·Total', 'Op+Act·Loss%', '%Adh', 'Closing'];
       final rows = <List<dynamic>>[];
-      for (final t in (data['top'] as List).cast<Map<String, dynamic>>()) {
-        rows.add([t['name'], t['projection'], t['opening'], t['actual'], t['openingActual'], ((t['adherence'] as num?) ?? 0).toStringAsFixed(1), t['closing']]);
+      final top = (data['top'] as List).cast<Map<String, dynamic>>();
+      final closingTotal = _lossClosingTotal(top);
+      for (final t in top) {
+        final closing = t['productId'] == 0
+            ? (num.tryParse('${t['closing']}') ?? closingTotal)
+            : t['closing'];
+        rows.add([t['name'], t['projection'], t['opening'], t['actual'], t['openingActual'], ((t['adherence'] as num?) ?? 0).toStringAsFixed(1), closing]);
       }
       // Per-product material blocks as proper PDF sections: heading stays with
       // its rows across page breaks, and pages pack fully (no half-empty pages).
@@ -146,6 +172,7 @@ class _LossPageState extends State<LossPage> {
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
         final data = snap.data!;
         final top = (data['top'] as List).cast<Map<String, dynamic>>();
+        final closingTotal = _lossClosingTotal(top);
         final sections = (data['sections'] as List).cast<Map<String, dynamic>>();
         final archives = ((data['archives'] as List?) ?? const []).cast<String>();
         final scheme = Theme.of(context).colorScheme;
@@ -162,62 +189,54 @@ class _LossPageState extends State<LossPage> {
               )
             : num0(v);
 
-        return ListView(padding: const EdgeInsets.all(18), children: [
-          Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-            Text('${tr('Month')}: ${data['ym']}${_isArchive ? '  (archived)' : ''}',
-                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-            if (archives.isNotEmpty || _isArchive)
-              DropdownButton<String>(
-                value: _viewYm,
-                hint: const Text('Current'),
-                items: [
-                  const DropdownMenuItem<String>(value: null, child: Text('Current month')),
-                  for (final a in archives) DropdownMenuItem(value: a, child: Text(a)),
+        final monthPicker = DropdownButton<String>(
+          value: _viewYm,
+          hint: Text(tr('Current month')),
+          items: [
+            DropdownMenuItem<String>(value: null, child: Text(tr('Current month'))),
+            for (final a in archives) DropdownMenuItem(value: a, child: Text(a)),
+          ],
+          onChanged: (v) {
+            // Wait until the menu route is closed before replacing the report.
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) setState(() { _viewYm = v; _future = _load(); });
+            });
+          },
+        );
+        final exportButton = OutlinedButton.icon(
+          onPressed: _busy ? null : () => _export(data, pdf: true),
+          icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
+          label: Text(tr('Export PDF')),
+        );
+        final closeButton = FilledButton.icon(
+          onPressed: !canEdit || _busy ? null : () => _closeMonth(data),
+          icon: const Icon(Icons.lock_clock_rounded, size: 17),
+          label: Text(tr('Close month')),
+        );
+        final productionCard = SectionCard(
+          title: '${tr('Production & Stock')} (${data['ym']})',
+          child: AppDataTable(
+            columns: const ['Product', 'Projection', 'Opening', 'Actual', 'Opening+Actual', '%Adherence', 'Closing'],
+            rows: [
+              for (final t in top)
+                [
+                  t['name'] == 'Total'
+                      ? Text(tr('Total'), style: const TextStyle(fontWeight: FontWeight.w800))
+                      : Text('${t['name']}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  t['name'] == 'Total' ? qtyInt(t['projection']) : edit('proj:${t['productId']}', (t['projection'] as num?) ?? 0, '${t['name']} — Projection'),
+                  t['name'] == 'Total' ? qtyInt(t['opening']) : edit('open:${t['productId']}', (t['opening'] as num?) ?? 0, '${t['name']} — Opening (last month closing + depot stock)'),
+                  t['name'] == 'Total' ? qtyInt(t['actual']) : edit('act:${t['productId']}', (t['actual'] as num?) ?? 0, '${t['name']} — Actual production (month total)'),
+                  qtyInt(t['openingActual']),
+                  ((t['adherence'] as num?) ?? 0).toStringAsFixed(1),
+                  t['name'] == 'Total'
+                      ? qtyInt(num.tryParse('${t['closing']}') ?? closingTotal)
+                      : edit('close:${t['productId']}', num.tryParse('${t['closing']}') ?? 0, '${t['name']} — Closing'),
                 ],
-                onChanged: (v) {
-                  // Let the dropdown menu route pop completely BEFORE swapping
-                  // the whole page future — rebuilding mid-pop left the menu's
-                  // barrier stuck as a washed-out overlay (archive → Current).
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) setState(() { _viewYm = v; _future = _load(); });
-                  });
-                },
-              ),
-            OutlinedButton.icon(
-              onPressed: _busy ? null : () => _export(data, pdf: true),
-              icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
-              label: Text(tr('Export PDF')),
-            ),
-            if (canEdit)
-              FilledButton.icon(
-                onPressed: _busy ? null : () => _closeMonth(data),
-                icon: const Icon(Icons.lock_clock_rounded, size: 17),
-                label: Text(tr('Close month')),
-              ),
-          ]),
-          const SizedBox(height: 12),
-          SectionCard(
-            title: '${tr('Production & Stock')} (${data['ym']})',
-            child: AppDataTable(
-              columns: const ['Product', 'Projection', 'Opening', 'Actual', 'Opening+Actual', '%Adherence', 'Closing'],
-              rows: [
-                for (final t in top)
-                  [
-                    t['name'] == 'Total'
-                        ? Text(tr('Total'), style: const TextStyle(fontWeight: FontWeight.w800))
-                        : Text('${t['name']}', style: const TextStyle(fontWeight: FontWeight.w600)),
-                    t['name'] == 'Total' ? qtyInt(t['projection']) : edit('proj:${t['productId']}', (t['projection'] as num?) ?? 0, '${t['name']} — Projection'),
-                    t['name'] == 'Total' ? qtyInt(t['opening']) : edit('open:${t['productId']}', (t['opening'] as num?) ?? 0, '${t['name']} — Opening (last month closing + depot stock)'),
-                    t['name'] == 'Total' ? qtyInt(t['actual']) : edit('act:${t['productId']}', (t['actual'] as num?) ?? 0, '${t['name']} — Actual production (month total)'),
-                    qtyInt(t['openingActual']),
-                    ((t['adherence'] as num?) ?? 0).toStringAsFixed(1),
-                    t['name'] == 'Total' ? '' : edit('close:${t['productId']}', num.tryParse('${t['closing']}') ?? 0, '${t['name']} — Closing'),
-                  ],
-              ],
-            ),
+            ],
           ),
-          const SizedBox(height: 14),
-          for (final s in sections) ...[
+        );
+        final materialCards = <Widget>[
+          for (final s in sections)
             SectionCard(
               title: '${s['name']}',
               child: AppDataTable(
@@ -238,14 +257,91 @@ class _LossPageState extends State<LossPage> {
                 ],
               ),
             ),
-            const SizedBox(height: 12),
-          ],
-          Text(
-            '${U.cb} = BOM × month production (sare batch codes da jod) · Extra = manual Extra Consumption entries · Loss% = Extra ÷ ${U.cb}. Har number edit ho sakda (product name nahi). Close month: export pehla, fer closing → next month opening.',
-            style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
-          ),
+        ];
+        final explanation = Text(
+          '${U.cb} = BOM × displayed Actual production (manual override included; tray use stays per recorded trays) · Extra = manual Extra Consumption entries · Loss% = Extra ÷ ${U.cb}. Har number edit ho sakda (product name nahi). Close month: export pehla, fer closing → next month opening.',
+          style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
+        );
+
+        if (isWindowsPlatform) {
+          return WindowsDocumentWorkspace(
+            title: 'Packing Loss %',
+            subtitle: '${tr('Production & Stock')} · ${_isArchive ? tr('Archived month') : tr('Current month')}',
+            icon: Icons.percent_rounded,
+            commandBar: WindowsCommandStrip(children: [
+              Text('${tr('Month')}: ${data['ym']}', style: const TextStyle(fontWeight: FontWeight.w700)),
+              if (archives.isNotEmpty || _isArchive) monthPicker,
+              exportButton,
+              if (canEdit) closeButton,
+            ]),
+            content: LayoutBuilder(builder: (context, constraints) {
+              final wide = constraints.maxWidth >= 1120;
+              return ListView(
+                padding: const EdgeInsets.all(14),
+                children: [
+                  Row(children: [
+                    Expanded(child: _lossMetric(label: 'Products', value: '${top.where((r) => r['name'] != 'Total').length}', icon: Icons.inventory_2_outlined)),
+                    const SizedBox(width: 8),
+                    Expanded(child: _lossMetric(label: 'Actual production', value: qtyInt(top.where((r) => r['name'] != 'Total').fold<num>(0, (sum, r) => sum + _lossNumber(r['actual']))), icon: Icons.factory_outlined)),
+                    const SizedBox(width: 8),
+                    Expanded(child: _lossMetric(label: 'Closing total', value: qty(closingTotal), icon: Icons.warehouse_outlined)),
+                  ]),
+                  const SizedBox(height: 12),
+                  productionCard,
+                  const SizedBox(height: 10),
+                  if (wide)
+                    Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Expanded(flex: 7, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [for (final card in materialCards) ...[card, const SizedBox(height: 10)]])),
+                      const SizedBox(width: 12),
+                      Expanded(flex: 3, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                        SectionCard(title: tr('Calculation notes'), child: explanation),
+                        const SizedBox(height: 10),
+                        SectionCard(
+                          title: tr('Month status'),
+                          child: Text(_isArchive ? tr('This month is archived. Values are read-only.') : tr('This is the current open month.'),
+                              style: TextStyle(color: scheme.onSurfaceVariant)),
+                        ),
+                      ])),
+                    ])
+                  else ...[
+                    for (final card in materialCards) ...[card, const SizedBox(height: 10)],
+                    SectionCard(title: tr('Calculation notes'), child: explanation),
+                  ],
+                ],
+              );
+            }),
+          );
+        }
+
+        return ListView(padding: const EdgeInsets.all(18), children: [
+          Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+            Text('${tr('Month')}: ${data['ym']}${_isArchive ? '  (archived)' : ''}',
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+            if (archives.isNotEmpty || _isArchive) monthPicker,
+            exportButton,
+            if (canEdit) closeButton,
+          ]),
+          const SizedBox(height: 12),
+          productionCard,
+          const SizedBox(height: 14),
+          for (final card in materialCards) ...[card, const SizedBox(height: 12)],
+          explanation,
         ]);
       },
     );
   }
+
+  Widget _lossMetric({required String label, required String value, required IconData icon}) => Container(
+        height: 62,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(color: const Color(0xFFF2F5F8), border: Border.all(color: const Color(0xFFC7D1DB))),
+        child: Row(children: [
+          Icon(icon, size: 17, color: const Color(0xFF214E6B)),
+          const SizedBox(width: 8),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+            Text(tr(label), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, color: Color(0xFF627588))),
+            Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF26394A))),
+          ])),
+        ]),
+      );
 }

@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -11,6 +10,7 @@ import '../../core/download.dart';
 import '../../core/i18n.dart';
 import '../../core/industry_pack.dart';
 import '../../core/item_code.dart';
+import '../../core/platform_support.dart';
 import '../../core/sheet_parse.dart';
 import '../../core/sheet_pick.dart';
 import '../../state/auth.dart';
@@ -20,8 +20,8 @@ import '../../ui/widgets.dart';
 /// from Excel / Google Sheets / CSV — fast onboarding of a master list.
 ///
 /// * Web: choose an .xlsx / .csv file, or paste.
-/// * Phone: copy the cells in Excel / Sheets and paste into the box
-///   (tab-separated text) — no file picker plugin needed.
+/// * Phone/desktop: copy cells in Excel / Sheets and paste into the box
+///   (tab-separated text) — no native file-picker plugin is needed.
 ///
 /// Header row is matched by name (any order, extra columns ignored). Each
 /// row is POSTed one by one to the existing create endpoint, so the server's
@@ -123,10 +123,18 @@ class _ImportDialogState extends State<_ImportDialog> {
     return [for (final e in ex) [e, '', cat, 'pcs', '0', '100']];
   }
 
-  void _downloadTemplate() {
+  Future<void> _downloadTemplate() async {
     final csv = SheetParse.toCsv([templateHeaders, ...templateSample]);
     final bytes = utf8.encode('\uFEFF$csv');
-    downloadBytes(isProducts ? 'flavorflow-products-template.csv' : 'flavorflow-materials-template.csv', Uint8List.fromList(bytes), 'text/csv');
+    try {
+      await downloadBytes(
+        isProducts ? 'flavorflow-products-template.csv' : 'flavorflow-materials-template.csv',
+        Uint8List.fromList(bytes),
+        'text/csv',
+      );
+    } catch (e) {
+      if (mounted) showErr(context, e);
+    }
   }
 
   void _load(List<List<String>> parsed, String name) {
@@ -339,7 +347,11 @@ class _ImportDialogState extends State<_ImportDialog> {
                 labelText: tr('Or paste cells copied from Excel / Google Sheets'),
                 hintText: '${templateHeaders.take(3).join('\t')}\n${templateSample.first.take(3).join('\t')}',
                 alignLabelWithHint: true,
-                helperText: kIsWeb ? null : tr('Phone: open the sheet, select the cells, copy, and paste here.'),
+                helperText: isPhonePlatform
+                    ? tr('Phone: open the sheet, select the cells, copy, and paste here.')
+                    : isDesktopPlatform
+                        ? tr('Desktop: copy cells in Excel or Sheets, then paste here.')
+                        : null,
               ),
               onChanged: (v) {
                 if (v.trim().isEmpty) {

@@ -9,15 +9,16 @@ plugins {
 
 val keystoreProperties = Properties()
 val keystorePropertiesFile = rootProject.file("key.properties")
+val configuredCompileSdk = rootProject.findProperty("flavorflow.compileSdk")?.toString()?.toIntOrNull()
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
 android {
     namespace = "in.flavorflow.sauce_erp"
-    // Use the SDK/NDK selected by the installed Flutter toolchain. This keeps
-    // GitHub Actions on the platform already bundled in its runner.
-    compileSdk = flutter.compileSdkVersion
+    // Follow Flutter's SDK, but never compile below the Android 16/API 36
+    // platform required for new Play submissions from August 31, 2026.
+    compileSdk = maxOf(configuredCompileSdk ?: flutter.compileSdkVersion, 36)
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -33,7 +34,7 @@ android {
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 23
-        targetSdk = 35
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

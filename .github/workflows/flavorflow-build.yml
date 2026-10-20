@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - arena/01a0dc70-flavorflow
+      - arena/02900f8a-flavorflow
   workflow_dispatch:
 
 permissions:
@@ -15,7 +16,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build web and Android APK
+    name: Analyze, test and build web + Android APK/AAB
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -38,8 +39,100 @@ jobs:
       - name: Install packages
         run: flutter pub get
 
+      - name: Generate launcher and web icons
+        run: dart run flutter_launcher_icons || echo "::warning::Icon generator did not complete; checked-in PWA icons already contain the final logo."
+
+      - name: Analyze Flutter app
+        shell: bash
+        run: |
+          set +e
+          flutter analyze --no-fatal-infos lib test > "$RUNNER_TEMP/flutter-analyze.log" 2>&1
+          analyze_status=$?
+          set -e
+          cat "$RUNNER_TEMP/flutter-analyze.log"
+          if [[ "$analyze_status" -ne 0 ]]; then
+            python3 - "$RUNNER_TEMP/flutter-analyze.log" <<'PY'
+          import pathlib
+          import sys
+
+          def escape_data(value):
+              return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+          def escape_property(value):
+              return escape_data(value).replace(":", "%3A").replace(",", "%2C")
+
+          text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
+          found = 0
+          for raw_line in text.splitlines():
+              parts = [part.strip() for part in raw_line.strip().split(" • ")]
+              if len(parts) < 4 or parts[0] not in {"error", "warning"}:
+                  continue
+              severity, message = parts[0], parts[1]
+              location, rule = parts[-2], parts[-1]
+              try:
+                  file_path, line, column = location.rsplit(":", 2)
+              except ValueError:
+                  file_path, line, column = location, "", ""
+              level = "error" if severity == "error" else "warning"
+              properties = [f"file={escape_property(file_path)}"]
+              if line.isdigit():
+                  properties.append(f"line={line}")
+              if column.isdigit():
+                  properties.append(f"col={column}")
+              properties.append(f"title={escape_property(rule)}")
+              print(f"::{level} {','.join(properties)}::{escape_data(message)}")
+              found += 1
+
+          if found == 0:
+              text = text.strip() or "flutter analyze failed without producing output."
+              text = escape_data(text[:12000])
+              print(f"::error title=Flutter analyzer output::{text}")
+          PY
+          fi
+          exit "$analyze_status"
+
+      - name: Run Flutter tests
+        run: flutter test
+
+      - name: Configure Android upload signing (when credentials are available)
+        id: signing
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$ANDROID_KEYSTORE_BASE64" ]]; then
+            if [[ -n "$ANDROID_KEYSTORE_PASSWORD$ANDROID_KEY_ALIAS$ANDROID_KEY_PASSWORD" ]]; then
+              echo "Upload-key secrets are incomplete; refusing to build a misleading release." >&2
+              exit 1
+            fi
+            echo "No upload key configured: build outputs will be debug-signed test packages, not Play Store upload packages."
+            echo "artifact_name=FlavorFlow-Android-test-debug-signed" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          : "${ANDROID_KEYSTORE_PASSWORD:?Missing ANDROID_KEYSTORE_PASSWORD}"
+          : "${ANDROID_KEY_ALIAS:?Missing ANDROID_KEY_ALIAS}"
+          : "${ANDROID_KEY_PASSWORD:?Missing ANDROID_KEY_PASSWORD}"
+          KEYSTORE_FILE="$RUNNER_TEMP/flavorflow-upload-key"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '\r\n ' | base64 --decode > "$KEYSTORE_FILE"
+          chmod 600 "$KEYSTORE_FILE"
+          if keytool -list -keystore "$KEYSTORE_FILE" -storepass "$ANDROID_KEYSTORE_PASSWORD" -storetype JKS >/dev/null 2>&1; then
+            STORE_TYPE=jks
+          elif keytool -list -keystore "$KEYSTORE_FILE" -storepass "$ANDROID_KEYSTORE_PASSWORD" -storetype PKCS12 >/dev/null 2>&1; then
+            STORE_TYPE=pkcs12
+          else
+            echo "Android upload keystore/password invalid or unsupported." >&2
+            exit 1
+          fi
+          printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\nstoreType=%s\n' \
+            "$KEYSTORE_FILE" "$ANDROID_KEYSTORE_PASSWORD" "$ANDROID_KEY_ALIAS" "$ANDROID_KEY_PASSWORD" "$STORE_TYPE" > android/key.properties
+          echo "artifact_name=FlavorFlow-Android-signed-release" >> "$GITHUB_OUTPUT"
+
       - name: Build web
-        run: flutter build web --release --no-tree-shake-icons --dart-define=API_BASE=https://flavorflow.duckdns.org/api
+        run: flutter build web --release --no-tree-shake-icons --dart-define=API_BASE=https://app.flavorflow.co.in/api
 
       - name: Upload web artifact
         uses: actions/upload-artifact@v4
@@ -50,12 +143,141 @@ jobs:
           retention-days: 7
 
       - name: Build Android APK
-        run: flutter build apk --release --dart-define=API_BASE=https://flavorflow.duckdns.org/api
+        run: flutter build apk --release --dart-define=API_BASE=https://app.flavorflow.co.in/api
 
-      - name: Upload Android APK
+      - name: Build Play Store Android App Bundle
+        run: flutter build appbundle --release --dart-define=API_BASE=https://app.flavorflow.co.in/api
+
+      - name: Verify Android release packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          AAB=build/app/outputs/bundle/release/app-release.aab
+          test -s "$APK"
+          test -s "$AAB"
+          unzip -tq "$APK"
+          jarsigner -verify "$AAB" >/dev/null
+          echo "APK and AAB are present and pass archive/signature checks."
+          ls -lh "$APK" "$AAB"
+
+      - name: Upload Android release artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: flavorflow-android-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: ${{ steps.signing.outputs.artifact_name }}
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/bundle/release/app-release.aab
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 14
+
+  build-windows:
+    name: Build Windows desktop portable x64 and installer
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install packages
+        run: flutter pub get
+
+      - name: Create and configure native Windows runner
+        shell: pwsh
+        run: .\tools\configure-windows.ps1
+
+      - name: Generate Windows application icon
+        run: dart run flutter_launcher_icons -f windows_launcher_icons.yaml
+
+      - name: Build Windows release
+        shell: pwsh
+        run: |
+          $buildRef = '${{ github.sha }}'.Substring(0, 7)
+          $buildOutput = & flutter build windows --release --dart-define=API_BASE=https://app.flavorflow.co.in/api "--dart-define=FF_BUILD_REF=$buildRef" 2>&1
+          $buildExitCode = $LASTEXITCODE
+          $buildOutput | ForEach-Object { Write-Host $_ }
+          if ($buildExitCode -ne 0) {
+            $tail = ($buildOutput | Select-Object -Last 60 | ForEach-Object { "$_" }) -join "`n"
+            $escaped = $tail.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Output "::error title=Flutter Windows build::$escaped"
+            exit $buildExitCode
+          }
+
+      - name: Package and verify portable x64 build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $releaseDir = Join-Path $PWD 'build/windows/x64/runner/Release'
+          $required = @(
+            (Join-Path $releaseDir 'flavorflow_erp.exe'),
+            (Join-Path $releaseDir 'flutter_windows.dll'),
+            (Join-Path $releaseDir 'data/flutter_assets')
+          )
+          foreach ($path in $required) {
+            if (-not (Test-Path $path)) { throw "Missing Windows release output: $path" }
+          }
+          $readme = @'
+          FlavorFlow ERP for Windows (portable x64)
+
+          Extract the complete ZIP and keep all files together, then run flavorflow_erp.exe.
+          Requires Windows 10/11 x64 and the Microsoft Visual C++ 2015-2022 x64 runtime.
+          First build is unsigned; Windows SmartScreen may show a warning.
+          CSV/XLSX files go to Downloads. PDF actions use the Windows print flow.
+          Use product/material code-entry fields or a USB keyboard-wedge barcode scanner.
+          Camera scanning, photos, GPS stamps, phone notifications and reminders are mobile-only.
+          '@
+          $readme | Set-Content -Path (Join-Path $releaseDir 'README-Windows.txt') -Encoding utf8
+          $zipPath = Join-Path $PWD 'build/FlavorFlow-Windows-x64-portable.zip'
+          if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+          Compress-Archive -Path (Join-Path $releaseDir '*') -DestinationPath $zipPath -CompressionLevel Optimal
+          if ((Get-Item $zipPath).Length -lt 1000000) { throw 'Windows portable ZIP is unexpectedly small.' }
+
+      - name: Build and smoke-test installable Windows setup
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          choco install innosetup --yes --no-progress --limit-output
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup installation failed ($LASTEXITCODE)." }
+          $compiler = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $compiler)) { throw "Inno Setup compiler not found: $compiler" }
+          $version = ((Select-String -Path pubspec.yaml -Pattern '^version:\s*([^+\s]+)' | Select-Object -First 1).Matches.Groups[1].Value)
+          if (-not $version) { throw 'App version was not found in pubspec.yaml.' }
+          & $compiler "/DAppVersion=$version" windows\installer\FlavorFlow.iss
+          if ($LASTEXITCODE -ne 0) { throw "Installer compilation failed ($LASTEXITCODE)." }
+          $installer = Join-Path $PWD 'build\windows-installer\FlavorFlow-Windows-x64-Setup.exe'
+          if (-not (Test-Path $installer) -or (Get-Item $installer).Length -lt 1000000) {
+            throw 'Windows installer is missing or unexpectedly small.'
+          }
+          $smokeDir = Join-Path $env:RUNNER_TEMP 'FlavorFlow Install Smoke'
+          $installed = Start-Process -FilePath $installer -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$smokeDir`"") -Wait -PassThru
+          if ($installed.ExitCode -ne 0 -or -not (Test-Path (Join-Path $smokeDir 'flavorflow_erp.exe'))) {
+            throw "Silent install failed ($($installed.ExitCode))."
+          }
+          $uninstaller = Join-Path $smokeDir 'unins000.exe'
+          if (-not (Test-Path $uninstaller)) { throw 'Windows uninstaller was not installed.' }
+          $removed = Start-Process -FilePath $uninstaller -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -Wait -PassThru
+          if ($removed.ExitCode -ne 0) { throw "Silent uninstall failed ($($removed.ExitCode))." }
+          Write-Host "Installer smoke test passed: $installer"
+
+      - name: Upload Windows portable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlavorFlow-Windows-x64-portable
+          path: build/FlavorFlow-Windows-x64-portable.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Windows installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlavorFlow-Windows-x64-Setup-unsigned
+          path: build/windows-installer/FlavorFlow-Windows-x64-Setup.exe
+          if-no-files-found: error
+          retention-days: 14

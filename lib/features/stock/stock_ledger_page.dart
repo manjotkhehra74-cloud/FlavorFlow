@@ -6,9 +6,11 @@ import '../../core/api.dart';
 import '../../core/download.dart';
 import '../../core/format.dart';
 import '../../core/i18n.dart';
+import '../../core/platform_support.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
+import '../../ui/windows_widgets.dart';
 import '../billing/item_history_page.dart';
 
 /// Stock Ledger — the SAP-style movement register for the whole factory:
@@ -42,6 +44,26 @@ class _StockLedgerPageState extends State<StockLedgerPage> with SingleTickerProv
 
   @override
   Widget build(BuildContext context) {
+    const tabs = <WindowsModuleTab>[
+      WindowsModuleTab('Movements', Icons.swap_horiz_rounded),
+      WindowsModuleTab('Period Balances', Icons.inventory_2_outlined),
+      WindowsModuleTab('Documents', Icons.description_outlined),
+    ];
+    const views = [_MovementsTab(), _BalancesTab(), _DocumentsTab()];
+    final content = TabBarView(controller: _tab, children: views);
+    if (isWindowsPlatform) {
+      return AnimatedBuilder(
+        animation: _tab,
+        builder: (context, _) => WindowsModuleWorkspace(
+          title: 'Stock Ledger',
+          subtitle: 'Movement register, period balances and source documents',
+          tabs: tabs,
+          selectedIndex: _tab.index,
+          onSelect: _tab.animateTo,
+          content: content,
+        ),
+      );
+    }
     return Column(children: [
       Material(
         color: Theme.of(context).colorScheme.surface,
@@ -60,13 +82,7 @@ class _StockLedgerPageState extends State<StockLedgerPage> with SingleTickerProv
         ),
       ),
       const Divider(height: 1),
-      Expanded(
-        child: TabBarView(controller: _tab, children: const [
-          _MovementsTab(),
-          _BalancesTab(),
-          _DocumentsTab(),
-        ]),
-      ),
+      Expanded(child: content),
     ]);
   }
 }
@@ -338,7 +354,7 @@ Future<void> _exportCsv(BuildContext context, String path, String filename, Valu
   busy(true);
   try {
     final bytes = await context.read<AuthController>().api.getBytes(path);
-    downloadBytes(filename, bytes, 'text/csv');
+    await downloadBytes(filename, bytes, 'text/csv');
     if (context.mounted) showOk(context, tr('Exported (CSV) — open in Excel or share.'));
   } catch (e) {
     if (context.mounted) showErr(context, e);

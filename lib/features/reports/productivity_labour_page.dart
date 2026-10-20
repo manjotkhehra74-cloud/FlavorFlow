@@ -5,12 +5,15 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/api.dart';
+import '../../core/company.dart';
 import '../../core/download.dart';
 import '../../core/format.dart';
 import '../../core/offline_queue.dart';
+import '../../core/platform_support.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
+import '../../ui/windows_widgets.dart';
 
 const _localLabourKey = 'flavorflow_productivity_local_labour';
 const _manualSkuChoice = '__manual_sku__';
@@ -217,6 +220,7 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
   String? _skuFilter;
   String _shiftFilter = 'Combined';
   bool _exporting = false;
+  Map<String, dynamic>? _selectedLabour;
 
   String get _fromYmd => _ymd(_from);
   String get _toYmd => _ymd(_to);
@@ -809,7 +813,7 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
       final path = kind == 'labour' ? '/labour/daily.xlsx' : '/reports/productivity.xlsx';
       final bytes = await context.read<AuthController>().api.getBytes('$path?${_query()}');
       final date = DateTime.now().toIso8601String().substring(0, 10);
-      downloadBytes('flavorflow-${kind == 'labour' ? 'daily-labour' : 'productivity'}-$date.xlsx', bytes,
+      await downloadBytes('flavorflow-${kind == 'labour' ? 'daily-labour' : 'productivity'}-$date.xlsx', bytes,
           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       if (mounted) showOk(context, 'Excel report downloaded.');
     } catch (e) {
@@ -890,6 +894,46 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
         final data = snap.data!;
         final columns = (data['columns'] as List? ?? const ['SKU', 'LINE', 'MANPOWER', 'PROD. IN KG', 'PROD. IN CB', 'PRODUCTIVITY IN KG/HEAD', 'PRODUCTIVITY IN CB/HEAD']).map((v) => '$v').toList();
         final rows = ((data['rows'] as List?) ?? const []).map((r) => (r as List).toList()).toList();
+        if (isWindowsPlatform) {
+          final totals = (data['totals'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+          final metrics = [
+            ('Production ${U.cb}', totals['cb'] ?? totals['producedCb'], Icons.inventory_2_outlined, U.cb),
+            ('Production KG', totals['kg'] ?? totals['netKg'], Icons.scale_outlined, 'kg'),
+            ('Manpower', totals['manpower'], Icons.groups_outlined, 'operators'),
+            ('KG / head', totals['kgPerHead'], Icons.bar_chart_outlined, 'productivity'),
+            ('${U.cb} / head', totals['cbPerHead'], Icons.hub_outlined, 'productivity'),
+          ];
+          return ListView(padding: const EdgeInsets.fromLTRB(18, 20, 18, 24), children: [
+            Text('Productivity — selected period',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800,
+                  color: Theme.of(context).colorScheme.onSurface)),
+            const SizedBox(height: 4),
+            Text('Completed production · ${U.cb} is your company pack unit',
+                style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 12),
+            _reconciliationBanner(context, data),
+            _dateFilters(context),
+            const SizedBox(height: 12),
+            Align(alignment: Alignment.centerRight,
+              child: OutlinedButton.icon(onPressed: _exporting ? null : () => _export('productivity'),
+                icon: const Icon(Icons.download_outlined, size: 16), label: const Text('Export Excel'))),
+            const SizedBox(height: 14),
+            LayoutBuilder(builder: (context, constraints) {
+              final columns = constraints.maxWidth >= 1000 ? 5 : constraints.maxWidth >= 600 ? 3 : 2;
+              const gap = 10.0;
+              final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+              return Wrap(spacing: gap, runSpacing: gap, children: [for (final metric in metrics)
+                SizedBox(width: width, height: 118, child: _DesktopProductivityMetric(
+                  label: metric.$1, value: metric.$2, icon: metric.$3, unit: metric.$4)),
+              ]);
+            }),
+            const SizedBox(height: 18),
+            SectionCard(title: 'Results — ${rows.length} items', padding: EdgeInsets.zero,
+              child: rows.isEmpty
+                ? const EmptyState('No completed production or labour entries for this period.')
+                : AppDataTable(columns: columns, rows: rows)),
+          ]);
+        }
         return ListView(padding: const EdgeInsets.all(18), children: [
           _hero(context, data),
           _reconciliationBanner(context, data),
@@ -941,6 +985,36 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
         final data = snap.data ?? const <String, dynamic>{};
         final totals = (data['periodTotals'] as Map?)?.cast<String, dynamic>() ?? (data['totals'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
         final sections = _analysisSections(data);
+        if (isWindowsPlatform) {
+          return ListView(padding: const EdgeInsets.all(12), children: [
+            _reconciliationBanner(context, data),
+            _dateFilters(context),
+            const SizedBox(height: 10),
+            WindowsCommandStrip(children: [
+              const Text('Labour Analysis', style: TextStyle(fontWeight: FontWeight.w700)),
+              OutlinedButton.icon(onPressed: _exporting ? null : () => _export('productivity'),
+                icon: const Icon(Icons.download_outlined, size: 16),
+                label: const Text('Export Analysis Excel')),
+            ]),
+            const SizedBox(height: 10),
+            Container(padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: const Color(0xFFF7F9FB),
+                border: Border.all(color: const Color(0xFFC7D1DB))),
+              child: Wrap(spacing: 24, runSpacing: 8, children: [
+                _totalChip(U.cb, totals['cb'] ?? totals['producedCb']),
+                _totalChip('Net KG', totals['kg'] ?? totals['netKg']),
+                _totalChip('Manpower', totals['manpower']),
+                _totalChip('KG / Head', totals['kgPerHead']),
+                _totalChip('${U.cb} / Head', totals['cbPerHead']),
+              ]),
+            ),
+            for (final section in sections) ...[
+              const SizedBox(height: 12),
+              _analysisMatrix(section['title'] as String,
+                section['data'] as Map<String, dynamic>),
+            ],
+          ]);
+        }
         return ListView(padding: const EdgeInsets.all(18), children: [
           _reconciliationBanner(context, data),
           _dateFilters(context),
@@ -982,25 +1056,65 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: _labourFuture,
       builder: (context, snap) {
-        final rows = snap.data ?? const <Map<String, dynamic>>[];
+        if (snap.hasError) return ErrorState(snap.error!, onRetry: _reload);
+        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        final rows = snap.data!;
+        final selected = rows.any((r) => identical(r, _selectedLabour)) ? _selectedLabour : null;
+        final register = SectionCard(
+          title: 'Daily Labour Details',
+          trailing: FilledButton.icon(onPressed: _openLabourForm,
+              icon: const Icon(Icons.add, size: 17), label: const Text('Add Entry')),
+          child: rows.isEmpty
+              ? const EmptyState('No daily labour entries yet. Add a line-wise entry to get started.')
+              : AppDataTable(
+                  columns: const ['DATE', 'SHIFT', 'LINE', 'SKU', 'WORKERS', 'HOURS', 'SUPERVISOR', 'REMARKS', ''],
+                  onRowTap: isWindowsPlatform ? (i) => setState(() => _selectedLabour = rows[i]) : null,
+                  rows: [for (final r in rows) [
+                    r['date'], r['shift'], r['line'], r['productName'] ?? r['sku'] ?? r['product'],
+                    r['workerCount'] ?? r['workers'], r['actualHours'] ?? r['hours'],
+                    r['supervisor'], r['remarks'],
+                    IconButton(tooltip: 'Edit entry', onPressed: () => _openLabourForm(entry: r),
+                      icon: const Icon(Icons.edit_outlined, size: 18)),
+                  ]],
+                ),
+        );
         return ListView(padding: const EdgeInsets.all(18), children: [
           _dateFilters(context),
           const SizedBox(height: 8),
-          Align(alignment: Alignment.centerRight, child: OutlinedButton.icon(onPressed: _exporting ? null : () => _export('labour'), icon: const Icon(Icons.download_outlined, size: 18), label: const Text('Export Labour Excel'))),
+          Align(alignment: Alignment.centerRight, child: OutlinedButton.icon(
+            onPressed: _exporting ? null : () => _export('labour'),
+            icon: const Icon(Icons.download_outlined, size: 18), label: const Text('Export Labour Excel'))),
           const SizedBox(height: 8),
-          SectionCard(
-            title: 'Daily Labour Details',
-            trailing: FilledButton.icon(onPressed: _openLabourForm, icon: const Icon(Icons.add, size: 17), label: const Text('Add Entry')),
-            child: rows.isEmpty
-                ? const EmptyState('No daily labour entries yet. Start entering line-wise details tomorrow.')
-                : AppDataTable(
-                    columns: const ['DATE', 'SHIFT', 'LINE', 'SKU', 'WORKERS', 'HOURS', 'SUPERVISOR', 'REMARKS', ''],
-                    rows: [
-                      for (final r in rows)
-                        [r['date'], r['shift'], r['line'], r['productName'] ?? r['sku'] ?? r['product'], r['workerCount'] ?? r['workers'], r['actualHours'] ?? r['hours'], r['supervisor'], r['remarks'], IconButton(tooltip: 'Edit entry', onPressed: () => _openLabourForm(entry: r), icon: const Icon(Icons.edit_outlined, size: 18))],
-                    ],
-                  ),
-          ),
+          if (isWindowsPlatform && selected != null)
+            LayoutBuilder(builder: (context, bounds) {
+              final inspector = SectionCard(
+                title: 'Selected entry',
+                trailing: IconButton(tooltip: 'Close inspector',
+                  onPressed: () => setState(() => _selectedLabour = null),
+                  icon: const Icon(Icons.close, size: 17)),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  for (final (label, value) in [
+                    ('Date', selected['date']), ('Shift', selected['shift']),
+                    ('Line', selected['line']),
+                    ('SKU', selected['productName'] ?? selected['sku'] ?? selected['product']),
+                    ('Workers', selected['workerCount'] ?? selected['workers']),
+                    ('Hours', selected['actualHours'] ?? selected['hours']),
+                    ('Supervisor', selected['supervisor']), ('Remarks', selected['remarks']),
+                  ]) Padding(padding: const EdgeInsets.only(bottom: 10),
+                      child: Text('$label: ${value ?? '—'}')),
+                  Align(alignment: Alignment.centerLeft,
+                    child: FilledButton.icon(onPressed: () => _openLabourForm(entry: selected),
+                      icon: const Icon(Icons.edit_outlined, size: 16), label: const Text('Edit entry'))),
+                ]),
+              );
+              if (bounds.maxWidth < 920) return Column(children: [register,
+                const SizedBox(height: 12), inspector]);
+              return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(flex: 7, child: register), const SizedBox(width: 12),
+                SizedBox(width: 280, child: inspector),
+              ]);
+            })
+          else register,
         ]);
       },
     );
@@ -1008,19 +1122,62 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
 
   @override
   Widget build(BuildContext context) {
+    final content = TabBarView(controller: _tabs, children: [
+      _productivityTab(context),
+      _labourTab(context),
+      _analysisTab(context),
+    ]);
+    if (isWindowsPlatform) {
+      return Column(children: [
+        Material(
+          color: Theme.of(context).colorScheme.surfaceContainerHigh,
+          child: Align(alignment: Alignment.centerLeft,
+            child: TabBar(
+              controller: _tabs,
+              isScrollable: true,
+              tabs: const [Tab(text: 'Productivity'), Tab(text: 'Daily Labour'), Tab(text: 'Labour Analysis')],
+            )),
+        ),
+        Expanded(child: content),
+      ]);
+    }
     return Column(children: [
       Material(
         color: Theme.of(context).colorScheme.surface,
         child: TabBar(controller: _tabs, tabs: const [Tab(text: 'Productivity'), Tab(text: 'Daily Labour'), Tab(text: 'Labour Analysis')]),
       ),
-      Expanded(
-        child: TabBarView(controller: _tabs, children: [
-          _productivityTab(context),
-          _labourTab(context),
-          _analysisTab(context),
-        ]),
-      ),
+      Expanded(child: content),
     ]);
+  }
+}
+
+/// The five desktop KPI cards are backed by the same server-normalised totals
+/// as the table. Never substitute illustrative preview quantities.
+class _DesktopProductivityMetric extends StatelessWidget {
+  final String label;
+  final dynamic value;
+  final IconData icon;
+  final String unit;
+  const _DesktopProductivityMetric({required this.label, required this.value,
+      required this.icon, required this.unit});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: scheme.surface,
+        border: Border.all(color: scheme.outlineVariant), borderRadius: BorderRadius.circular(5)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [Icon(icon, size: 19, color: scheme.primary), const SizedBox(width: 8),
+          Expanded(child: Text(label, maxLines: 2, overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)))]),
+        const Spacer(),
+        Text(value == null ? '—' : qty(value), maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: scheme.onSurface)),
+        Text(unit, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+      ]),
+    );
   }
 }
 
@@ -1179,8 +1336,115 @@ class _DailyLabourDialogState extends State<_DailyLabourDialog> {
 
   String _ymd(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
+  Widget _windowsForm(BuildContext context) {
+    Widget dateField() => OutlinedButton.icon(
+      onPressed: () async {
+        final picked = await showDatePicker(context: context, initialDate: date,
+          firstDate: DateTime(2020), lastDate: DateTime.now().add(const Duration(days: 365)));
+        if (picked != null) setState(() => date = picked);
+      }, icon: const Icon(Icons.calendar_today, size: 17), label: Text(fmtDate(_ymd(date))),
+    );
+    return Dialog(
+      insetPadding: const EdgeInsets.all(24),
+      child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 880, maxHeight: 680),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(width: double.infinity, padding: const EdgeInsets.all(16),
+            color: const Color(0xFFE2E9EF),
+            child: Text(widget.entry == null ? 'Daily Labour Entry' : 'Edit Daily Labour Entry',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
+          Flexible(child: SingleChildScrollView(padding: const EdgeInsets.all(20),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [const Text('Date'), dateField()])),
+                const SizedBox(width: 16),
+                Expanded(child: DropdownButtonFormField<String>(initialValue: shift,
+                  decoration: const InputDecoration(labelText: 'Shift'),
+                  items: const [DropdownMenuItem(value: 'Day', child: Text('Day')),
+                    DropdownMenuItem(value: 'Night', child: Text('Night'))],
+                  onChanged: (v) => setState(() => shift = v ?? 'Day'))),
+              ]),
+              const SizedBox(height: 16),
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(child: TextField(controller: line,
+                  decoration: const InputDecoration(labelText: 'Production line *'))),
+                const SizedBox(width: 16),
+                Expanded(child: Column(children: [
+                  if (products.isNotEmpty) DropdownButtonFormField<String>(
+                    initialValue: product == _manualSkuChoice ||
+                      products.any((p) => '${p['id']}' == product) ? product : null,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'SKU / Product *'),
+                    items: [for (final p in products)
+                      DropdownMenuItem(value: '${p['id']}', child: Text('${p['name']}')),
+                      const DropdownMenuItem(value: _manualSkuChoice,
+                        child: Text('Type SKU / product manually'))],
+                    onChanged: (v) {
+                      final selected = products.where((p) => '${p['id']}' == v).toList();
+                      final inferredName = selected.isNotEmpty
+                        ? '${selected.first['name']}' : manualSku.text.trim();
+                      final inferred = _lineForSku(inferredName);
+                      setState(() {
+                        product = v;
+                        if (selected.isNotEmpty) manualSku.text = inferredName;
+                        if (_isUnassignedLine(line.text) && inferred != null) line.text = inferred;
+                      });
+                    },
+                  ),
+                  if (products.isEmpty || product == _manualSkuChoice) ...[
+                    if (products.isEmpty) const Text(
+                      'Product list unavailable offline. Type an existing SKU; it will be checked when synced.'),
+                    TextField(controller: manualSku,
+                      decoration: const InputDecoration(labelText: 'SKU / Product *'),
+                      onChanged: (value) {
+                        final inferred = _lineForSku(value);
+                        if (_isUnassignedLine(line.text) && inferred != null) line.text = inferred;
+                      }),
+                  ],
+                ])),
+              ]),
+              const SizedBox(height: 16),
+              Row(children: [
+                Expanded(child: TextField(controller: workers,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'Workers *'))),
+                const SizedBox(width: 16),
+                Expanded(child: TextField(controller: hours,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'Actual hours *'))),
+              ]),
+              const SizedBox(height: 16),
+              Row(children: [
+                Expanded(child: TextField(controller: supervisor,
+                  decoration: const InputDecoration(labelText: 'Supervisor'))),
+                const SizedBox(width: 16),
+                Expanded(child: TextField(controller: remarks,
+                  decoration: const InputDecoration(labelText: 'Remarks (optional)'))),
+              ]),
+              const SizedBox(height: 14),
+              const Text('Offline entries are queued on this device for later sync. '
+                'Older servers may only support local storage.',
+                style: TextStyle(fontSize: 11)),
+            ]),
+          )),
+          const Divider(height: 1),
+          Padding(padding: const EdgeInsets.all(12), child: Row(
+            mainAxisAlignment: MainAxisAlignment.end, children: [
+              TextButton(onPressed: busy ? null : () => Navigator.pop(context),
+                child: const Text('Cancel')),
+              const SizedBox(width: 8),
+              FilledButton(onPressed: busy ? null : _save,
+                child: Text(busy ? 'Saving…' : widget.entry == null ? 'Save Entry' : 'Update Entry')),
+            ],
+          )),
+        ]),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (isWindowsPlatform) return _windowsForm(context);
     return AlertDialog(
       title: Text(widget.entry == null ? 'Daily Labour Entry' : 'Edit Daily Labour Entry'),
       content: SizedBox(

@@ -12,9 +12,11 @@ import '../core/industry_pack.dart';
 import '../core/i18n.dart';
 import '../core/theme.dart';
 import '../core/format.dart';
+import '../core/platform_support.dart';
 import '../core/app_permissions.dart';
 import '../state/auth.dart';
 import 'widgets.dart';
+import 'windows_workspace.dart';
 
 /// Standard sections in menu order with the permission that unlocks each
 /// (mirrors the server's rbac NAV_ITEMS; Dashboard is universal).
@@ -115,7 +117,7 @@ void reconcileNav(List<Map<String, dynamic>> nav, AuthController auth) {
 }
 
 /// Status strip under the app bar (MAN-13): offline / waiting / needs-review
-/// state of entries kept on this phone. Tap opens "Offline entries".
+/// state of entries kept on this device. Tap opens "Offline entries".
 class _SyncBanner extends StatelessWidget {
   const _SyncBanner();
 
@@ -133,8 +135,8 @@ class _SyncBanner extends StatelessWidget {
         final IconData icon;
         if (!q.online) {
           text = waiting == 0
-              ? 'Offline — new entries will be saved on this phone and synced later'
-              : 'Offline — $waiting ${waiting == 1 ? 'entry' : 'entries'} saved on this phone, will sync when internet returns';
+              ? 'Offline — new entries will be saved on this device and synced later'
+              : 'Offline — $waiting ${waiting == 1 ? 'entry' : 'entries'} saved on this device, will sync when internet returns';
           color = AppColors.amber;
           icon = Icons.cloud_off_outlined;
         } else if (review > 0) {
@@ -180,6 +182,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   int _unread = 0;
   Timer? _timer;
   bool _polling = false; // in-flight guard — never stack polls
+  int _pageRefreshRevision = 0;
 
   @override
   void initState() {
@@ -271,13 +274,33 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     if (mounted) context.go('/login');
   }
 
+  Future<void> _confirmPageRefresh() async {
+    final reload = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(tr('Refresh current screen?')),
+        content: Text(tr('Any unsaved changes on this screen will be lost. Continue?')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('Cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('Refresh'))),
+        ],
+      ),
+    );
+    if (reload == true && mounted) setState(() => _pageRefreshRevision++);
+  }
+
+  Future<void> _refreshPermissions() async {
+    await context.read<AuthController>().refreshSession();
+    if (mounted) showOk(context, 'Permissions refreshed.');
+  }
+
   @override
   Widget build(BuildContext context) {
     // Remount the current page when the company's industry / unit names
     // change (server sync after login, or Settings → Company details) so
     // every label, column and dropdown re-reads the IndustryPack.
     final page = KeyedSubtree(
-      key: ValueKey('co-${CompanyProfile.current.industry}-${U.cb}-${U.tray}-${U.piece}'),
+      key: ValueKey('co-${CompanyProfile.current.industry}-${U.cb}-${U.tray}-${U.piece}-r$_pageRefreshRevision'),
       child: widget.child,
     );
     final auth = context.watch<AuthController>();
@@ -330,10 +353,19 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       nav.add({'path': '/settings', 'label': 'Settings', 'icon': 'settings', 'group': nav.isNotEmpty ? (nav.last['group'] ?? 'System') : 'System'});
     }
     final width = MediaQuery.sizeOf(context).width;
-    final wide = width >= 1060;
+    // The native Windows executable always gets the desktop workspace. Do not
+    // rely only on logical width: high-DPI scaling can make a desktop window
+    // look "narrow" and accidentally select the mobile drawer/bottom-nav shell.
+    final wide = width >= 1060 || isWindowsPlatform;
     final phone = width < 700;
     final selected = _selectedIndex(context, nav);
-    final title = tr(nav[selected]['label'] as String);
+    final currentPath = GoRouterState.of(context).uri.path;
+    final auxiliaryTitles = <String, String>{
+      '/notifications': 'Notifications',
+      '/sync': 'Offline entries',
+      '/subscription': 'Subscription',
+    };
+    final title = tr(auxiliaryTitles[currentPath] ?? nav[selected]['label'] as String);
 
     void goTo(int i) {
       context.go(nav[i]['path'] as String);
@@ -360,18 +392,19 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     }
 
     if (wide) {
-      return Scaffold(
-        resizeToAvoidBottomInset: true,
-        body: Row(children: [
-          sidebar,
-          Expanded(
-            child: Column(children: [
-              topBar,
-              const Divider(height: 1),
-              Expanded(child: RepaintBoundary(child: page)),
-            ]),
-          ),
-        ]),
+      return WindowsWorkspace(
+        page: page,
+        syncBanner: const _SyncBanner(),
+        nav: nav.map((e) => Map<String, dynamic>.from(e as Map)).toList(),
+        selectedIndex: selected,
+        title: title,
+        unread: _unread,
+        session: session,
+        onNavigate: goTo,
+        onMainMenu: () => context.go('/dashboard'),
+        onLogout: _logout,
+        onRefreshPage: _confirmPageRefresh,
+        onRefreshPermissions: _refreshPermissions,
       );
     }
 
@@ -1096,6 +1129,49 @@ class LanguageDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.watch<L10n>();
+    if (isWindowsPlatform) {
+      return Dialog(
+        child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 460),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Container(width: double.infinity, padding: const EdgeInsets.all(16),
+              color: const Color(0xFFE2E9EF),
+              child: Text('${tr('Language')} · ਭਾਸ਼ਾ · भाषा',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(18, 18, 18, 12),
+              child: Text('Select your preferred language. The change applies immediately.',
+                  style: TextStyle(fontSize: 12.5)),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              child: Column(children: [
+                for (final lang in L10n.languages)
+                  RadioListTile<String>(
+                    title: Text(lang[1]),
+                    value: lang[0],
+                    groupValue: l10n.code,
+                    selected: l10n.code == lang[0],
+                    selectedTileColor: const Color(0xFFE6F1FC),
+                    shape: const RoundedRectangleBorder(
+                        side: BorderSide(color: Color(0xFFCCD7E2))),
+                    onChanged: (v) async {
+                      if (v == null) return;
+                      await L10n.instance.set(v);
+                      if (context.mounted) Navigator.pop(context);
+                    },
+                  ),
+              ]),
+            ),
+            const Divider(height: 1),
+            Padding(padding: const EdgeInsets.all(10), child: Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(onPressed: () => Navigator.pop(context),
+                child: Text(tr('Cancel'))),
+            )),
+          ]),
+        ),
+      );
+    }
     return AlertDialog(
       title: Text('${tr('Language')} · ਭਾਸ਼ਾ · भाषा'),
       content: DropdownButtonFormField<String>(

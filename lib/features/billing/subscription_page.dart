@@ -7,8 +7,10 @@ import '../../core/format.dart';
 import '../../core/i18n.dart';
 import '../../core/subscription.dart';
 import '../../core/theme.dart';
+import '../../core/platform_support.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
+import '../../ui/windows_widgets.dart';
 
 /// FlavorFlow cloud subscription of this company: plan, validity, due
 /// invoice with cheque / NEFT instructions, payment history and the
@@ -46,7 +48,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
         final scheme = Theme.of(context).colorScheme;
         if (sub.loading && !s.available) return const Center(child: CircularProgressIndicator());
         if (!s.available) {
-          return ListView(padding: const EdgeInsets.all(20), children: [
+          final unavailable = ListView(padding: const EdgeInsets.all(20), children: [
             _back(context),
             const SizedBox(height: 12),
             SectionCard(
@@ -57,14 +59,23 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
               ),
             ),
           ]);
+          if (isWindowsPlatform) {
+            return WindowsDocumentWorkspace(
+              title: 'Subscription',
+              subtitle: 'Plan and payment status',
+              icon: Icons.workspace_premium_outlined,
+              content: unavailable,
+            );
+          }
+          return unavailable;
         }
         final due = s.dueInvoice;
         final pay = s.payment;
         final tint = s.isBlocked ? AppColors.red : (s.isGrace ? AppColors.orange : (s.isTrial ? AppColors.teal : AppColors.green));
         final stateLabel = s.isDemo ? tr('Demo') : s.isActive ? tr('Active') : s.isTrial ? tr('Free trial') : s.isGrace ? tr('Grace period') : s.state == 'suspended' ? tr('Suspended') : tr('Expired');
-        final wide = MediaQuery.sizeOf(context).width > 760;
+        final wide = isWindowsPlatform || MediaQuery.sizeOf(context).width > 760;
 
-        return RefreshIndicator(
+        final page = RefreshIndicator(
           onRefresh: () => sub.refresh(auth.api),
           child: ListView(physics: const AlwaysScrollableScrollPhysics(), padding: const EdgeInsets.all(20), children: [
             _back(context),
@@ -226,6 +237,20 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
             const SizedBox(height: 40),
           ]),
         );
+        if (isWindowsPlatform) {
+          return WindowsDocumentWorkspace(
+            title: 'Subscription',
+            subtitle: '${s.company} · ${s.planName} · ${stateLabel}',
+            icon: Icons.workspace_premium_outlined,
+            commandBar: WindowsCommandStrip(children: [
+              StatusChip(stateLabel.toUpperCase()),
+              if (s.until.isNotEmpty && !s.isDemo) Text('${tr('Valid until')}: ${fmtDate(s.isGrace ? s.graceUntil : s.until)}'),
+              OutlinedButton.icon(onPressed: () => sub.refresh(auth.api), icon: const Icon(Icons.refresh_rounded, size: 16), label: Text(tr('Refresh'))),
+            ]),
+            content: page,
+          );
+        }
+        return page;
       },
     );
   }

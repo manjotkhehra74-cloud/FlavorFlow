@@ -7,6 +7,7 @@ import '../../core/format.dart';
 import '../../core/i18n.dart';
 import '../../core/item_code.dart';
 import '../../core/theme.dart';
+import '../../core/platform_support.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
 import '../billing/item_history_page.dart' show showItemHistory;
@@ -126,6 +127,106 @@ class _ProductsPageState extends State<ProductsPage> {
     }
   }
 
+  Widget _buildWindowsProductRegister({
+    required AuthController auth,
+    required bool canManage,
+    required List<Map<String, dynamic>> all,
+    required List<Map<String, dynamic>> products,
+    required bool hasCodes,
+    required bool bomKnown,
+    required int bomCount,
+  }) {
+    final lowCount = all.where((p) => (p['min_stock_cb'] as num? ?? 0) > 0 && (p['qty_cb'] as num? ?? 0) <= (p['min_stock_cb'] as num? ?? 0)).length;
+    final search = TextField(
+      controller: _q,
+      onChanged: (_) => setState(() {}),
+      decoration: InputDecoration(
+        prefixIcon: const Icon(Icons.search_rounded, size: 18),
+        hintText: hasCodes ? tr('Search name / item code') : tr('Search product'),
+        suffixIcon: _q.text.isEmpty ? null : IconButton(icon: const Icon(Icons.clear_rounded, size: 17), onPressed: () => setState(_q.clear)),
+      ),
+    );
+    final controls = Wrap(spacing: 6, runSpacing: 6, children: [
+      ChoiceChip(label: Text(tr('All products')), selected: !_lowOnly && !_bomOnly, onSelected: (_) => setState(() { _lowOnly = false; _bomOnly = false; })),
+      if (bomKnown) ChoiceChip(label: Text(tr('With BOM')), selected: _bomOnly, avatar: const Icon(Icons.account_tree_outlined, size: 15), onSelected: (_) => setState(() { _bomOnly = !_bomOnly; _lowOnly = false; })),
+      ChoiceChip(label: Text(tr('Low stock')), selected: _lowOnly, avatar: const Icon(Icons.warning_amber_rounded, size: 15), onSelected: (_) => setState(() { _lowOnly = !_lowOnly; _bomOnly = false; })),
+      if (canManage)
+        FilledButton.icon(
+          onPressed: () async {
+            final saved = await showDialog<bool>(context: context, builder: (_) => const ProductFormDialog());
+            if (saved == true) _reload();
+          },
+          icon: const Icon(Icons.add_rounded, size: 16),
+          label: Text(tr('Add Product')),
+        ),
+      if (canManage)
+        OutlinedButton.icon(onPressed: () async { final saved = await showImportDialog(context, ImportKind.products); if (saved == true) _reload(); }, icon: const Icon(Icons.upload_file_rounded, size: 16), label: Text(tr('Import'))),
+      if (auth.canManageBilling)
+        OutlinedButton.icon(
+          onPressed: () async { final saved = await showDialog<bool>(context: context, builder: (_) => ProductRatesDialog(products: products)); if (saved == true) _reload(); },
+          icon: const Icon(Icons.currency_rupee_rounded, size: 16),
+          label: Text(tr('Rates & GST')),
+        ),
+      if (hasCodes) OutlinedButton.icon(onPressed: () => showLabelDialog(context, products), icon: const Icon(Icons.qr_code_2_rounded, size: 16), label: Text(tr('Labels'))),
+    ]);
+    final table = SectionCard(
+      title: IndustryPack.current.productsTitle,
+      trailing: Text('${products.length} ${tr('items')}'),
+      padding: EdgeInsets.zero,
+      child: products.isEmpty
+          ? EmptyState(_q.text.isEmpty && !_lowOnly && !_bomOnly ? tr('No products yet') : tr('No matching products'), icon: Icons.inventory_2_outlined)
+          : AppDataTable(
+              columns: [
+                if (hasCodes) 'Item Code', 'Product', 'Stock (${U.cb})', 'Packing', 'Min (${U.cb})', 'BOM', 'Status', '',
+              ],
+              rows: [
+                for (final product in products)
+                  [
+                    if (hasCodes) ItemCodeChip(ItemCode.of(product)),
+                    Text(product['name'] as String, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    qtyInt(product['qty_cb']),
+                    Text(_productPacking(product), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    qtyInt(product['min_stock_cb']),
+                    _hasBom(product) ? const StatusChip('LINKED') : const StatusChip('NOT LINKED'),
+                    (product['min_stock_cb'] as num? ?? 0) > 0 && (product['qty_cb'] as num? ?? 0) <= (product['min_stock_cb'] as num? ?? 0)
+                        ? const StatusChip('LOW')
+                        : const StatusChip('IN STOCK'),
+                    Row(mainAxisSize: MainAxisSize.min, children: [
+                      if (auth.canViewBilling)
+                        IconButton(tooltip: tr('Stock ledger'), icon: const Icon(Icons.history_rounded, size: 16), onPressed: () => showItemHistory(context, type: 'product', id: product['id'] as int, name: product['name'] as String)),
+                      if (canManage)
+                        IconButton(
+                          tooltip: tr('Edit'),
+                          icon: const Icon(Icons.edit_outlined, size: 16),
+                          onPressed: () async { final saved = await showDialog<bool>(context: context, builder: (_) => ProductFormDialog(product: product)); if (saved == true) _reload(); },
+                        ),
+                      if (canManage)
+                        IconButton(tooltip: tr('Delete'), icon: Icon(Icons.delete_outline_rounded, size: 16, color: Theme.of(context).colorScheme.error), onPressed: () => _deleteProduct(product)),
+                    ]),
+                  ],
+              ],
+            ),
+    );
+
+    return LayoutBuilder(builder: (context, constraints) {
+      return ListView(
+        padding: EdgeInsets.all(constraints.maxWidth < 640 ? 10 : 14),
+        children: [
+          _WindowsProductHeading(total: all.length, title: IndustryPack.current.productsTitle, onRefresh: _reload),
+          const SizedBox(height: 10),
+          _WindowsProductMetrics(total: all.length, bomCount: bomCount, lowCount: lowCount, bomKnown: bomKnown),
+          const SizedBox(height: 10),
+          if (constraints.maxWidth >= 900)
+            Row(children: [Expanded(flex: 3, child: search), const SizedBox(width: 10), Expanded(flex: 8, child: controls)])
+          else
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [search, const SizedBox(height: 8), controls]),
+          const SizedBox(height: 10),
+          table,
+        ],
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthController>();
@@ -145,6 +246,17 @@ class _ProductsPageState extends State<ProductsPage> {
           return true;
         }).toList();
         final bomCount = all.where(_hasBom).length;
+        if (isWindowsPlatform) {
+          return _buildWindowsProductRegister(
+            auth: auth,
+            canManage: canManage,
+            all: all,
+            products: products,
+            hasCodes: hasCodes,
+            bomKnown: bomKnown,
+            bomCount: bomCount,
+          );
+        }
         return ListView(
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
           children: [
@@ -244,6 +356,98 @@ class _ProductsPageState extends State<ProductsPage> {
           ],
         );
       },
+    );
+  }
+}
+
+String _productPacking(Map<String, dynamic> product) {
+  final pieces = qtyInt(product['bottles_per_cb']);
+  final trayCount = (product['bottles_per_tray'] as num? ?? 0) > 0 ? qtyInt(product['bottles_per_tray']) : '';
+  return trayCount.isEmpty ? '$pieces / ${U.cb}' : '$pieces / ${U.cb} · $trayCount / ${U.trayLc}';
+}
+
+class _WindowsProductHeading extends StatelessWidget {
+  final int total;
+  final String title;
+  final VoidCallback onRefresh;
+  const _WindowsProductHeading({required this.total, required this.title, required this.onRefresh});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        child: LayoutBuilder(builder: (context, constraints) {
+          final identity = Row(children: [
+            Container(width: 4, height: 38, color: AppBrand.blue),
+            const SizedBox(width: 10),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 18, fontWeight: FontWeight.w700)),
+              Text('$total active products · ${tr('Product master')}', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5)),
+            ])),
+          ]);
+          final refresh = OutlinedButton.icon(onPressed: onRefresh, icon: const Icon(Icons.refresh_rounded, size: 16), label: Text(tr('Refresh')));
+          if (constraints.maxWidth < 520) {
+            return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [identity, const SizedBox(height: 8), Align(alignment: Alignment.centerRight, child: refresh)]);
+          }
+          return Row(children: [Expanded(child: identity), const SizedBox(width: 10), refresh]);
+        }),
+      ),
+    );
+  }
+}
+
+class _WindowsProductMetrics extends StatelessWidget {
+  final int total;
+  final int bomCount;
+  final int lowCount;
+  final bool bomKnown;
+  const _WindowsProductMetrics({required this.total, required this.bomCount, required this.lowCount, required this.bomKnown});
+
+  @override
+  Widget build(BuildContext context) {
+    final metrics = <(String, String, IconData, Color)>[
+      ('Active products', qtyInt(total), Icons.inventory_2_outlined, AppColors.blue),
+      if (bomKnown) ('BOM linked', qtyInt(bomCount), Icons.account_tree_outlined, AppColors.teal),
+      ('Low stock', qtyInt(lowCount), Icons.warning_amber_rounded, AppColors.red),
+    ];
+    return LayoutBuilder(builder: (context, constraints) {
+      final columns = constraints.maxWidth >= 900 ? metrics.length : constraints.maxWidth >= 540 ? 2 : 1;
+      const gap = 8.0;
+      final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+      return Wrap(spacing: gap, runSpacing: gap, children: [
+        for (final metric in metrics)
+          SizedBox(width: width, height: 62, child: _WindowsProductMetric(label: metric.$1, value: metric.$2, icon: metric.$3, tint: metric.$4)),
+      ]);
+    });
+  }
+}
+
+class _WindowsProductMetric extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color tint;
+  const _WindowsProductMetric({required this.label, required this.value, required this.icon, required this.tint});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(color: scheme.surface, border: Border.all(color: scheme.outlineVariant), borderRadius: BorderRadius.circular(3)),
+      child: Row(children: [
+        Container(width: 3, height: double.infinity, color: tint),
+        const SizedBox(width: 10),
+        Icon(icon, size: 19, color: tint),
+        const SizedBox(width: 8),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w600)),
+          Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 17, fontWeight: FontWeight.w700)),
+        ])),
+        const SizedBox(width: 8),
+      ]),
     );
   }
 }
@@ -449,14 +653,21 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final desktopForm = isWindowsPlatform;
+    final nameField = TextField(controller: name, textCapitalization: TextCapitalization.words, decoration: InputDecoration(labelText: tr('Product name *'), hintText: IndustryPack.eg(IndustryPack.current.productExamples)));
+    final codeField = ItemCodeField(controller: code, seriesPrefix: 'FG', editing: widget.product != null);
     return AlertDialog(
       title: Text(widget.product == null ? 'Add Product' : 'Edit Product'),
       content: SizedBox(
-        width: 460,
+        width: desktopForm ? 760 : 460,
         child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          TextField(controller: name, textCapitalization: TextCapitalization.words, decoration: InputDecoration(labelText: tr('Product name *'), hintText: IndustryPack.eg(IndustryPack.current.productExamples))),
-          const SizedBox(height: 12),
-          ItemCodeField(controller: code, seriesPrefix: 'FG', editing: widget.product != null),
+          if (desktopForm)
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: nameField), const SizedBox(width: 12), Expanded(child: codeField)])
+          else ...[
+            nameField,
+            const SizedBox(height: 12),
+            codeField,
+          ],
           const SizedBox(height: 12),
           Row(children: [
             Expanded(child: TextField(controller: wcb, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: tr('Gross / with-${U.cb} reference (kg)')))),

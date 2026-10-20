@@ -10,9 +10,11 @@ import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../core/i18n.dart';
 import '../../core/item_code.dart';
+import '../../core/platform_support.dart';
 import '../../state/auth.dart';
 import '../../core/offline_queue.dart';
 import '../../ui/widgets.dart';
+import '../../ui/windows_widgets.dart';
 import '../billing/item_history_page.dart' show showItemHistory;
 import '../reports/report_pdf.dart';
 import '../products/import_dialog.dart';
@@ -44,6 +46,29 @@ class _PackingPageState extends State<PackingPage> with SingleTickerProviderStat
 
   @override
   Widget build(BuildContext context) {
+    final tabs = <WindowsModuleTab>[
+      const WindowsModuleTab('Packing Stock', Icons.inventory_2_outlined),
+      if (CompanyProfile.usesBom) const WindowsModuleTab('Packing per Product BOM', Icons.account_tree_outlined),
+      const WindowsModuleTab('Ledger', Icons.list_alt_outlined),
+    ];
+    final content = TabBarView(controller: _tab, children: [
+      _StockTab(lowOnly: widget.lowOnly),
+      if (CompanyProfile.usesBom) const _BomTab(),
+      const _LedgerTab(),
+    ]);
+    if (isWindowsPlatform) {
+      return AnimatedBuilder(
+        animation: _tab,
+        builder: (context, _) => WindowsModuleWorkspace(
+          title: 'Packing Material',
+          subtitle: 'Stock, product recipes and movements',
+          tabs: tabs,
+          selectedIndex: _tab.index,
+          onSelect: _tab.animateTo,
+          content: content,
+        ),
+      );
+    }
     return Column(children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
@@ -61,13 +86,7 @@ class _PackingPageState extends State<PackingPage> with SingleTickerProviderStat
           ),
         ),
       ),
-      Expanded(
-        child: TabBarView(controller: _tab, children: [
-          _StockTab(lowOnly: widget.lowOnly),
-          if (CompanyProfile.usesBom) const _BomTab(),
-          const _LedgerTab(),
-        ]),
-      ),
+      Expanded(child: content),
     ]);
   }
 }
@@ -98,6 +117,25 @@ class _RawMaterialPageState extends State<RawMaterialPage> with SingleTickerProv
 
   @override
   Widget build(BuildContext context) {
+    const tabs = <WindowsModuleTab>[
+      WindowsModuleTab('Raw Material Stock', Icons.inventory_2_outlined),
+      WindowsModuleTab('Ledger', Icons.list_alt_outlined),
+    ];
+    const views = [_StockTab(rawOnly: true), _LedgerTab(rawOnly: true)];
+    final content = TabBarView(controller: _tab, children: views);
+    if (isWindowsPlatform) {
+      return AnimatedBuilder(
+        animation: _tab,
+        builder: (context, _) => WindowsModuleWorkspace(
+          title: 'Raw Materials',
+          subtitle: 'Stock, recipes and movement history',
+          tabs: tabs,
+          selectedIndex: _tab.index,
+          onSelect: _tab.animateTo,
+          content: content,
+        ),
+      );
+    }
     return Column(children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
@@ -114,12 +152,7 @@ class _RawMaterialPageState extends State<RawMaterialPage> with SingleTickerProv
           ),
         ),
       ),
-      Expanded(
-        child: TabBarView(controller: _tab, children: const [
-          _StockTab(rawOnly: true),
-          _LedgerTab(rawOnly: true),
-        ]),
-      ),
+      Expanded(child: content),
     ]);
   }
 }
@@ -209,7 +242,7 @@ class _StockTabState extends State<_StockTab> {
         await Printing.sharePdf(bytes: bytes, filename: 'flavorflow-raw-material-$date.pdf');
       } else {
         final bytes = await context.read<AuthController>().api.getBytes('/reports/raw-material-stock.xlsx');
-        downloadBytes('flavorflow-raw-material-$date.xlsx', bytes,
+        await downloadBytes('flavorflow-raw-material-$date.xlsx', bytes,
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         if (mounted) showOk(context, 'Excel file downloaded.');
       }
@@ -282,6 +315,172 @@ class _StockTabState extends State<_StockTab> {
         rows.sort((a, b) => pairKey(a).compareTo(pairKey(b)));
         Widget chip(Widget child) => Padding(padding: const EdgeInsets.only(right: 8), child: child);
         Widget action(Widget child) => Padding(padding: const EdgeInsets.only(right: 8), child: child);
+        if (isWindowsPlatform) {
+          return Column(children: [
+            WindowsCommandStrip(children: [
+              SizedBox(
+                width: 250,
+                child: TextField(
+                  controller: _q,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    prefixIcon: const Icon(Icons.search_rounded, size: 17),
+                    hintText: hasCodes ? tr('Search name / item code') : tr('Search material'),
+                    suffixIcon: _q.text.isEmpty ? null : IconButton(icon: const Icon(Icons.clear_rounded, size: 16), onPressed: () => setState(_q.clear)),
+                  ),
+                ),
+              ),
+              DropdownButton<String>(
+                value: categoryList.contains(_category) ? _category : '',
+                underline: const SizedBox.shrink(),
+                items: [
+                  DropdownMenuItem(value: '', child: Text(tr('All categories'))),
+                  for (final cat in categoryList) DropdownMenuItem(value: cat, child: Text(tr(cat))),
+                ],
+                onChanged: (value) => setState(() { _category = value ?? ''; _lowOnly = false; }),
+              ),
+              FilterChip(
+                label: Text(tr('Low stock only')),
+                selected: _lowOnly,
+                onSelected: (value) => setState(() { _lowOnly = value; if (value) _category = ''; _future = _load(); }),
+              ),
+              if (canManage) ...[
+                FilledButton.icon(
+                  onPressed: () async {
+                    final saved = await showFastDialog<bool>(context, (_) => _TxnDialog(kind: 'receive', rawOnly: widget.rawOnly));
+                    if (saved == true) _reload();
+                  },
+                  icon: const Icon(Icons.south_west_rounded, size: 16),
+                  label: Text(tr('Receive Stock')),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final saved = await showFastDialog<bool>(context, (_) => _TxnDialog(kind: 'consume', rawOnly: widget.rawOnly));
+                    if (saved == true) _reload();
+                  },
+                  icon: const Icon(Icons.north_east_rounded, size: 16),
+                  label: Text(tr('Extra Consumption')),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final saved = await showFastDialog<bool>(context, (_) => _MaterialFormDialog(rawOnly: widget.rawOnly));
+                    if (saved == true) _reload();
+                  },
+                  icon: const Icon(Icons.add_rounded, size: 16),
+                  label: Text(tr('New Material')),
+                ),
+              ],
+              if (canManage && auth.canManageBilling)
+                OutlinedButton.icon(
+                  onPressed: () async { await context.push('/billing/purchases/new'); _reload(); },
+                  icon: const Icon(Icons.receipt_long_outlined, size: 16),
+                  label: Text(tr('Supplier Bill')),
+                ),
+              if (canManage && widget.rawOnly && CompanyProfile.usesRecipes)
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final saved = await showFastDialog<bool>(context, (_) => const _RecipeConsumeDialog());
+                    if (saved == true) _reload();
+                  },
+                  icon: const Icon(Icons.science_outlined, size: 16),
+                  label: Text(tr('Recipe Consumption')),
+                ),
+              if (canManage && widget.rawOnly && CompanyProfile.usesRecipes)
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final saved = await showFastDialog<bool>(context, (_) => const _RecipeEditDialog());
+                    if (saved == true) _reload();
+                  },
+                  icon: const Icon(Icons.edit_note_rounded, size: 16),
+                  label: Text(tr('Edit Recipes')),
+                ),
+              if (canManage && widget.rawOnly)
+                OutlinedButton.icon(
+                  onPressed: _exporting ? null : () => _exportRaw(all, pdf: true),
+                  icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
+                  label: Text(tr('Export PDF')),
+                ),
+              if (canManage && widget.rawOnly)
+                OutlinedButton.icon(
+                  onPressed: _exporting ? null : () => _exportRaw(all, pdf: false),
+                  icon: const Icon(Icons.table_view_outlined, size: 16),
+                  label: Text(tr('Export Excel')),
+                ),
+              if (canManage)
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final saved = await showImportDialog(context, ImportKind.materials, rawOnly: widget.rawOnly);
+                  if (saved == true) _reload();
+                },
+                icon: const Icon(Icons.upload_file_rounded, size: 16),
+                label: Text(tr('Import')),
+              ),
+              if (canManage && hasCodes)
+                OutlinedButton.icon(onPressed: () => showLabelDialog(context, rows), icon: const Icon(Icons.qr_code_2_rounded, size: 16), label: Text(tr('Labels'))),
+              if (canManage && all.isEmpty)
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final added = await showFastDialog<bool>(context, (_) => _StarterListDialog(rawOnly: widget.rawOnly));
+                    if (added == true) _reload();
+                  },
+                  icon: const Icon(Icons.playlist_add_rounded, size: 16),
+                  label: Text(tr('Add industry starter list')),
+                ),
+            ]),
+            Expanded(
+              child: ListView(padding: const EdgeInsets.all(14), children: [
+                Wrap(spacing: 10, runSpacing: 8, children: [
+                  SizedBox(width: 230, height: 110, child: KpiCard(label: widget.rawOnly ? 'Raw materials' : 'Packing materials', value: '${all.length}', icon: Icons.inventory_2_outlined, tint: AppColors.blue)),
+                  SizedBox(width: 230, height: 110, child: KpiCard(label: 'Categories', value: '${categories.length}', icon: Icons.category_outlined, tint: AppColors.teal)),
+                  SizedBox(width: 230, height: 110, child: KpiCard(label: 'Low stock', value: '$lowCount', icon: Icons.warning_amber_rounded, tint: lowCount > 0 ? AppColors.red : AppColors.green)),
+                ]),
+                const SizedBox(height: 12),
+                SectionCard(
+                  title: widget.rawOnly ? 'Raw Material Register' : 'Packing Material Register',
+                  child: rows.isEmpty
+                      ? EmptyState(_lowOnly ? 'Nothing running low 🎉' : 'No materials match the current filters.')
+                      : AppDataTable(
+                          columns: [if (hasCodes) 'Item Code', 'Material', 'Category', 'In Stock', 'Unit', 'Min Stock', 'Status', ''],
+                          rows: [
+                            for (final m in rows)
+                              [
+                                if (hasCodes) ItemCodeChip(ItemCode.of(m)),
+                                Text(m['name'] as String, style: const TextStyle(fontWeight: FontWeight.w600)),
+                                tr('${m['category']}'),
+                                Text(qtyInt(m['stock']), style: TextStyle(fontWeight: FontWeight.w700, color: (m['low'] as int) == 1 ? AppColors.red : null)),
+                                m['unit'],
+                                qtyInt(m['min_stock']),
+                                (m['low'] as int) == 1 ? const StatusChip('LOW') : const StatusChip('IN STOCK'),
+                                if (canManage || auth.canViewBilling)
+                                  Row(mainAxisSize: MainAxisSize.min, children: [
+                                    if (auth.canViewBilling)
+                                      IconButton(tooltip: tr('Stock ledger (all in / out with doc numbers)'), icon: const Icon(Icons.history_rounded, size: 17), onPressed: () => showItemHistory(context, type: 'material', id: m['id'] as int, name: m['name'] as String)),
+                                    if (canManage)
+                                      IconButton(tooltip: tr('Edit material & stock'), icon: const Icon(Icons.edit_outlined, size: 17), onPressed: () async {
+                                        final saved = await showFastDialog<bool>(context, (_) => _MaterialFormDialog(material: m, rawOnly: widget.rawOnly));
+                                        if (saved == true) _reload();
+                                      }),
+                                    if (canManage)
+                                      IconButton(tooltip: tr('Delete material'), icon: Icon(Icons.delete_outline_rounded, size: 17, color: Theme.of(context).colorScheme.error), onPressed: () => _deleteMaterial(m)),
+                                  ])
+                                else
+                                  const SizedBox.shrink(),
+                              ],
+                          ],
+                        ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  widget.rawOnly
+                      ? (CompanyProfile.usesRecipes ? 'Recipe Consumption or Extra Consumption reduces raw material stock.' : 'Extra Consumption reduces raw material stock against a batch or job.')
+                      : 'Packing material is consumed by completed production batches according to each product BOM.',
+                  style: TextStyle(fontSize: 11.5, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                ),
+              ]),
+            ),
+          ]);
+        }
         return ListView(padding: const EdgeInsets.all(20), children: [
           _PackingHealthCard(
             itemCount: all.length,
@@ -607,6 +806,53 @@ class _BomTabState extends State<_BomTab> {
         if (snap.hasError) return ErrorState(snap.error!, onRetry: () => setState(() => _future = _load()));
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
         final bom = snap.data!;
+        if (isWindowsPlatform) {
+          final componentCount = bom.fold<int>(0, (sum, entry) => sum + (entry['items'] as List).length);
+          final desktopRows = <List<dynamic>>[];
+          for (final entry in bom) {
+            final product = (entry['product'] as Map).cast<String, dynamic>();
+            final productLabel = ItemCode.label(product);
+            final items = (entry['items'] as List).cast<Map<String, dynamic>>();
+            if (items.isEmpty) {
+              desktopRows.add([productLabel, 'No BOM recorded', '—', '—', if (CompanyProfile.usesTrays) '—', '—', '—']);
+            } else {
+              for (final item in items) {
+                desktopRows.add([
+                  Text(productLabel, style: const TextStyle(fontWeight: FontWeight.w600)),
+                  item['material'],
+                  tr('${item['category']}'),
+                  (item['perCb'] as num) > 0 ? qty(item['perCb']) : '—',
+                  if (CompanyProfile.usesTrays) (item['perTray'] as num) > 0 ? qty(item['perTray']) : '—',
+                  item['unit'],
+                  qtyInt(item['inStock']),
+                ]);
+              }
+            }
+          }
+          return Column(children: [
+            WindowsCommandStrip(children: [
+              Text('${tr('Packing BOM Register')} · ${bom.length} ${tr('products')} · $componentCount ${tr('material lines')}', style: const TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(width: 10),
+              Text(CompanyProfile.usesTrays ? '${U.cb} and ${U.trayLc} consumption per product' : 'Consumption per ${U.cb}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            ]),
+            Expanded(child: ListView(padding: const EdgeInsets.all(14), children: [
+              Wrap(spacing: 10, runSpacing: 8, children: [
+                SizedBox(width: 220, height: 110, child: KpiCard(label: 'Products', value: '${bom.length}', icon: Icons.inventory_2_outlined, tint: AppColors.blue)),
+                SizedBox(width: 220, height: 110, child: KpiCard(label: 'BOM material lines', value: '$componentCount', icon: Icons.account_tree_outlined, tint: AppColors.teal)),
+              ]),
+              const SizedBox(height: 12),
+              SectionCard(
+                title: 'Packing Material by Product',
+                child: desktopRows.isEmpty
+                    ? const EmptyState('No products yet', icon: Icons.inventory_2_outlined)
+                    : AppDataTable(
+                        columns: ['Product', 'Material', 'Category', 'Per ${U.cb}', if (CompanyProfile.usesTrays) 'Per ${U.tray}', 'Unit', 'In Stock'],
+                        rows: desktopRows,
+                      ),
+              ),
+            ])),
+          ]);
+        }
         return ListView(padding: const EdgeInsets.all(20), children: [
           Text(
               CompanyProfile.usesTrays
@@ -694,6 +940,57 @@ class _LedgerTabState extends State<_LedgerTab> {
         if (snap.hasError) return ErrorState(snap.error!, onRetry: () => setState(() => _future = _load()));
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
         final rows = snap.data!;
+        if (isWindowsPlatform) {
+          final received = rows.where((t) => t['txn_type'] == 'RECEIVED').length;
+          final consumed = rows.length - received;
+          return Column(children: [
+            WindowsCommandStrip(children: [
+              Text(tr('Movement type'), style: const TextStyle(fontWeight: FontWeight.w700)),
+              DropdownButton<String>(
+                value: _type,
+                underline: const SizedBox.shrink(),
+                items: [
+                  DropdownMenuItem(value: '', child: Text(tr('All movements'))),
+                  DropdownMenuItem(value: 'RECEIVED', child: Text(tr('Received'))),
+                  DropdownMenuItem(value: 'CONSUMED', child: Text(tr('Consumed'))),
+                ],
+                onChanged: (value) => setState(() { _type = value ?? ''; _future = _load(); }),
+              ),
+              Text('${rows.length} ${tr('records')}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            ]),
+            Expanded(child: ListView(padding: const EdgeInsets.all(14), children: [
+              Wrap(spacing: 10, runSpacing: 8, children: [
+                SizedBox(width: 220, height: 110, child: KpiCard(label: 'Ledger entries', value: '${rows.length}', icon: Icons.list_alt_outlined, tint: AppColors.blue)),
+                SizedBox(width: 220, height: 110, child: KpiCard(label: 'Receipts', value: '$received', icon: Icons.south_west_rounded, tint: AppColors.green)),
+                SizedBox(width: 220, height: 110, child: KpiCard(label: 'Consumption', value: '$consumed', icon: Icons.north_east_rounded, tint: AppColors.orange)),
+              ]),
+              const SizedBox(height: 12),
+              SectionCard(
+                title: 'Receipts & Consumption Ledger',
+                child: rows.isEmpty
+                    ? const EmptyState('No entries yet')
+                    : AppDataTable(
+                        columns: ['Date', 'Material', 'Type', 'Qty', 'Reference', U.ize('Batch'), 'By'],
+                        rows: [
+                          for (final t in rows)
+                            [
+                              fmtDateWithDay(t['txn_date']),
+                              Text(t['material_name'] as String, style: const TextStyle(fontWeight: FontWeight.w600)),
+                              StatusChip(t['txn_type'] == 'RECEIVED' ? 'IN' : 'OUT'),
+                              Text('${t['txn_type'] == 'RECEIVED' ? '+' : '−'}${qtyInt(t['qty'])}',
+                                  style: TextStyle(fontWeight: FontWeight.w700, color: t['txn_type'] == 'RECEIVED' ? AppColors.green : AppColors.red)),
+                              (t['reference'] as String? ?? '').isEmpty
+                                  ? ((t['remark'] as String? ?? '').isEmpty ? '—' : t['remark'])
+                                  : Text(t['reference'] as String, style: TextStyle(fontWeight: (t['reference'] as String).startsWith('Bill ') ? FontWeight.w700 : FontWeight.w400)),
+                              t['batch_code'] ?? '—',
+                              t['created_by_name'] ?? '—',
+                            ],
+                        ],
+                      ),
+              ),
+            ])),
+          ]);
+        }
         return ListView(padding: const EdgeInsets.all(20), children: [
           Wrap(spacing: 8, runSpacing: 8, children: [
             for (final t in ['', 'RECEIVED', 'CONSUMED'])
@@ -887,12 +1184,16 @@ class _TxnDialogState extends State<_TxnDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final quantityField = TextField(controller: qty, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${tr('Quantity')} (${_material?['unit'] ?? 'pcs'}) *'));
+    final referenceField = isReceive
+        ? TextField(controller: reference, decoration: InputDecoration(labelText: tr('Supplier bill no / reference'), hintText: 'e.g. ASM/1187 · Ambala Sugar Mills', helperText: tr('Tip: "Enter Supplier Bill" records the full bill with GST and adds stock for all items at once.'), helperMaxLines: 2))
+        : TextField(controller: reference, decoration: InputDecoration(labelText: tr('Reference (batch / purpose)'), hintText: 'e.g. batch B-2603 / QC samples'));
     return AlertDialog(
       title: Text(isReceive
           ? (widget.rawOnly ? 'Receive Raw Material' : 'Receive Packing Stock')
           : tr('Extra Consumption')),
       content: SizedBox(
-        width: 400,
+        width: isWindowsPlatform ? 720 : 400,
         child: loadError != null
             ? Text(loadError!)
             : materials.isEmpty
@@ -928,12 +1229,17 @@ class _TxnDialogState extends State<_TxnDialog> {
                             style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12.5)),
                       ),
                     const SizedBox(height: 12),
-                    TextField(controller: qty, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${tr('Quantity')} (${_material?['unit'] ?? 'pcs'}) *')),
-                    const SizedBox(height: 12),
-                    if (isReceive)
-                      TextField(controller: reference, decoration: InputDecoration(labelText: tr('Supplier bill no / reference'), hintText: 'e.g. ASM/1187 · Ambala Sugar Mills', helperText: tr('Tip: "Enter Supplier Bill" records the full bill with GST and adds stock for all items at once.'), helperMaxLines: 2))
-                    else
-                      TextField(controller: reference, decoration: InputDecoration(labelText: tr('Reference (batch / purpose)'), hintText: 'e.g. batch B-2603 / QC samples')),
+                    if (isWindowsPlatform)
+                      Row(children: [
+                        Expanded(child: quantityField),
+                        const SizedBox(width: 12),
+                        Expanded(child: referenceField),
+                      ])
+                    else ...[
+                      quantityField,
+                      const SizedBox(height: 12),
+                      referenceField,
+                    ],
                     const SizedBox(height: 12),
                     TextField(controller: remark, decoration: InputDecoration(labelText: tr('Remark (optional)'))),
                   ]),
@@ -1106,12 +1412,21 @@ class _MaterialFormDialogState extends State<_MaterialFormDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final nameField = TextField(
+      controller: name,
+      textCapitalization: TextCapitalization.words,
+      decoration: InputDecoration(
+        labelText: tr('Material name *'),
+        hintText: IndustryPack.eg(isRaw ? IndustryPack.current.rawExamples : IndustryPack.current.packingExamples),
+      ),
+    );
+    final codeField = ItemCodeField(controller: code, seriesPrefix: isRaw ? 'RM' : 'PM', editing: editing);
     return AlertDialog(
       title: Text(editing
           ? (isRaw ? 'Edit Raw Material' : 'Edit Packing Material')
           : (isRaw ? 'New Raw Material' : 'New Packing Material')),
       content: SizedBox(
-        width: 380,
+        width: isWindowsPlatform ? 720 : 380,
         child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             if (editing)
@@ -1120,16 +1435,17 @@ class _MaterialFormDialogState extends State<_MaterialFormDialog> {
                 child: Text('Stock entered here replaces the current count (use for opening stock / corrections).',
                     style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
               ),
-            TextField(
-              controller: name,
-              textCapitalization: TextCapitalization.words,
-              decoration: InputDecoration(
-                labelText: tr('Material name *'),
-                hintText: IndustryPack.eg(isRaw ? IndustryPack.current.rawExamples : IndustryPack.current.packingExamples),
-              ),
-            ),
-            const SizedBox(height: 12),
-            ItemCodeField(controller: code, seriesPrefix: isRaw ? 'RM' : 'PM', editing: editing),
+            if (isWindowsPlatform)
+              Row(children: [
+                Expanded(child: nameField),
+                const SizedBox(width: 12),
+                Expanded(child: codeField),
+              ])
+            else ...[
+              nameField,
+              const SizedBox(height: 12),
+              codeField,
+            ],
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               key: ValueKey('cat-$category'),

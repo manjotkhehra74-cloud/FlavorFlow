@@ -5,8 +5,10 @@ import '../../core/company.dart';
 import '../../core/download.dart';
 import '../../core/theme.dart';
 import '../../core/i18n.dart';
+import '../../core/platform_support.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
+import '../../ui/windows_widgets.dart';
 import 'report_pdf.dart';
 
 /// Role-scoped reports with export to PDF & Excel — the server decides
@@ -95,6 +97,47 @@ class _ReportMetric extends StatelessWidget {
         Text(value, style: TextStyle(color: scheme.onSurface, fontSize: 22, fontWeight: FontWeight.w800)),
         Text('$label · $sub', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w700)),
       ]),
+    );
+  }
+}
+
+/// Native desktop summary derived exclusively from the authorized report list.
+class _WindowsReportSummary extends StatelessWidget {
+  final List<Map<String, dynamic>> reports;
+  const _WindowsReportSummary({required this.reports});
+
+  @override
+  Widget build(BuildContext context) {
+    int count(String pattern) => reports.where((r) => RegExp(pattern, caseSensitive: false)
+        .hasMatch('${r['id'] ?? ''} ${r['title'] ?? ''}')).length;
+    final tiles = [
+      ('Reports Available', reports.length, Icons.description_outlined),
+      ('Stock Reports', count('stock|inventory|material|ledger'), Icons.inventory_2_outlined),
+      ('Production Reports', count('production|batch|packing'), Icons.factory_outlined),
+      ('Dispatch Reports', count('dispatch|shipment'), Icons.local_shipping_outlined),
+    ];
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface,
+          border: Border.all(color: const Color(0xFFC7D1DB)), borderRadius: BorderRadius.circular(4)),
+      child: LayoutBuilder(builder: (context, constraints) {
+        final width = constraints.maxWidth / (constraints.maxWidth < 700 ? 2 : 4);
+        return Wrap(children: [for (final (label, value, icon) in tiles)
+          SizedBox(width: width, child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+            child: Row(children: [
+              Icon(icon, color: const Color(0xFF214E6B), size: 25),
+              const SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, color: Color(0xFF627588))),
+                Text('$value', style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
+              ])),
+            ]),
+          )),
+        ]);
+      }),
     );
   }
 }
@@ -199,7 +242,7 @@ class _ReportsPageState extends State<ReportsPage> {
       final id = _selected!['id'] as String;
       final bytes = await context.read<AuthController>().api.getBytes('/reports/$id.xlsx');
       final date = DateTime.now().toIso8601String().substring(0, 10);
-      downloadBytes('flavorflow-$id-$date.xlsx', bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      await downloadBytes('flavorflow-$id-$date.xlsx', bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       if (mounted) showOk(context, 'Excel file downloaded.');
     } catch (e) {
       if (mounted) showErr(context, e);
@@ -219,7 +262,7 @@ class _ReportsPageState extends State<ReportsPage> {
         rows: _rows,
       );
       final date = DateTime.now().toIso8601String().substring(0, 10);
-      downloadBytes('flavorflow-${_data!['id']}-$date.pdf', bytes, 'application/pdf');
+      await downloadBytes('flavorflow-${_data!['id']}-$date.pdf', bytes, 'application/pdf');
       if (mounted) showOk(context, 'PDF downloaded.');
     } catch (e) {
       if (mounted) showErr(context, e);
@@ -238,7 +281,45 @@ class _ReportsPageState extends State<ReportsPage> {
         final reports = snap.data!;
         if (reports.isEmpty) return const EmptyState('No reports available for your role', icon: Icons.bar_chart_rounded);
         return LayoutBuilder(builder: (context, c) {
-          final wide = c.maxWidth >= 900;
+          final windows = isWindowsPlatform;
+          final wide = windows || c.maxWidth >= 900;
+          if (windows) {
+            return WindowsDocumentWorkspace(
+              title: 'Reports',
+              subtitle: '${reports.length} role-authorized reports · PDF and Excel export',
+              icon: Icons.bar_chart_rounded,
+              commandBar: WindowsCommandStrip(children: [
+                Text('${tr('Report Library')}: ${reports.length}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                if (_selected != null) ...[
+                  const SizedBox(width: 10),
+                  Text('· ${U.ize(tr(_displayTitle(_selected!)))}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                ],
+              ]),
+              content: Column(children: [
+                _WindowsReportSummary(reports: reports),
+                Expanded(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                SizedBox(
+                  width: 268,
+                  child: Container(
+                    decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface, border: Border.all(color: const Color(0xFFC7D1DB))),
+                    child: Column(children: [
+                      Container(
+                        height: 36,
+                        alignment: Alignment.centerLeft,
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                        child: Text(tr('Report Library'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                      ),
+                      Expanded(child: ListView(padding: const EdgeInsets.all(7), children: [for (final r in reports) _reportTile(r)])),
+                    ]),
+                  ),
+                ),
+                const VerticalDivider(width: 1, thickness: 1, color: Color(0xFFC7D1DB)),
+                Expanded(child: Padding(padding: const EdgeInsets.all(12), child: _reportBody())),
+                ])),
+              ]),
+            );
+          }
           return ListView(padding: const EdgeInsets.all(18), children: [
             _ReportsOverview(reports: reports),
             const SizedBox(height: 16),
@@ -302,8 +383,14 @@ class _ReportsPageState extends State<ReportsPage> {
           ),
           padding: EdgeInsets.fromLTRB(sel ? 9 : 12, 9, 10, 9),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(U.ize(tr(_displayTitle(r))),
-                style: TextStyle(fontSize: 12.6, fontWeight: FontWeight.w600, color: sel ? Theme.of(context).colorScheme.onPrimaryContainer : Theme.of(context).colorScheme.onSurface)),
+            Row(children: [
+              if (isWindowsPlatform) ...[
+                Icon(Icons.description_outlined, size: 17, color: sel ? AppColors.blue : Theme.of(context).colorScheme.onSurfaceVariant),
+                const SizedBox(width: 9),
+              ],
+              Expanded(child: Text(U.ize(tr(_displayTitle(r))),
+                style: TextStyle(fontSize: 12.6, fontWeight: FontWeight.w600, color: sel ? Theme.of(context).colorScheme.onPrimaryContainer : Theme.of(context).colorScheme.onSurface))),
+            ]),
             const SizedBox(height: 2),
             Text(U.ize(tr(r['desc'] as String)),
                 maxLines: 2,

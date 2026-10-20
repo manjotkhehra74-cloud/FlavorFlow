@@ -86,7 +86,7 @@ app.post('/api/saas/register', express.json({ limit: '50kb' }), (req, res) => {
   const name = String(b.company || '').trim();
   const industry = String(b.industry || '').trim();
   const adminName = String(b.adminName || '').trim();
-  const adminEmail = String(b.adminEmail || '').trim().toLowerCase();
+  const adminEmail = String(b.adminEmail || '').trim().toLowerCase().replace(/@flavorflow\.in$/, '@flavorflow.co.in');
   const adminPassword = String(b.adminPassword || '');
   if (name.length < 3) return res.status(400).json({ error: 'Company name required (min 3 characters).' });
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(adminEmail)) return res.status(400).json({ error: 'A valid admin email is required.' });

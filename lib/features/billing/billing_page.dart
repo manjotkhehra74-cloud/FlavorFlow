@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -6,9 +7,11 @@ import '../../core/company.dart';
 import '../../core/download.dart';
 import '../../core/format.dart';
 import '../../core/i18n.dart';
+import '../../core/platform_support.dart';
 import '../../core/theme.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
+import '../../ui/windows_widgets.dart';
 
 /// Billing — OUTWARD (GST tax invoices, receipts, receivables) and INWARD
 /// (supplier bills entered with the supplier's invoice number → stock in,
@@ -38,6 +41,62 @@ class _BillingPageState extends State<BillingPage> with SingleTickerProviderStat
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthController>();
+    const tabs = <WindowsModuleTab>[
+      WindowsModuleTab('Sales Invoices', Icons.receipt_long_outlined),
+      WindowsModuleTab('Receivable', Icons.payments_outlined),
+      WindowsModuleTab('Purchases (Inward)', Icons.input_outlined),
+      WindowsModuleTab('Payable', Icons.account_balance_wallet_outlined),
+      WindowsModuleTab('Parties', Icons.groups_outlined),
+      WindowsModuleTab('GST Register', Icons.assessment_outlined),
+      WindowsModuleTab('Billing Setup', Icons.settings_outlined),
+    ];
+    final content = TabBarView(controller: _tab, children: const [
+      _InvoicesTab(),
+      _ReceivablesTab(),
+      _PurchasesTab(),
+      _PayablesTab(),
+      _PartiesTab(),
+      _RegisterTab(),
+      _SettingsTab(),
+    ]);
+    if (isWindowsPlatform) {
+      return AnimatedBuilder(
+        animation: _tab,
+        builder: (context, _) => WindowsModuleWorkspace(
+          title: 'Billing',
+          subtitle: 'Sales, purchases, balances and tax registers',
+          tabs: tabs,
+          selectedIndex: _tab.index,
+          onSelect: _tab.animateTo,
+          commandBar: WindowsCommandStrip(children: [
+            if (auth.canManageBilling) ...[
+              FilledButton.icon(
+                onPressed: () => context.push('/billing/new'),
+                icon: const Icon(Icons.add_rounded, size: 16),
+                label: Text(tr('New Invoice')),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => context.push('/billing/purchases/new'),
+                icon: const Icon(Icons.move_to_inbox_outlined, size: 16),
+                label: Text(tr('Supplier Bill')),
+              ),
+            ],
+            OutlinedButton.icon(
+              onPressed: () => _tab.animateTo(4),
+              icon: const Icon(Icons.groups_outlined, size: 16),
+              label: Text(tr('Parties')),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => _tab.animateTo(5),
+              icon: const Icon(Icons.assessment_outlined, size: 16),
+              label: Text(tr('GST Register')),
+            ),
+          ]),
+          content: content,
+        ),
+      );
+    }
     return Column(children: [
       Material(
         color: Theme.of(context).colorScheme.surface,
@@ -59,17 +118,7 @@ class _BillingPageState extends State<BillingPage> with SingleTickerProviderStat
           ),
         ),
       ),
-      Expanded(
-        child: TabBarView(controller: _tab, children: const [
-          _InvoicesTab(),
-          _ReceivablesTab(),
-          _PurchasesTab(),
-          _PayablesTab(),
-          _PartiesTab(),
-          _RegisterTab(),
-          _SettingsTab(),
-        ]),
-      ),
+      Expanded(child: content),
     ]);
   }
 }
@@ -503,7 +552,30 @@ class _PartiesTabState extends State<_PartiesTab> {
   Future<void> _delete(Map<String, dynamic> p) async {
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => !kIsWeb && defaultTargetPlatform == TargetPlatform.windows
+          ? Dialog(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 520),
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Container(color: const Color(0xFFE2E9EF), padding: const EdgeInsets.all(16),
+                  child: Row(children: [
+                    const Icon(Icons.warning_amber_outlined, color: AppColors.red),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text('${tr('Remove')} ${p['name']}?',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
+                  ])),
+                Padding(padding: const EdgeInsets.all(20),
+                  child: Text(tr('The party is hidden from new invoices. Old invoices keep their details.'))),
+                const Divider(height: 1),
+                Padding(padding: const EdgeInsets.all(12), child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end, children: [
+                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('Keep party'))),
+                    const SizedBox(width: 8),
+                    FilledButton(style: FilledButton.styleFrom(backgroundColor: AppColors.red),
+                      onPressed: () => Navigator.pop(ctx, true), child: Text(tr('Remove'))),
+                  ],
+                )),
+              ]),
+            ))
+          : AlertDialog(
         title: Text('${tr('Remove')} ${p['name']}?'),
         content: Text(tr('The party is hidden from new invoices. Old invoices keep their details.')),
         actions: [
@@ -659,10 +731,83 @@ class _PartyFormDialogState extends State<PartyFormDialog> {
 
   @override
   Widget build(BuildContext context) {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+      return Dialog(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 800),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Container(padding: const EdgeInsets.all(18), color: const Color(0xFFE2E9EF),
+            child: Text(widget.party == null
+              ? (widget.asSupplier ? tr('Add Supplier') : tr('Add Party')) : tr('Edit Party'),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
+          Flexible(child: SingleChildScrollView(padding: const EdgeInsets.all(20),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                const Text('IDENTITY & ROLES', style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 14),
+                TextField(controller: name, textCapitalization: TextCapitalization.words,
+                  decoration: InputDecoration(labelText: tr('Party name *'))),
+                const SizedBox(height: 12),
+                CheckboxListTile(dense: true, contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading, value: isCustomer,
+                  onChanged: (v) => setState(() => isCustomer = v ?? false),
+                  title: Text(tr('Customer')), subtitle: Text(tr('we sell to'))),
+                CheckboxListTile(dense: true, contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading, value: isSupplier,
+                  onChanged: (v) => setState(() => isSupplier = v ?? false),
+                  title: Text(tr('Supplier')), subtitle: Text(tr('we buy from'))),
+                const SizedBox(height: 12),
+                TextField(controller: gstin, textCapitalization: TextCapitalization.characters,
+                  maxLength: 15,
+                  decoration: InputDecoration(labelText: 'GSTIN',
+                    hintText: tr('blank = unregistered (B2C)'), counterText: ''),
+                  onChanged: (v) {
+                    final code = v.trim();
+                    if (code.length >= 2 && kGstStates.containsKey(code.substring(0, 2)) && state.isEmpty) {
+                      setState(() => state = code.substring(0, 2));
+                    }
+                  }),
+              ])),
+              const SizedBox(width: 24),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                const Text('BILLING & CONTACT', style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 14),
+                DropdownButtonFormField<String>(key: ValueKey('desktop-state-$state'),
+                  initialValue: state, isExpanded: true,
+                  decoration: InputDecoration(labelText: tr('State (place of supply)')),
+                  items: [
+                    DropdownMenuItem(value: '', child: Text(tr('Same as company'))),
+                    for (final e in kGstStates.entries) DropdownMenuItem(value: e.key,
+                      child: Text('${e.key} · ${e.value}', overflow: TextOverflow.ellipsis)),
+                  ], onChanged: (v) => setState(() => state = v ?? '')),
+                const SizedBox(height: 12),
+                TextField(controller: address, maxLines: 2,
+                  decoration: InputDecoration(labelText: tr('Billing address'))),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Expanded(child: TextField(controller: phone, keyboardType: TextInputType.phone,
+                    decoration: InputDecoration(labelText: tr('Phone')))),
+                  const SizedBox(width: 10),
+                  Expanded(child: TextField(controller: credit, keyboardType: TextInputType.number,
+                    decoration: InputDecoration(labelText: tr('Credit days')))),
+                ]),
+                const SizedBox(height: 12),
+                TextField(controller: email, keyboardType: TextInputType.emailAddress,
+                  decoration: InputDecoration(labelText: tr('Email'))),
+              ])),
+            ]))),
+          const Divider(height: 1),
+          Padding(padding: const EdgeInsets.all(12), child: Row(mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(onPressed: busy ? null : () => Navigator.pop(context), child: Text(tr('Cancel'))),
+              const SizedBox(width: 8),
+              FilledButton(onPressed: busy ? null : _save, child: Text(busy ? tr('Saving…') : tr('Save'))),
+            ])),
+        ]),
+      ));
+    }
     return AlertDialog(
       title: Text(widget.party == null ? (widget.asSupplier ? tr('Add Supplier') : tr('Add Party')) : tr('Edit Party')),
       content: SizedBox(
-        width: 460,
+        width: isWindowsPlatform ? 720 : 460,
         child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             TextField(controller: name, textCapitalization: TextCapitalization.words, decoration: InputDecoration(labelText: tr('Party name *'), hintText: widget.asSupplier ? 'e.g. Ambala Sugar Mills' : 'e.g. Guru Nanak Traders')),
@@ -752,7 +897,7 @@ class _RegisterTabState extends State<_RegisterTab> {
     setState(() => exporting = true);
     try {
       final bytes = await context.read<AuthController>().api.getBytes('/billing/$_path.csv?from=${ymd(from)}&to=${ymd(to)}');
-      downloadBytes('${purchase ? 'purchase' : 'gst'}-register-${ymd(from)}-to-${ymd(to)}.csv', bytes, 'text/csv');
+      await downloadBytes('${purchase ? 'purchase' : 'gst'}-register-${ymd(from)}-to-${ymd(to)}.csv', bytes, 'text/csv');
       if (mounted) showOk(context, tr('GST register exported (CSV) — open in Excel / share with your CA.'));
     } catch (e) {
       if (mounted) showErr(context, e);

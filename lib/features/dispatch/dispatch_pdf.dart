@@ -8,7 +8,7 @@ import '../../core/company.dart';
 import '../../core/i18n.dart';
 import '../../core/pdf_fonts.dart';
 
-/// PDF builder for dispatch challans & truck-loading estimates.
+/// PDF builder for confirmed dispatch challans.
 /// Roboto is embedded so all glyphs render correctly.
 class DispatchPdf {
   static pw.Font? _regular;
@@ -72,51 +72,9 @@ class DispatchPdf {
     return doc.save();
   }
 
-  /// Truck Loading Calculator estimate (pre-dispatch loading plan).
-  static Future<Uint8List> estimate({
-    required List<Map<String, dynamic>> lines,
-    required Map<String, dynamic> totals,
-    String? truckNumber,
-    String? dispatchDate,
-    String? destination,
-  }) async {
-    await _loadFonts();
-    final rows = <List<String>>[
-      for (var i = 0; i < lines.length; i++)
-        [
-          '${i + 1}',
-          '${lines[i]['productName']}',
-          '${lines[i]['cartons']}',
-          if (_trays) '${lines[i]['trays'] ?? 0}',
-          '${lines[i]['totalBottles']}',
-          kg(lines[i]['cartonWeight']),
-          if (_trays) kg(lines[i]['trayWeight'] ?? 0),
-          kg(lines[i]['grossWeight']),
-        ],
-    ];
-    final doc = pw.Document();
-    doc.addPage(_page(
-      title: tr('Truck Loading Plan').toUpperCase(),
-      subtitle: tr('Pre-dispatch weight estimate'),
-      meta: [
-        [tr('Truck / Vehicle No.'), (truckNumber == null || truckNumber.isEmpty) ? '—' : truckNumber],
-        [tr('Dispatch Date'), (dispatchDate == null || dispatchDate.isEmpty) ? '—' : _dateWithDay(dispatchDate)],
-        [tr('Destination'), (destination == null || destination.isEmpty) ? '—' : destination],
-      ],
-      rows: rows,
-      totals: [
-        'TOTAL', '', '${totals['totalCartons']}', if (_trays) '${totals['totalTrays'] ?? 0}', '${totals['totalBottles']}',
-        kg(totals['cartonWeight']), if (_trays) kg(totals['trayWeight'] ?? 0), kg(totals['grossWeight']),
-      ],
-      footnote: tr('Estimate only — actual challan is generated at dispatch.'),
-    ));
-    return doc.save();
-  }
-
   /// Tray columns only for industries that use the secondary unit.
   static bool get _trays => CompanyProfile.usesTrays;
   static List<String> get _headers => ['#', tr('Product'), tr(U.carton), if (_trays) tr(U.tray), tr(U.piece), '${U.cb} ${tr('Wt')}', if (_trays) '${tr(U.tray)} ${tr('Wt')}', tr('Gross Wt')];
-  static List<String> get _headersWithBatch => _hdrs(batch: true);
   static List<String> _hdrs({bool code = false, bool batch = false}) => ['#', tr('Product'), if (code) tr('Item Code'), if (batch) tr('Batch'), tr(U.carton), if (_trays) tr(U.tray), tr(U.piece), '${U.cb} ${tr('Wt')}', if (_trays) '${tr(U.tray)} ${tr('Wt')}', tr('Gross Wt')];
 
   static pw.Page _page({

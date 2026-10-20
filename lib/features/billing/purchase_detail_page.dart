@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -7,8 +8,10 @@ import '../../core/format.dart';
 import '../../core/i18n.dart';
 import '../../core/item_code.dart';
 import '../../core/theme.dart';
+import '../../core/platform_support.dart';
 import '../../state/auth.dart';
 import '../../ui/widgets.dart';
+import '../../ui/windows_widgets.dart';
 import 'billing_page.dart' show gstStateName;
 import 'item_history_page.dart' show showItemHistory;
 
@@ -38,7 +41,36 @@ class _PurchaseDetailPageState extends State<PurchaseDetailPage> {
   Future<void> _deletePayment(Map<String, dynamic> pay) async {
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => !kIsWeb && defaultTargetPlatform == TargetPlatform.windows
+          ? Dialog(alignment: Alignment.centerRight, insetPadding: EdgeInsets.zero,
+              shape: const RoundedRectangleBorder(),
+              child: SizedBox(width: 420, height: double.infinity,
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Container(color: const Color(0xFFE2E9EF), padding: const EdgeInsets.all(20),
+                    child: Text(tr('Delete this payment?'),
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
+                  Expanded(child: Padding(padding: const EdgeInsets.all(22),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('${inr(pay['amount'])} · ${(pay['mode'] ?? '').toString().toUpperCase()}'),
+                      const SizedBox(height: 8),
+                      Text('${pay['ref_no'] ?? ''}'),
+                      const SizedBox(height: 20),
+                      Text(tr('The bill balance goes back up.'),
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    ]))),
+                  const Divider(height: 1),
+                  Padding(padding: const EdgeInsets.all(16), child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end, children: [
+                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('Keep'))),
+                      const SizedBox(width: 8),
+                      FilledButton(style: FilledButton.styleFrom(backgroundColor: AppColors.red),
+                        onPressed: () => Navigator.pop(ctx, true), child: Text(tr('Delete'))),
+                    ],
+                  )),
+                ]),
+              ),
+            )
+          : AlertDialog(
         title: Text(tr('Delete this payment?')),
         content: Text('${inr(pay['amount'])} · ${(pay['mode'] ?? '').toString().toUpperCase()} ${pay['ref_no'] ?? ''}\n${tr('The bill balance goes back up.')}'),
         actions: [
@@ -60,7 +92,40 @@ class _PurchaseDetailPageState extends State<PurchaseDetailPage> {
     final reason = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => !kIsWeb && defaultTargetPlatform == TargetPlatform.windows
+          ? StatefulBuilder(builder: (ctx, refresh) => Dialog(child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 580),
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Container(color: const Color(0xFFE2E9EF), padding: const EdgeInsets.all(18),
+                  child: Row(children: [
+                    const Icon(Icons.warning_amber_outlined, color: AppColors.red),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text('${tr('Cancel purchase')} ${p['entry_no']}?',
+                      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700))),
+                  ])),
+                Padding(padding: const EdgeInsets.all(20), child: Column(
+                  mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(p['stock_added'] == 1
+                      ? tr('The quantities added by this bill are taken back out of stock and the ledger entries are removed. The entry stays in the register marked CANCELLED. This cannot be undone.')
+                      : tr('The entry stays in the register marked CANCELLED. This cannot be undone.')),
+                    const SizedBox(height: 16),
+                    TextField(controller: reason, autofocus: true,
+                      decoration: InputDecoration(labelText: tr('Reason *')),
+                      onChanged: (_) => refresh(() {})),
+                  ])),
+                const Divider(height: 1),
+                Padding(padding: const EdgeInsets.all(12), child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end, children: [
+                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('Keep'))),
+                    const SizedBox(width: 8),
+                    FilledButton(style: FilledButton.styleFrom(backgroundColor: AppColors.red),
+                      onPressed: reason.text.trim().length < 3 ? null : () => Navigator.pop(ctx, true),
+                      child: Text(tr('Cancel purchase'))),
+                  ],
+                )),
+              ]),
+            )))
+          : AlertDialog(
         title: Text('${tr('Cancel purchase')} ${p['entry_no']}?'),
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(p['stock_added'] == 1
@@ -110,7 +175,7 @@ class _PurchaseDetailPageState extends State<PurchaseDetailPage> {
         final tax = (p['cgst'] as num) + (p['sgst'] as num) + (p['igst'] as num);
         final overdue = !cancelled && balance > 0 && (p['due_date'] ?? '').toString().isNotEmpty && (p['due_date'] as String).compareTo(todayYmd()) < 0;
 
-        return ListView(padding: const EdgeInsets.all(20), children: [
+        final pageContent = ListView(padding: const EdgeInsets.all(20), children: [
           Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, runSpacing: 8, children: [
             IconButton(onPressed: () => context.canPop() ? context.pop() : context.go('/billing?tab=purchases'), icon: const Icon(Icons.arrow_back_rounded)),
             Text('${tr('Bill')} ${p['bill_no']}', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
@@ -230,6 +295,146 @@ class _PurchaseDetailPageState extends State<PurchaseDetailPage> {
           ),
           const SizedBox(height: 40),
         ]);
+        if (isWindowsPlatform) {
+          final desktopSupplier = SectionCard(
+            title: tr('Supplier & Bill Details'),
+            child: Wrap(spacing: 22, runSpacing: 12, children: [
+              _kv(tr('Supplier'), p['party_name'] as String, bold: true),
+              _kv('GSTIN', (p['party_gstin'] as String? ?? '').isEmpty ? tr('Unregistered') : p['party_gstin'] as String),
+              if ((p['party_address'] as String? ?? '').isNotEmpty) _kv(tr('Address'), p['party_address'] as String),
+              if ((p['party_state_code'] as String? ?? '').isNotEmpty) _kv(tr('State'), gstStateName(p['party_state_code'] as String)),
+              _kv(tr("Supplier's invoice no"), p['bill_no'] as String, bold: true),
+              _kv(tr('Bill date'), fmtDate(p['bill_date'])),
+              if ((p['received_date'] as String? ?? '').isNotEmpty) _kv(tr('Received on'), fmtDate(p['received_date'])),
+              _kv(tr('Stock'), p['stock_added'] == 1 ? (cancelled ? tr('added, then reversed on cancel') : tr('added to stock')) : tr('not added (payment record only)')),
+              if ((p['remarks'] as String? ?? '').isNotEmpty) _kv(tr('Remarks'), p['remarks'] as String),
+              _kv(tr('Entered by'), '${p['created_by_name'] ?? '—'} · ${fmtDateTime(p['created_at'])}'),
+            ]),
+          );
+          final desktopItems = SectionCard(
+            title: tr('Received Items'),
+            child: AppDataTable(
+              columns: ['#', tr('Item'), tr('Type'), 'HSN', tr('Batch'), tr('Qty'), tr('Rate'), tr('Disc %'), tr('Taxable'), 'GST %', tr('Tax'), tr('Amount'), ''],
+              moneyColumns: const {6, 8, 10, 11},
+              rows: [
+                for (var i = 0; i < items.length; i++)
+                  [
+                    '${i + 1}',
+                    ItemNameCell(name: items[i]['description'] as String, code: ItemCode.of(items[i])),
+                    _typeLabel(items[i]['item_type'] as String? ?? ''),
+                    (items[i]['hsn_code'] as String? ?? '').isEmpty ? '—' : items[i]['hsn_code'],
+                    (items[i]['batch_code'] as String? ?? '').isEmpty ? '—' : items[i]['batch_code'],
+                    '${qty(items[i]['qty'])} ${items[i]['item_type'] == 'product' ? U.cb : (items[i]['unit'] ?? '')}',
+                    items[i]['rate'],
+                    (items[i]['discount_pct'] as num? ?? 0) > 0 ? '${qty(items[i]['discount_pct'])}%' : '—',
+                    items[i]['taxable'],
+                    '${qty(items[i]['gst_rate'])}%',
+                    (items[i]['cgst'] as num) + (items[i]['sgst'] as num) + (items[i]['igst'] as num),
+                    items[i]['total'],
+                    items[i]['item_id'] != null && items[i]['item_type'] != 'other'
+                        ? IconButton(
+                            tooltip: tr('Stock ledger (all in / out with doc numbers)'),
+                            icon: const Icon(Icons.history_rounded, size: 18),
+                            onPressed: () => showItemHistory(context, type: items[i]['item_type'] as String, id: items[i]['item_id'] as int, name: items[i]['description'] as String),
+                          )
+                        : const SizedBox.shrink(),
+                  ],
+              ],
+            ),
+          );
+          final desktopTotals = SectionCard(
+            title: tr('Tax & Payable Summary'),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              _tot(tr('Sub total'), p['subtotal']),
+              if ((p['discount'] as num) > 0) ...[_tot(tr('Discount'), -(p['discount'] as num)), _tot(tr('Taxable value'), p['taxable'])],
+              if (intra) ...[_tot('CGST', p['cgst']), _tot('SGST', p['sgst'])] else _tot('IGST', p['igst']),
+              if ((p['round_off'] as num) != 0) _tot(tr('Round off'), p['round_off']),
+              const Divider(height: 18),
+              Text('${tr('Bill total')}  ${inr(p['total'])}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+              const Divider(height: 18),
+              _tot(tr('Paid'), p['paid_amount']),
+              _tot(tr('Balance to pay'), cancelled ? 0 : balance),
+            ]),
+          );
+          final desktopPayments = SectionCard(
+            title: tr('Payments Register'),
+            trailing: canManage && !cancelled && balance > 0 ? TextButton.icon(onPressed: () => _pay(p), icon: const Icon(Icons.add_rounded, size: 17), label: Text(tr('Add payment'))) : null,
+            child: payments.isEmpty
+                ? EmptyState(cancelled ? tr('No payments.') : tr('Nothing paid yet — record cheque / NEFT / cash payments here.'), icon: Icons.payments_outlined)
+                : AppDataTable(
+                    columns: [tr('Date'), tr('Mode'), tr('Ref / cheque no'), tr('Bank'), tr('Amount'), tr('Note'), tr('By'), ''],
+                    moneyColumns: const {4},
+                    rows: [
+                      for (final pay in payments)
+                        [
+                          fmtDate(pay['paid_on']),
+                          (pay['mode'] ?? '').toString().toUpperCase(),
+                          (pay['ref_no'] as String? ?? '').isEmpty ? '—' : pay['ref_no'],
+                          (pay['bank'] as String? ?? '').isEmpty ? '—' : pay['bank'],
+                          pay['amount'],
+                          (pay['note'] as String? ?? '').isEmpty ? '—' : pay['note'],
+                          pay['created_by_name'] ?? '—',
+                          canManage ? IconButton(icon: Icon(Icons.delete_outline_rounded, size: 18, color: scheme.error), tooltip: tr('Delete payment'), onPressed: () => _deletePayment(pay)) : const SizedBox.shrink(),
+                        ],
+                    ],
+                  ),
+          );
+          final desktopActions = <Widget>[
+            IconButton(onPressed: () => context.canPop() ? context.pop() : context.go('/billing?tab=purchases'), tooltip: tr('Back'), icon: const Icon(Icons.arrow_back_rounded)),
+            if (canManage && !cancelled && balance > 0)
+              FilledButton.icon(onPressed: busy ? null : () => _pay(p), icon: const Icon(Icons.payments_rounded, size: 16), label: Text(tr('Record payment'))),
+            if (canManage && !cancelled && payments.isEmpty)
+              OutlinedButton.icon(onPressed: busy ? null : () => _cancel(p), style: TextButton.styleFrom(foregroundColor: AppColors.red), icon: const Icon(Icons.block_rounded, size: 16), label: Text(tr('Cancel purchase'))),
+          ];
+          final cancelledNote = cancelled
+              ? Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: AppColors.red.withValues(alpha: 0.08), border: Border.all(color: AppColors.red.withValues(alpha: 0.24))),
+                  child: Text('${tr('Cancelled')} ${fmtDateTime(p['cancelled_at'])} · ${p['cancel_reason'] ?? ''}', style: const TextStyle(color: AppColors.red, fontWeight: FontWeight.w600)),
+                )
+              : const SizedBox.shrink();
+          return WindowsDocumentWorkspace(
+            title: 'Supplier Bill',
+            subtitle: '${p['entry_no']} · ${p['party_name']} · ${fmtDate(p['bill_date'])}',
+            icon: Icons.receipt_long_outlined,
+            commandBar: WindowsCommandStrip(children: [
+              StatusChip(status),
+              if (overdue) const StatusChip('OVERDUE'),
+              if (p['stock_added'] == 1 && !cancelled) const StatusChip('STOCK RECEIVED'),
+              Text('${tr('Balance to pay')}: ${inr(cancelled ? 0 : balance, decimals: false)}', style: const TextStyle(fontWeight: FontWeight.w700)),
+              ...desktopActions,
+            ]),
+            content: LayoutBuilder(builder: (context, constraints) {
+              final wide = constraints.maxWidth >= 1180;
+              return ListView(padding: const EdgeInsets.all(14), children: [
+                Wrap(spacing: 9, runSpacing: 8, children: [
+                  SizedBox(width: 205, height: 108, child: KpiCard(label: tr('Bill total'), value: inr(p['total'], decimals: false), icon: Icons.receipt_long_rounded, tint: AppColors.blue)),
+                  SizedBox(width: 205, height: 108, child: KpiCard(label: intra ? 'CGST + SGST' : 'IGST', value: inr(tax, decimals: false), icon: Icons.account_balance_rounded, tint: AppColors.teal)),
+                  SizedBox(width: 205, height: 108, child: KpiCard(label: tr('Paid'), value: inr(p['paid_amount'], decimals: false), icon: Icons.payments_rounded, tint: AppColors.green)),
+                  SizedBox(width: 205, height: 108, child: KpiCard(label: tr('Balance to pay'), value: inr(cancelled ? 0 : balance, decimals: false), icon: Icons.hourglass_bottom_rounded, tint: overdue ? AppColors.red : AppColors.orange)),
+                ]),
+                const SizedBox(height: 12),
+                if (wide)
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(flex: 7, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [desktopSupplier, const SizedBox(height: 10), desktopItems, const SizedBox(height: 10), desktopPayments])),
+                    const SizedBox(width: 12),
+                    Expanded(flex: 3, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [if (cancelled) ...[cancelledNote, const SizedBox(height: 10)], desktopTotals])),
+                  ])
+                else ...[
+                  if (cancelled) ...[cancelledNote, const SizedBox(height: 10)],
+                  desktopSupplier,
+                  const SizedBox(height: 10),
+                  desktopItems,
+                  const SizedBox(height: 10),
+                  desktopTotals,
+                  const SizedBox(height: 10),
+                  desktopPayments,
+                ],
+              ]);
+            }),
+          );
+        }
+        return pageContent;
       },
     );
   }
@@ -298,6 +503,63 @@ class _PayDialogState extends State<_PayDialog> {
 
   @override
   Widget build(BuildContext context) {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+      return Dialog(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 700),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Container(color: const Color(0xFF243B50), padding: const EdgeInsets.all(18),
+            child: Text(tr('Record payment'),
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700))),
+          Flexible(child: SingleChildScrollView(padding: const EdgeInsets.all(20),
+            child: Column(mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('${tr('To')} ${widget.supplier}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                Text('${tr('Balance to pay')}: ${inr(widget.balance)}'),
+                const SizedBox(height: 16),
+                TextField(controller: amount, autofocus: true,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(labelText: '${tr('Amount')} ₹ *')),
+                const SizedBox(height: 18),
+                Text(tr('Mode'), style: const TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                Wrap(spacing: 7, runSpacing: 6, children: [
+                  for (final e in modes.entries)
+                    ChoiceChip(label: Text(tr(e.value)), selected: mode == e.key,
+                      onSelected: busy ? null : (_) => setState(() => mode = e.key)),
+                ]),
+                const SizedBox(height: 16),
+                Row(children: [
+                  Expanded(child: TextField(controller: ref,
+                    decoration: InputDecoration(labelText: mode == 'cheque'
+                      ? tr('Cheque number *') : tr('UTR / reference')))),
+                  const SizedBox(width: 12),
+                  Expanded(child: InkWell(onTap: busy ? null : () async {
+                    final d = await showDatePicker(context: context, initialDate: paidOn,
+                      firstDate: DateTime(2020), lastDate: DateTime.now().add(const Duration(days: 60)));
+                    if (d != null) setState(() => paidOn = d);
+                  }, child: InputDecorator(
+                    decoration: InputDecoration(labelText: mode == 'cheque'
+                      ? tr('Cheque date') : tr('Paid on')),
+                    child: Text(fmtDate(ymd(paidOn)))))),
+                ]),
+                if (mode == 'cheque' || mode == 'neft') ...[
+                  const SizedBox(height: 12),
+                  TextField(controller: bank, decoration: InputDecoration(labelText: tr('Bank'))),
+                ],
+                const SizedBox(height: 12),
+                TextField(controller: note, decoration: InputDecoration(labelText: tr('Note'))),
+              ]))),
+          const Divider(height: 1),
+          Padding(padding: const EdgeInsets.all(12), child: Row(mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(onPressed: busy ? null : () => Navigator.pop(context), child: Text(tr('Cancel'))),
+              const SizedBox(width: 8),
+              FilledButton(onPressed: busy ? null : _save,
+                child: Text(busy ? tr('Saving…') : tr('Save payment'))),
+            ])),
+        ]),
+      ));
+    }
     return AlertDialog(
       title: Text(tr('Record payment')),
       content: SizedBox(
