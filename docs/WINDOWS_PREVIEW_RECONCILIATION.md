@@ -8,7 +8,7 @@ These are the actual image assets present in this repository on this branch. The
 
 | Reference image (`preview/`) | Runtime area to compare | Status |
 | --- | --- | --- |
-| `windows-2fa-setup-concept.png` | Settings, 2FA dialog | Visual parity not verified |
+| `windows-2fa-setup-concept.png` | Settings, 2FA dialog | Live account QR, 3-step desktop layout, masked/copyable setup key and 6-digit input coded; visual parity not verified |
 | `windows-adjustment-form-revised-concept.png` | Stock Adjustments, new request | Visual parity not verified; material API not deployed |
 | `windows-approval-history-concept.png` | Approvals, history | Visual parity not verified |
 | `windows-approvals-register-concept.png` | Approvals, pending | **Rejected early concept; do not implement as approval** |

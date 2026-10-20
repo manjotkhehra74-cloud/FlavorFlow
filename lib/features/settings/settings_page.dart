@@ -518,10 +518,25 @@ class _TotpSetupDialog extends StatefulWidget {
 
 class _TotpSetupDialogState extends State<_TotpSetupDialog> {
   final code = TextEditingController();
+  late final TextEditingController _setupKeyController;
   bool busy = false;
+  bool _showSetupKey = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _setupKeyController = TextEditingController(text: widget.secret);
+  }
+
+  @override
+  void dispose() {
+    code.dispose();
+    _setupKeyController.dispose();
+    super.dispose();
+  }
 
   Future<void> _confirm() async {
-    if (code.text.trim().length != 6) return;
+    if (!RegExp(r'^\d{6}$').hasMatch(code.text.trim())) return;
     setState(() => busy = true);
     try {
       await context.read<AuthController>().api.post('/auth/totp/enable', {'code': code.text.trim()});
@@ -539,45 +554,92 @@ class _TotpSetupDialogState extends State<_TotpSetupDialog> {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 780),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(width: double.infinity, padding: const EdgeInsets.all(16),
+          Container(width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
             color: const Color(0xFFE2E9EF),
-            child: Text(tr('Set up 2FA'), style: const TextStyle(
-                fontSize: 16, fontWeight: FontWeight.w700))),
-          Padding(padding: const EdgeInsets.all(20), child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('1. Open your authenticator app.\n\n'
-                    '2. Scan the QR code or enter the key manually.\n\n'
-                    '3. Enter the six-digit code to enable 2FA.'),
-                const SizedBox(height: 20),
-                TextField(controller: code, keyboardType: TextInputType.number,
-                  maxLength: 6, decoration: const InputDecoration(
-                    labelText: 'Code from the app', counterText: '', hintText: '000000')),
-              ])),
-              const SizedBox(width: 24),
-              SizedBox(width: 280, child: Column(children: [
-                // Never persist the QR or secret in preview assets or logs.
-                Container(color: Colors.white, padding: const EdgeInsets.all(10),
-                    child: QrImageView(data: widget.otpauth, size: 190)),
-                const SizedBox(height: 10),
-                SelectableText(widget.secret, style: const TextStyle(fontFamily: 'monospace')),
-                TextButton.icon(onPressed: () {
-                  Clipboard.setData(ClipboardData(text: widget.secret));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Key copied.')));
-                }, icon: const Icon(Icons.copy_rounded, size: 16),
-                    label: const Text('Copy key')),
-              ])),
-            ],
+            child: Row(children: [
+              const Expanded(child: Text('Settings — Security',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
+              IconButton(tooltip: 'Close', onPressed: () => Navigator.pop(context, false),
+                icon: const Icon(Icons.close, size: 18)),
+            ])),
+          Flexible(child: SingleChildScrollView(padding: const EdgeInsets.all(22),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Set up two-factor authentication',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 18),
+              LayoutBuilder(builder: (context, size) {
+                final instructions = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  for (final (number, text) in [
+                    ('1', 'Open your authenticator app'),
+                    ('2', 'Scan the QR code or enter the setup key'),
+                    ('3', 'Enter the 6-digit code from your app'),
+                  ]) Padding(padding: const EdgeInsets.only(bottom: 15),
+                    child: Row(children: [
+                      CircleAvatar(radius: 12, backgroundColor: const Color(0xFFDCECF9),
+                        child: Text(number, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                      const SizedBox(width: 10),
+                      Expanded(child: Text(text)),
+                    ])),
+                ]);
+                // The QR is generated from the current user's API response,
+                // never from the illustrative image or a static setup key.
+                final qr = Container(padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: Colors.white,
+                    border: Border.all(color: const Color(0xFFC7D1DB)),
+                    borderRadius: BorderRadius.circular(6)),
+                  child: QrImageView(data: widget.otpauth, size: 180));
+                if (size.maxWidth < 570) return Column(children: [
+                  instructions, const SizedBox(height: 10), Center(child: qr)]);
+                return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Expanded(child: instructions), const SizedBox(width: 16), qr,
+                ]);
+              }),
+              const SizedBox(height: 22),
+              LayoutBuilder(builder: (context, size) {
+                final key = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('Manual setup key'),
+                  const SizedBox(height: 6),
+                  Row(children: [
+                    Expanded(child: TextField(readOnly: true,
+                      controller: _setupKeyController,
+                      obscureText: !_showSetupKey,
+                      decoration: InputDecoration(border: const OutlineInputBorder(),
+                        suffixIcon: IconButton(tooltip: _showSetupKey ? 'Hide key' : 'Show key',
+                          icon: Icon(_showSetupKey ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                          onPressed: () => setState(() => _showSetupKey = !_showSetupKey))))),
+                    const SizedBox(width: 8),
+                    OutlinedButton(onPressed: () {
+                      Clipboard.setData(ClipboardData(text: widget.secret));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Key copied. Clear the clipboard after setup.')));
+                    }, child: const Text('Copy key')),
+                  ]),
+                ]);
+                final verification = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('6-digit code'),
+                  const SizedBox(height: 6),
+                  TextField(controller: code, keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly], maxLength: 6,
+                    decoration: const InputDecoration(border: OutlineInputBorder(),
+                      counterText: '', hintText: '000000')),
+                ]);
+                if (size.maxWidth < 570) return Column(children: [key,
+                  const SizedBox(height: 12), verification]);
+                return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Expanded(child: key), const SizedBox(width: 18), Expanded(child: verification),
+                ]);
+              }),
+            ]),
           )),
           const Divider(height: 1),
           Padding(padding: const EdgeInsets.all(12), child: Row(
             mainAxisAlignment: MainAxisAlignment.end, children: [
-              TextButton(onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Cancel')),
+              OutlinedButton(onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel')),
               const SizedBox(width: 8),
               FilledButton(onPressed: busy ? null : _confirm,
-                  child: Text(busy ? 'Checking…' : 'Turn on 2FA')),
+                child: Text(busy ? 'Checking…' : 'Turn on 2FA')),
             ],
           )),
         ]),
