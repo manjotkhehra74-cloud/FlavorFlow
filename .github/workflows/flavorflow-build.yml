@@ -199,7 +199,8 @@ jobs:
       - name: Build Windows release
         shell: pwsh
         run: |
-          $buildOutput = & flutter build windows --release --dart-define=API_BASE=https://app.flavorflow.co.in/api 2>&1
+          $buildRef = '${{ github.sha }}'.Substring(0, 7)
+          $buildOutput = & flutter build windows --release --dart-define=API_BASE=https://app.flavorflow.co.in/api "--dart-define=FF_BUILD_REF=$buildRef" 2>&1
           $buildExitCode = $LASTEXITCODE
           $buildOutput | ForEach-Object { Write-Host $_ }
           if ($buildExitCode -ne 0) {

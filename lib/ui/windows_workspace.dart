@@ -488,6 +488,9 @@ class _WindowsWorkspaceState extends State<WindowsWorkspace> {
               Text('${queue.pendingCount} ${tr('pending')}', style: const TextStyle(fontSize: 10.5, color: _muted)),
             ],
             const Spacer(),
+            const Text('BUILD ${String.fromEnvironment('FF_BUILD_REF', defaultValue: 'local')}',
+                style: TextStyle(fontSize: 10.5, color: _muted, fontWeight: FontWeight.w600)),
+            const SizedBox(width: 14),
             Flexible(
               child: Text('${widget.session.name}  ·  ${widget.session.roleLabel}', style: const TextStyle(fontSize: 10.5, color: _muted), overflow: TextOverflow.ellipsis, maxLines: 1),
             ),

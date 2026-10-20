@@ -1,7 +1,7 @@
 name: flavorflow_erp
 description: FlavorFlow ERP — role-based production, store, packing & dispatch with strict RBAC. Native mobile, desktop + web.
 publish_to: 'none'
-version: 1.2.5+9
+version: 1.2.6+10
 
 environment:
   sdk: ^3.9.0

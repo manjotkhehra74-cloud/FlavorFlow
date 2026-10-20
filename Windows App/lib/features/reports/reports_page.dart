@@ -101,6 +101,47 @@ class _ReportMetric extends StatelessWidget {
   }
 }
 
+/// Native desktop summary derived exclusively from the authorized report list.
+class _WindowsReportSummary extends StatelessWidget {
+  final List<Map<String, dynamic>> reports;
+  const _WindowsReportSummary({required this.reports});
+
+  @override
+  Widget build(BuildContext context) {
+    int count(String pattern) => reports.where((r) => RegExp(pattern, caseSensitive: false)
+        .hasMatch('${r['id'] ?? ''} ${r['title'] ?? ''}')).length;
+    final tiles = [
+      ('Reports Available', reports.length, Icons.description_outlined),
+      ('Stock Reports', count('stock|inventory|material|ledger'), Icons.inventory_2_outlined),
+      ('Production Reports', count('production|batch|packing'), Icons.factory_outlined),
+      ('Dispatch Reports', count('dispatch|shipment'), Icons.local_shipping_outlined),
+    ];
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface,
+          border: Border.all(color: const Color(0xFFC7D1DB)), borderRadius: BorderRadius.circular(4)),
+      child: LayoutBuilder(builder: (context, constraints) {
+        final width = constraints.maxWidth / (constraints.maxWidth < 700 ? 2 : 4);
+        return Wrap(children: [for (final (label, value, icon) in tiles)
+          SizedBox(width: width, child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+            child: Row(children: [
+              Icon(icon, color: const Color(0xFF214E6B), size: 25),
+              const SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, color: Color(0xFF627588))),
+                Text('$value', style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
+              ])),
+            ]),
+          )),
+        ]);
+      }),
+    );
+  }
+}
+
 class _ReportsPageState extends State<ReportsPage> {
   late Future<List<Map<String, dynamic>>> _future;
   Map<String, dynamic>? _selected;
@@ -254,7 +295,9 @@ class _ReportsPageState extends State<ReportsPage> {
                   Text('· ${U.ize(tr(_displayTitle(_selected!)))}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                 ],
               ]),
-              content: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              content: Column(children: [
+                _WindowsReportSummary(reports: reports),
+                Expanded(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 SizedBox(
                   width: 268,
                   child: Container(
@@ -273,6 +316,7 @@ class _ReportsPageState extends State<ReportsPage> {
                 ),
                 const VerticalDivider(width: 1, thickness: 1, color: Color(0xFFC7D1DB)),
                 Expanded(child: Padding(padding: const EdgeInsets.all(12), child: _reportBody())),
+                ])),
               ]),
             );
           }
@@ -339,8 +383,14 @@ class _ReportsPageState extends State<ReportsPage> {
           ),
           padding: EdgeInsets.fromLTRB(sel ? 9 : 12, 9, 10, 9),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(U.ize(tr(_displayTitle(r))),
-                style: TextStyle(fontSize: 12.6, fontWeight: FontWeight.w600, color: sel ? Theme.of(context).colorScheme.onPrimaryContainer : Theme.of(context).colorScheme.onSurface)),
+            Row(children: [
+              if (isWindowsPlatform) ...[
+                Icon(Icons.description_outlined, size: 17, color: sel ? AppColors.blue : Theme.of(context).colorScheme.onSurfaceVariant),
+                const SizedBox(width: 9),
+              ],
+              Expanded(child: Text(U.ize(tr(_displayTitle(r))),
+                style: TextStyle(fontSize: 12.6, fontWeight: FontWeight.w600, color: sel ? Theme.of(context).colorScheme.onPrimaryContainer : Theme.of(context).colorScheme.onSurface))),
+            ]),
             const SizedBox(height: 2),
             Text(U.ize(tr(r['desc'] as String)),
                 maxLines: 2,
