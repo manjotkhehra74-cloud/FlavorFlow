@@ -32,6 +32,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool? _totpEnabled; // null = unknown/server not patched
   bool _totpBusy = false; // blocks duplicate setup/disable requests per account
   bool? _notifOn; // phone notification permission (null = still checking)
+  String _desktopSettingsSection = 'General';
 
   @override
   void initState() {
@@ -422,33 +423,85 @@ class _SettingsPageState extends State<SettingsPage> {
         return items.sublist(start, end);
       }
 
+      final preferences = section('preferences');
+      final labels = <(String, IconData)>[
+        ('General', Icons.tune_outlined),
+        ('Language', Icons.language_outlined),
+        ('Appearance', Icons.palette_outlined),
+        ('Security', Icons.shield_outlined),
+        ('Company', Icons.business_outlined),
+        ('Connection', Icons.dns_outlined),
+        ('About', Icons.info_outline_rounded),
+      ];
+      final sectionContent = switch (_desktopSettingsSection) {
+        'Language' => <Widget>[
+          Text('Choose your preferred language for the application.',
+            style: TextStyle(color: scheme.onSurfaceVariant)),
+          const SizedBox(height: 20),
+          Card(child: ListTile(
+            leading: const Icon(Icons.language_outlined),
+            title: const Text('Current language'),
+            subtitle: Text([for (final l in L10n.languages)
+              if (l[0] == L10n.instance.code) l[1]].firstOrNull ?? 'English'),
+            trailing: OutlinedButton(onPressed: () async {
+              await showDialog<void>(context: context,
+                builder: (_) => const LanguageDialog());
+              if (mounted) setState(() {});
+            }, child: const Text('Change…')),
+          )),
+        ],
+        'Appearance' => <Widget>[...preferences.skip(2).take(2)],
+        'Security' => section('security'),
+        'Company' => section('company'),
+        'Connection' => section('connection'),
+        'About' => section('about'),
+        _ => <Widget>[
+          Card(child: ListTile(
+            leading: const Icon(Icons.account_circle_outlined),
+            title: Text(session?.name ?? 'Account'),
+            subtitle: Text('${session?.roleLabel ?? ''} · ${session?.email ?? ''}'),
+          )),
+          ...preferences.skip(4),
+          ...section('subscription'),
+        ],
+      };
       return WindowsDocumentWorkspace(
         title: 'Settings',
         subtitle: 'Preferences, security, company and connection',
         icon: Icons.settings_outlined,
-        commandBar: WindowsCommandStrip(children: [
-          const Icon(Icons.account_circle_outlined, size: 17),
-          Text('${session?.name ?? ''} · ${session?.roleLabel ?? ''}'),
-          const SizedBox(width: 12),
-          Text('${tr('Login ID')}: ${session?.email ?? ''}', style: TextStyle(color: scheme.onSurfaceVariant)),
-        ]),
         content: LayoutBuilder(builder: (context, constraints) {
-          final columns = constraints.maxWidth >= 1120;
-          final desktopGroups = columns
-              ? <Widget>[
-                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [...section('preferences'), ...section('security')])),
-                    const SizedBox(width: 14),
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                      ...section('company'),
-                      ...section('subscription'),
-                      ...section('connection'),
-                      ...section('about'),
-                    ])),
-                  ]),
-                ]
-              : items;
-          return ListView(padding: const EdgeInsets.all(18), children: desktopGroups);
+          if (constraints.maxWidth < 740) {
+            return ListView(padding: const EdgeInsets.all(18), children: items);
+          }
+          return Row(children: [
+            SizedBox(width: 212, child: ColoredBox(
+              color: scheme.surfaceContainerLow,
+              child: ListView(padding: const EdgeInsets.symmetric(vertical: 12),
+                children: [for (final (label, icon) in labels)
+                  ListTile(
+                    dense: true,
+                    leading: Icon(icon, size: 19),
+                    title: Text(label),
+                    selected: _desktopSettingsSection == label,
+                    selectedTileColor: scheme.primaryContainer,
+                    onTap: () => setState(() => _desktopSettingsSection = label),
+                  ),
+                ]),
+              ),
+            ),
+            const VerticalDivider(width: 1),
+            Expanded(child: ListView(padding: const EdgeInsets.all(24), children: [
+              Text(_desktopSettingsSection,
+                style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800,
+                  color: scheme.onSurface)),
+              const SizedBox(height: 6),
+              if (_desktopSettingsSection != 'Language')
+                Text('Manage ${_desktopSettingsSection.toLowerCase()} settings',
+                  style: TextStyle(color: scheme.onSurfaceVariant)),
+              const SizedBox(height: 15),
+              ...sectionContent,
+            ])),
+          ]);
         }),
       );
     }

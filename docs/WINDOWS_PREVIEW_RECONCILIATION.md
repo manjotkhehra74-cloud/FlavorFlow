@@ -17,7 +17,7 @@ These are the actual image assets present in this repository on this branch. The
 | `windows-daily-labour-entry-concept.png` | Productivity & Labour, entry | Visual parity not verified |
 | `windows-edit-user-concept.png` | User Management, edit user | Visual parity not verified |
 | `windows-labour-analysis-concept.png` | Productivity & Labour, analysis | Visual parity not verified |
-| `windows-language-picker-concept.png` | Language selector | Visual parity not verified |
+| `windows-language-picker-concept.png` | Settings language pane and selector | Windows settings section navigation, current-language pane and immediate-choice dialog coded; visual parity not verified |
 | `windows-notifications-register-concept.png` | Notifications | Visual parity not verified |
 | `windows-offline-entries-concept.png` | Sync / offline entries | Visual parity not verified |
 | `windows-productivity-concept.png` | Productivity & Labour, overview | Horizontal desktop tabs and five live KPI cards above filtered results coded; visual parity not verified |

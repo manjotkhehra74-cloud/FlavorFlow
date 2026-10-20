@@ -1137,17 +1137,31 @@ class LanguageDialog extends StatelessWidget {
               color: const Color(0xFFE2E9EF),
               child: Text('${tr('Language')} · ਭਾਸ਼ਾ · भाषा',
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
-            for (final lang in L10n.languages)
-              RadioListTile<String>(
-                title: Text(lang[1]),
-                value: lang[0],
-                groupValue: l10n.code,
-                onChanged: (v) async {
-                  if (v == null) return;
-                  await L10n.instance.set(v);
-                  if (context.mounted) Navigator.pop(context);
-                },
-              ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(18, 18, 18, 12),
+              child: Text('Select your preferred language. The change applies immediately.',
+                  style: TextStyle(fontSize: 12.5)),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              child: Column(children: [
+                for (final lang in L10n.languages)
+                  RadioListTile<String>(
+                    title: Text(lang[1]),
+                    value: lang[0],
+                    groupValue: l10n.code,
+                    selected: l10n.code == lang[0],
+                    selectedTileColor: const Color(0xFFE6F1FC),
+                    shape: const RoundedRectangleBorder(
+                        side: BorderSide(color: Color(0xFFCCD7E2))),
+                    onChanged: (v) async {
+                      if (v == null) return;
+                      await L10n.instance.set(v);
+                      if (context.mounted) Navigator.pop(context);
+                    },
+                  ),
+              ]),
+            ),
             const Divider(height: 1),
             Padding(padding: const EdgeInsets.all(10), child: Align(
               alignment: Alignment.centerRight,
