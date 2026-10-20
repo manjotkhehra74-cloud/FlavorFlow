@@ -449,10 +449,16 @@ Future<void> _reject(BuildContext context, Map<String, dynamic> a, VoidCallback 
   if (ok == true) { onDone(); if (context.mounted) showOk(context, '${a['code']} rejected.'); }
 }
 
-class _HistoryList extends StatelessWidget {
+class _HistoryList extends StatefulWidget {
   final Future<List<Map<String, dynamic>>> future;
   final VoidCallback onRetry;
   const _HistoryList({required this.future, required this.onRetry});
+  @override
+  State<_HistoryList> createState() => _HistoryListState();
+}
+
+class _HistoryListState extends State<_HistoryList> {
+  Map<String, dynamic>? _selected;
 
   void _inspectWindows(BuildContext context, Map<String, dynamic> a) {
     showDialog<void>(context: context, builder: (ctx) => AlertDialog(
@@ -487,21 +493,89 @@ class _HistoryList extends StatelessWidget {
     ));
   }
 
+  Widget _decisionDetails(Map<String, dynamic> a) {
+    final fields = <(String, String)>[
+      ('Code', '${a['code'] ?? '—'}'),
+      ('Product / SKU', '${a['product_name'] ?? '—'}'),
+      ('IN / OUT', '${a['adj_type'] ?? '—'}'),
+      ('Qty (company pack unit)', a['qty_cb'] == null ? '—' : '${a['qty_cb']}'),
+      ('Requested By', '${a['requested_by_name'] ?? a['requested_by'] ?? '—'}'),
+      ('Requested on', fmtDateTime(a['requested_at'])),
+      ('Reason', '${a['reason'] ?? '—'}'),
+      ('Decision', '${a['status'] ?? '—'}'),
+      ('Decision By', '${a['approved_by_name'] ?? a['rejected_by_name'] ?? '—'}'),
+      ('Decision Date', fmtDateTime(a['approved_at'] ?? a['rejected_at'])),
+      ('Approved', fmtDateTime(a['approved_at'])),
+      ('Rejected', fmtDateTime(a['rejected_at'])),
+      ('Reject Reason', '${a['reject_reason'] ?? '—'}'),
+      ('Full Reason', '${a['reason'] ?? ''}\n${a['approval_remarks'] ?? ''}'.trim()),
+    ];
+    return SectionCard(
+      title: 'Decision Details',
+      padding: const EdgeInsets.all(12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        for (final f in fields)
+          Padding(padding: const EdgeInsets.only(bottom: 10),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(f.$1, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, letterSpacing: 0.6)),
+              const SizedBox(height: 2),
+              SelectableText(f.$2.isEmpty ? '—' : f.$2, style: const TextStyle(fontSize: 12.5)),
+            ])),
+        const Divider(height: 16),
+        Text('Approval Remarks.', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+      ]),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<Map<String, dynamic>>>(
-      future: future,
+      future: widget.future,
       builder: (context, snap) {
-        if (snap.hasError) return ErrorState(snap.error!, onRetry: onRetry);
+        if (snap.hasError) return ErrorState(snap.error!, onRetry: widget.onRetry);
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
         final rows = snap.data!;
         if (rows.isEmpty) return const EmptyState('No decisions recorded yet');
-        return ListView(padding: EdgeInsets.all(isWindowsPlatform ? 12 : 20), children: [
+        // Approve inspector: first row selected by default on Windows, mirrors concept's blue selection.
+        final selected = (_selected != null && rows.any((r) => identical(r, _selected))) ? _selected : (isWindowsPlatform && rows.isNotEmpty ? rows.first : null);
+        final table = SectionCard(
+          title: 'Approval History',
+          padding: EdgeInsets.zero,
+          child: AppDataTable(
+            columns: ['Code', 'Product / SKU', 'IN / OUT', 'Qty (company pack unit)', 'Requested By', 'Requested on', 'Reason'],
+            onRowTap: isWindowsPlatform ? (i) => setState(() => _selected = rows[i]) : (i) => _inspectWindows(context, rows[i]),
+            rows: [
+              for (final a in rows)
+                [
+                  Text(a['code'] as String, style: const TextStyle(fontWeight: FontWeight.w700)),
+                  a['product_name'] ?? '—',
+                  StatusChip(a['adj_type'] as String? ?? '—'),
+                  a['qty_cb'] == null ? '—' : qtyInt(a['qty_cb']),
+                  a['requested_by_name'] ?? a['requested_by'] ?? '—',
+                  fmtDateTime(a['requested_at']),
+                  SizedBox(width: 180, child: Text('${a['reason'] ?? '—'}', maxLines: 2, overflow: TextOverflow.ellipsis)),
+                ],
+            ],
+          ),
+        );
+        if (isWindowsPlatform) {
+          return LayoutBuilder(builder: (context, bounds) {
+            final inspector = selected == null ? const SizedBox.shrink() : _decisionDetails(selected);
+            if (bounds.maxWidth < 900) {
+              return ListView(padding: const EdgeInsets.all(12), children: [table, const SizedBox(height: 12), inspector]);
+            }
+            return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(flex: 7, child: ListView(padding: const EdgeInsets.all(12), children: [table])),
+              SizedBox(width: 320, child: Padding(padding: const EdgeInsets.fromLTRB(0, 12, 12, 12), child: inspector)),
+            ]);
+          });
+        }
+        // Mobile keeps the expanded flat table with all decision columns for small screens.
+        return ListView(padding: const EdgeInsets.all(20), children: [
           SectionCard(
             title: 'Decision History & Audit Trail',
             child: AppDataTable(
               columns: ['Code', 'Product', 'Type', U.cb, 'Reason', 'Decision', 'Approved By', 'Approved Date', 'Rejected By', 'Rejected Date', 'Reject Reason', 'Remarks'],
-              onRowTap: isWindowsPlatform ? (i) => _inspectWindows(context, rows[i]) : null,
               rows: [
                 for (final a in rows)
                   [

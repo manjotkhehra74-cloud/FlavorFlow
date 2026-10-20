@@ -972,9 +972,16 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
   Widget _analysisMatrix(String title, Map<String, dynamic> data) {
     final rows = ((data['rows'] as List?) ?? const []).map((r) => (r as List).toList()).toList();
     final columns = ((data['columns'] as List?) ?? const ['METRIC']).map((v) => '$v').toList();
+    final headerNote = title.contains('Day') || title.contains('Night') ? null : null;
     return SectionCard(
       title: title,
-      child: rows.isEmpty ? const EmptyState('No labour analysis rows for this section.') : AppDataTable(columns: columns.cast<String>(), rows: rows),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (rows.isEmpty) const EmptyState('No labour analysis rows for this section.')
+        else AppDataTable(columns: columns.cast<String>(), rows: rows),
+        const SizedBox(height: 6),
+        Text('Concept preview • illustrative data only; columns supplied by server',
+          style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant, fontStyle: FontStyle.italic)),
+      ]),
     );
   }
 

@@ -226,74 +226,131 @@ class _AdjustmentFormDialogState extends State<AdjustmentFormDialog> {
       ? m['category'] == 'Raw Material' : m['category'] != 'Raw Material').toList();
     final selected = matches.where((m) => m['id'] == materialId).toList();
     final material = selected.isEmpty ? null : selected.first;
+    final scheme = Theme.of(context).colorScheme;
     return Dialog(insetPadding: const EdgeInsets.all(24), child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 780, maxHeight: 680),
+      constraints: const BoxConstraints(maxWidth: 780, maxHeight: 720),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Container(width: double.infinity, padding: const EdgeInsets.all(16),
+        Container(width: double.infinity, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           color: const Color(0xFFE2E9EF),
-          child: Text(tr('Request Stock Adjustment'),
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(tr('Request Stock Adjustment'),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 2),
+            Text('Request only — stock changes after approval.',
+              style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
+          ])),
         Flexible(child: SingleChildScrollView(padding: const EdgeInsets.all(20),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            DropdownButtonFormField<String>(initialValue: stockType,
-              decoration: const InputDecoration(labelText: 'Stock type *'),
-              items: const [
-                DropdownMenuItem(value: 'Finished Goods', child: Text('Finished Goods')),
-                DropdownMenuItem(value: 'Semi-finished Goods', child: Text('Semi-finished Goods')),
-              ], onChanged: (v) => setState(() {
-                stockType = v ?? 'Finished Goods';
-                materialId = null;
-              })),
-            const SizedBox(height: 14),
-            if (stockType == 'Finished Goods') ...[
-              DropdownButtonFormField<int>(
-                key: ValueKey('windows-adj-$productId'), initialValue: productId,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'SKU *'),
-                items: [for (final p in products)
-                  DropdownMenuItem(value: p['id'] as int,
-                    child: Text(ItemCode.pick(p), overflow: TextOverflow.ellipsis))],
-                onChanged: (v) => setState(() => productId = v),
-              ),
-              if (_product != null) Padding(padding: const EdgeInsets.only(top: 8),
-                child: Text('In stock: ${qtyInt(_product!['qty_cb'])} ${U.cb}')),
-            ] else ...[
-              DropdownButtonFormField<String>(initialValue: materialType,
-                decoration: const InputDecoration(labelText: 'Material type *'),
+            // Top row: Stock type + Material type + Material (mirrors concept's 3-column header)
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: DropdownButtonFormField<String>(initialValue: stockType,
+                decoration: const InputDecoration(labelText: 'Stock type *'),
                 items: const [
-                  DropdownMenuItem(value: 'Raw Material', child: Text('Raw Material')),
-                  DropdownMenuItem(value: 'Packing Material', child: Text('Packing Material')),
+                  DropdownMenuItem(value: 'Finished Goods', child: Text('Finished Goods')),
+                  DropdownMenuItem(value: 'Semi-finished Goods', child: Text('Semi-finished Goods')),
                 ], onChanged: (v) => setState(() {
-                  materialType = v ?? 'Raw Material'; materialId = null;
-                })),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<int>(key: ValueKey('material-$materialType'),
-                initialValue: materialId, isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Material *'),
-                items: [for (final m in matches)
-                  DropdownMenuItem(value: m['id'] as int,
-                    child: Text('${m['name']}', overflow: TextOverflow.ellipsis))],
-                onChanged: (v) => setState(() => materialId = v)),
-              if (material != null) Padding(padding: const EdgeInsets.only(top: 8),
-                child: Text('In stock: ${material['stock']} ${material['unit']}')),
-            ],
-            const SizedBox(height: 16),
-            SegmentedButton<String>(segments: const [
-              ButtonSegment(value: 'IN', label: Text('Stock IN')),
-              ButtonSegment(value: 'OUT', label: Text('Stock OUT')),
-            ], selected: {type}, onSelectionChanged: (v) => setState(() => type = v.first)),
-            const SizedBox(height: 14),
-            TextField(controller: cb, keyboardType: TextInputType.number,
-              decoration: InputDecoration(labelText: stockType == 'Finished Goods'
-                ? 'Quantity (${U.cb}) *' : 'Quantity (${material?['unit'] ?? 'material unit'}) *')),
+                  stockType = v ?? 'Finished Goods';
+                  materialId = null;
+                }))),
+              const SizedBox(width: 12),
+              if (stockType != 'Finished Goods') ...[
+                Expanded(child: DropdownButtonFormField<String>(initialValue: materialType,
+                  decoration: const InputDecoration(labelText: 'Material type *'),
+                  items: const [
+                    DropdownMenuItem(value: 'Raw Material', child: Text('Raw Material')),
+                    DropdownMenuItem(value: 'Packing Material', child: Text('Packing Material')),
+                  ], onChanged: (v) => setState(() {
+                    materialType = v ?? 'Raw Material'; materialId = null;
+                  }))),
+                const SizedBox(width: 12),
+                Expanded(child: DropdownButtonFormField<int>(key: ValueKey('material-$materialType'),
+                  initialValue: materialId, isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Material *', hintText: 'Select a material'),
+                  items: [for (final m in matches)
+                    DropdownMenuItem(value: m['id'] as int,
+                      child: Text('${m['name']}', overflow: TextOverflow.ellipsis))],
+                  onChanged: (v) => setState(() => materialId = v))),
+              ] else
+                Expanded(child: DropdownButtonFormField<int>(
+                  key: ValueKey('windows-adj-$productId'), initialValue: productId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'SKU *', hintText: 'Select a SKU'),
+                  items: [for (final p in products)
+                    DropdownMenuItem(value: p['id'] as int,
+                      child: Text(ItemCode.pick(p), overflow: TextOverflow.ellipsis))],
+                  onChanged: (v) => setState(() => productId = v),
+                )),
+            ]),
+            if (stockType != 'Finished Goods')
+              Padding(padding: const EdgeInsets.only(top: 6), child: Row(children: [
+                TextButton(onPressed: null, style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 28)),
+                  child: const Text('+ Show Finished goods flow', style: TextStyle(fontSize: 11.5))),
+                const SizedBox(width: 16),
+                TextButton(onPressed: null, style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 28)),
+                  child: const Text('+ Add material', style: TextStyle(fontSize: 11.5))),
+              ]))
+            else
+              Padding(padding: const EdgeInsets.only(top: 6),
+                child: TextButton(onPressed: null, style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 28)),
+                  child: const Text('+ Show Finished goods flow', style: TextStyle(fontSize: 11.5)))),
             const SizedBox(height: 12),
-            TextField(controller: reason, maxLines: 2,
-              decoration: const InputDecoration(labelText: 'Reason *')),
-            if (stockType != 'Finished Goods') const Padding(
-              padding: EdgeInsets.only(top: 16),
-              child: Text('Material stock requests are unavailable until the server supports '
-                'typed approvals, inventory updates and audit ledger. No request can be sent.'),
-            ),
+            // Current stock grey field with unit hint (kg / m / pcs)
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Current stock', style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(color: const Color(0xFFF0F2F4), border: Border.all(color: const Color(0xFFD0D7DD)), borderRadius: BorderRadius.circular(4)),
+                child: Text(
+                  stockType == 'Finished Goods'
+                    ? (_product == null ? '—' : '${qtyInt(_product!['qty_cb'])} ${U.cb}')
+                    : (material == null ? '—' : '${material['stock']} ${material['unit']}'),
+                  style: TextStyle(color: scheme.onSurfaceVariant)),
+              ),
+              Padding(padding: const EdgeInsets.only(top: 4),
+                child: Text('( kg / m / pcs )', style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant))),
+            ]),
+            const SizedBox(height: 16),
+            Text('Adjustment', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: scheme.onSurface)),
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(child: SegmentedButton<String>(segments: const [
+                ButtonSegment(value: 'IN', label: Text('Stock IN')),
+                ButtonSegment(value: 'OUT', label: Text('Stock OUT')),
+              ], selected: {type}, onSelectionChanged: (v) => setState(() => type = v.first))),
+              const SizedBox(width: 12),
+              Expanded(child: Row(children: [
+                const Text('Adjustment quantity *', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                const SizedBox(width: 8),
+                Expanded(child: TextField(controller: cb, keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10)))),
+                const SizedBox(width: 6),
+                Text('( kg / m / pcs )', style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant)),
+              ])),
+            ]),
+            const SizedBox(height: 14),
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Padding(padding: const EdgeInsets.only(top: 12), child: Text('Reason *', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: scheme.onSurface))),
+              const SizedBox(width: 12),
+              Expanded(child: TextField(controller: reason, maxLines: 4,
+                decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.all(10)))),
+            ]),
+            Align(alignment: Alignment.centerLeft,
+              child: TextButton(onPressed: null,
+                child: const Text('+ Photo / Gallery', style: TextStyle(fontSize: 11.5)))),
+            if (stockType != 'Finished Goods')
+              Container(
+                margin: const EdgeInsets.only(top: 12),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: scheme.surfaceContainerHighest.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(6), border: Border.all(color: scheme.outlineVariant)),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Icon(Icons.info_outline_rounded, size: 16, color: scheme.onSurfaceVariant),
+                  const SizedBox(width: 8),
+                  const Expanded(child: Text('Material adjustment requires API support through approval and stock ledger; unavailable server must block submission, never update a different SKU.',
+                    style: TextStyle(fontSize: 11.5, height: 1.35))),
+                ]),
+              ),
           ]),
         )),
         const Divider(height: 1),

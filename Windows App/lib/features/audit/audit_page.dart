@@ -81,16 +81,21 @@ class _AuditPageState extends State<AuditPage> {
                   selected: _entity == e,
                   onSelected: (_) => setState(() { _entity = e; _selected = null; _future = _load(); }),
                 ),
+              Text('Showing ${logs.length} events from loaded response.', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
             ]),
             content: LayoutBuilder(builder: (context, size) {
               // The inspector is read-only; the audit API does not expose
               // editing or deletion. Discard a stale selection after refresh.
               final selected = logs.any((l) => identical(l, _selected)) ? _selected : null;
-              final register = ListView(padding: const EdgeInsets.all(12), children: [table]);
+              final register = ListView(padding: const EdgeInsets.all(12), children: [
+                table,
+                Padding(padding: const EdgeInsets.only(top: 8),
+                  child: Text('Concept preview • illustrative rows only', style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant))),
+              ]);
               if (selected == null || size.maxWidth < 1050) return register;
               return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Expanded(flex: 7, child: register),
-                SizedBox(width: 300, child: Padding(
+                SizedBox(width: 320, child: Padding(
                   padding: const EdgeInsets.fromLTRB(0, 12, 12, 12),
                   child: SectionCard(title: 'Event details', child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start, children: [
