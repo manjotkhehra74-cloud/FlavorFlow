@@ -220,6 +220,7 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
   String? _skuFilter;
   String _shiftFilter = 'Combined';
   bool _exporting = false;
+  Map<String, dynamic>? _selectedLabour;
 
   String get _fromYmd => _ymd(_from);
   String get _toYmd => _ymd(_to);
@@ -895,40 +896,39 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
         final rows = ((data['rows'] as List?) ?? const []).map((r) => (r as List).toList()).toList();
         if (isWindowsPlatform) {
           final totals = (data['totals'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
-          return ListView(padding: const EdgeInsets.all(12), children: [
+          final metrics = [
+            ('Production ${U.cb}', totals['cb'] ?? totals['producedCb'], Icons.inventory_2_outlined, U.cb),
+            ('Production KG', totals['kg'] ?? totals['netKg'], Icons.scale_outlined, 'kg'),
+            ('Manpower', totals['manpower'], Icons.groups_outlined, 'operators'),
+            ('KG / head', totals['kgPerHead'], Icons.bar_chart_outlined, 'productivity'),
+            ('${U.cb} / head', totals['cbPerHead'], Icons.hub_outlined, 'productivity'),
+          ];
+          return ListView(padding: const EdgeInsets.fromLTRB(18, 20, 18, 24), children: [
+            Text('Productivity — selected period',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800,
+                  color: Theme.of(context).colorScheme.onSurface)),
+            const SizedBox(height: 4),
+            Text('Completed production · ${U.cb} is your company pack unit',
+                style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 12),
             _reconciliationBanner(context, data),
-            WindowsCommandStrip(children: [
-              Text('Selected period: ${fmtDate(_fromYmd)} — ${fmtDate(_toYmd)}',
-                style: const TextStyle(fontWeight: FontWeight.w700)),
-              const SizedBox(width: 12),
-              OutlinedButton.icon(onPressed: _exporting ? null : () => _export('productivity'),
-                icon: const Icon(Icons.download_outlined, size: 16), label: const Text('Export Excel')),
-            ]),
-            const SizedBox(height: 10),
             _dateFilters(context),
             const SizedBox(height: 12),
-            Container(
-              decoration: BoxDecoration(color: const Color(0xFFF7F9FB),
-                border: Border.all(color: const Color(0xFFC7D1DB))),
-              child: Wrap(spacing: 0, children: [
-                for (final item in [
-                  ('Production ${U.cb}', totals['cb'] ?? totals['producedCb']),
-                  ('Production KG', totals['kg'] ?? totals['netKg']),
-                  ('Manpower', totals['manpower']),
-                  ('KG / Head', totals['kgPerHead']),
-                  ('${U.cb} / Head', totals['cbPerHead']),
-                ]) SizedBox(width: 168, child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(item.$1, style: const TextStyle(fontSize: 11)),
-                    Text(qty(item.$2), style: const TextStyle(fontSize: 16,
-                      fontWeight: FontWeight.w700)),
-                  ]),
-                )),
-              ]),
-            ),
-            const SizedBox(height: 12),
-            SectionCard(title: 'Productivity — selected period', padding: EdgeInsets.zero,
+            Align(alignment: Alignment.centerRight,
+              child: OutlinedButton.icon(onPressed: _exporting ? null : () => _export('productivity'),
+                icon: const Icon(Icons.download_outlined, size: 16), label: const Text('Export Excel'))),
+            const SizedBox(height: 14),
+            LayoutBuilder(builder: (context, constraints) {
+              final columns = constraints.maxWidth >= 1000 ? 5 : constraints.maxWidth >= 600 ? 3 : 2;
+              const gap = 10.0;
+              final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+              return Wrap(spacing: gap, runSpacing: gap, children: [for (final metric in metrics)
+                SizedBox(width: width, height: 118, child: _DesktopProductivityMetric(
+                  label: metric.$1, value: metric.$2, icon: metric.$3, unit: metric.$4)),
+              ]);
+            }),
+            const SizedBox(height: 18),
+            SectionCard(title: 'Results — ${rows.length} items', padding: EdgeInsets.zero,
               child: rows.isEmpty
                 ? const EmptyState('No completed production or labour entries for this period.')
                 : AppDataTable(columns: columns, rows: rows)),
@@ -1056,25 +1056,65 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: _labourFuture,
       builder: (context, snap) {
-        final rows = snap.data ?? const <Map<String, dynamic>>[];
+        if (snap.hasError) return ErrorState(snap.error!, onRetry: _reload);
+        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        final rows = snap.data!;
+        final selected = rows.any((r) => identical(r, _selectedLabour)) ? _selectedLabour : null;
+        final register = SectionCard(
+          title: 'Daily Labour Details',
+          trailing: FilledButton.icon(onPressed: _openLabourForm,
+              icon: const Icon(Icons.add, size: 17), label: const Text('Add Entry')),
+          child: rows.isEmpty
+              ? const EmptyState('No daily labour entries yet. Add a line-wise entry to get started.')
+              : AppDataTable(
+                  columns: const ['DATE', 'SHIFT', 'LINE', 'SKU', 'WORKERS', 'HOURS', 'SUPERVISOR', 'REMARKS', ''],
+                  onRowTap: isWindowsPlatform ? (i) => setState(() => _selectedLabour = rows[i]) : null,
+                  rows: [for (final r in rows) [
+                    r['date'], r['shift'], r['line'], r['productName'] ?? r['sku'] ?? r['product'],
+                    r['workerCount'] ?? r['workers'], r['actualHours'] ?? r['hours'],
+                    r['supervisor'], r['remarks'],
+                    IconButton(tooltip: 'Edit entry', onPressed: () => _openLabourForm(entry: r),
+                      icon: const Icon(Icons.edit_outlined, size: 18)),
+                  ]],
+                ),
+        );
         return ListView(padding: const EdgeInsets.all(18), children: [
           _dateFilters(context),
           const SizedBox(height: 8),
-          Align(alignment: Alignment.centerRight, child: OutlinedButton.icon(onPressed: _exporting ? null : () => _export('labour'), icon: const Icon(Icons.download_outlined, size: 18), label: const Text('Export Labour Excel'))),
+          Align(alignment: Alignment.centerRight, child: OutlinedButton.icon(
+            onPressed: _exporting ? null : () => _export('labour'),
+            icon: const Icon(Icons.download_outlined, size: 18), label: const Text('Export Labour Excel'))),
           const SizedBox(height: 8),
-          SectionCard(
-            title: 'Daily Labour Details',
-            trailing: FilledButton.icon(onPressed: _openLabourForm, icon: const Icon(Icons.add, size: 17), label: const Text('Add Entry')),
-            child: rows.isEmpty
-                ? const EmptyState('No daily labour entries yet. Start entering line-wise details tomorrow.')
-                : AppDataTable(
-                    columns: const ['DATE', 'SHIFT', 'LINE', 'SKU', 'WORKERS', 'HOURS', 'SUPERVISOR', 'REMARKS', ''],
-                    rows: [
-                      for (final r in rows)
-                        [r['date'], r['shift'], r['line'], r['productName'] ?? r['sku'] ?? r['product'], r['workerCount'] ?? r['workers'], r['actualHours'] ?? r['hours'], r['supervisor'], r['remarks'], IconButton(tooltip: 'Edit entry', onPressed: () => _openLabourForm(entry: r), icon: const Icon(Icons.edit_outlined, size: 18))],
-                    ],
-                  ),
-          ),
+          if (isWindowsPlatform && selected != null)
+            LayoutBuilder(builder: (context, bounds) {
+              final inspector = SectionCard(
+                title: 'Selected entry',
+                trailing: IconButton(tooltip: 'Close inspector',
+                  onPressed: () => setState(() => _selectedLabour = null),
+                  icon: const Icon(Icons.close, size: 17)),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  for (final (label, value) in [
+                    ('Date', selected['date']), ('Shift', selected['shift']),
+                    ('Line', selected['line']),
+                    ('SKU', selected['productName'] ?? selected['sku'] ?? selected['product']),
+                    ('Workers', selected['workerCount'] ?? selected['workers']),
+                    ('Hours', selected['actualHours'] ?? selected['hours']),
+                    ('Supervisor', selected['supervisor']), ('Remarks', selected['remarks']),
+                  ]) Padding(padding: const EdgeInsets.only(bottom: 10),
+                      child: Text('$label: ${value ?? '—'}')),
+                  Align(alignment: Alignment.centerLeft,
+                    child: FilledButton.icon(onPressed: () => _openLabourForm(entry: selected),
+                      icon: const Icon(Icons.edit_outlined, size: 16), label: const Text('Edit entry'))),
+                ]),
+              );
+              if (bounds.maxWidth < 920) return Column(children: [register,
+                const SizedBox(height: 12), inspector]);
+              return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(flex: 7, child: register), const SizedBox(width: 12),
+                SizedBox(width: 280, child: inspector),
+              ]);
+            })
+          else register,
         ]);
       },
     );
@@ -1082,28 +1122,24 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
 
   @override
   Widget build(BuildContext context) {
-    const tabs = <WindowsModuleTab>[
-      WindowsModuleTab('Productivity', Icons.analytics_outlined),
-      WindowsModuleTab('Daily Labour', Icons.groups_outlined),
-      WindowsModuleTab('Labour Analysis', Icons.assessment_outlined),
-    ];
     final content = TabBarView(controller: _tabs, children: [
       _productivityTab(context),
       _labourTab(context),
       _analysisTab(context),
     ]);
     if (isWindowsPlatform) {
-      return AnimatedBuilder(
-        animation: _tabs,
-        builder: (context, _) => WindowsModuleWorkspace(
-          title: 'Productivity & Labour',
-          subtitle: 'Factory output and workforce records',
-          tabs: tabs,
-          selectedIndex: _tabs.index,
-          onSelect: _tabs.animateTo,
-          content: content,
+      return Column(children: [
+        Material(
+          color: Theme.of(context).colorScheme.surfaceContainerHigh,
+          child: Align(alignment: Alignment.centerLeft,
+            child: TabBar(
+              controller: _tabs,
+              isScrollable: true,
+              tabs: const [Tab(text: 'Productivity'), Tab(text: 'Daily Labour'), Tab(text: 'Labour Analysis')],
+            )),
         ),
-      );
+        Expanded(child: content),
+      ]);
     }
     return Column(children: [
       Material(
@@ -1112,6 +1148,36 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
       ),
       Expanded(child: content),
     ]);
+  }
+}
+
+/// The five desktop KPI cards are backed by the same server-normalised totals
+/// as the table. Never substitute illustrative preview quantities.
+class _DesktopProductivityMetric extends StatelessWidget {
+  final String label;
+  final dynamic value;
+  final IconData icon;
+  final String unit;
+  const _DesktopProductivityMetric({required this.label, required this.value,
+      required this.icon, required this.unit});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: scheme.surface,
+        border: Border.all(color: scheme.outlineVariant), borderRadius: BorderRadius.circular(5)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [Icon(icon, size: 19, color: scheme.primary), const SizedBox(width: 8),
+          Expanded(child: Text(label, maxLines: 2, overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)))]),
+        const Spacer(),
+        Text(value == null ? '—' : qty(value), maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: scheme.onSurface)),
+        Text(unit, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+      ]),
+    );
   }
 }
 

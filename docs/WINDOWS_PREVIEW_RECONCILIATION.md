@@ -13,14 +13,14 @@ These are the actual image assets present in this repository on this branch. The
 | `windows-approval-history-concept.png` | Approvals, history | Visual parity not verified |
 | `windows-approvals-register-concept.png` | Approvals, pending | **Rejected early concept; do not implement as approval** |
 | `windows-audit-trail-concept.png` | Audit Log | Filterable live register and full-row selection to inspector; visual parity not verified |
-| `windows-daily-labour-concept.png` | Productivity & Labour, labour | Visual parity not verified |
+| `windows-daily-labour-concept.png` | Productivity & Labour, labour | Horizontal desktop tabs, live register, row inspector and edit action coded; visual parity not verified |
 | `windows-daily-labour-entry-concept.png` | Productivity & Labour, entry | Visual parity not verified |
 | `windows-edit-user-concept.png` | User Management, edit user | Visual parity not verified |
 | `windows-labour-analysis-concept.png` | Productivity & Labour, analysis | Visual parity not verified |
 | `windows-language-picker-concept.png` | Language selector | Visual parity not verified |
 | `windows-notifications-register-concept.png` | Notifications | Visual parity not verified |
 | `windows-offline-entries-concept.png` | Sync / offline entries | Visual parity not verified |
-| `windows-productivity-concept.png` | Productivity & Labour, overview | Visual parity not verified |
+| `windows-productivity-concept.png` | Productivity & Labour, overview | Horizontal desktop tabs and five live KPI cards above filtered results coded; visual parity not verified |
 | `windows-reports-library-concept.png` | Reports | Desktop metric strip/list implemented in `lib/features/reports/reports_page.dart`; **visual parity not verified** |
 | `windows-user-form-concept.png` | User Management, add user | Full-width account editor and role-based permissions coded; visual parity not verified |
 | `windows-users-roles-concept.png` | User Management, roles | Searchable full-width live account register and read-only role matrix coded; visual parity not verified |
