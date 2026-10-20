@@ -22,6 +22,7 @@ class UsersPage extends StatefulWidget {
 
 class _UsersPageState extends State<UsersPage> {
   late Future<Map<String, dynamic>> _future;
+  String _userQuery = '';
 
   @override
   void initState() {
@@ -234,30 +235,89 @@ class _UsersPageState extends State<UsersPage> {
         );
 
         if (isWindowsPlatform) {
+          // The approved desktop register is full-width, with a searchable
+          // account list above read-only role defaults, not a side-by-side
+          // mobile permission editor. Only server-provided users and roles
+          // are shown; edit/delete remain permission-gated.
+          final query = _userQuery.trim().toLowerCase();
+          final visibleUsers = users.where((u) => query.isEmpty ||
+              '${u['name'] ?? ''} ${u['email'] ?? ''} ${roleMap[u['role']]?['name'] ?? ''}'
+                  .toLowerCase().contains(query)).toList();
+          final desktopTable = SectionCard(
+            title: 'Users & Roles',
+            padding: EdgeInsets.zero,
+            child: visibleUsers.isEmpty
+                ? const Padding(padding: EdgeInsets.all(24), child: Text('No users match this search.'))
+                : AppDataTable(
+                    columns: ['User', 'User ID', 'Role', 'Status', 'Created', 'Permissions', if (canManage) 'Actions'],
+                    rows: [for (final u in visibleUsers) [
+                      Text('${u['name'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                      u['email'] ?? '—',
+                      _RoleChip(role: roleMap[u['role']]),
+                      u['active'] == 1 ? const StatusChip('ACTIVE') : const StatusChip('INACTIVE'),
+                      fmtDate(u['created_at']),
+                      _permsCell(u, roleMap[u['role']]),
+                      if (canManage) Row(mainAxisSize: MainAxisSize.min, children: [
+                        IconButton(
+                          tooltip: 'Edit user', icon: const Icon(Icons.edit_outlined, size: 18),
+                          onPressed: () async {
+                            final saved = await showDialog<bool>(context: context,
+                                builder: (_) => UserFormDialog(roles: roles, user: u));
+                            if (saved == true) _reload();
+                          },
+                        ),
+                        if (u['id'] != auth.session?.id)
+                          IconButton(
+                            tooltip: 'Delete permanently',
+                            icon: const Icon(Icons.delete_outline_rounded, size: 18, color: AppColors.red),
+                            onPressed: () => _deleteUser(u),
+                          ),
+                      ]),
+                    ]],
+                  ),
+          );
+          final desktopRoles = SectionCard(
+            title: 'Role Permission Matrix · read-only defaults',
+            padding: EdgeInsets.zero,
+            child: AppDataTable(
+              columns: const ['Role', 'Permissions'],
+              rows: [for (final r in roles) [
+                _RoleChip(role: r),
+                Text(((r['permissions'] as List?) ?? const [])
+                    .where((p) => CompanyProfile.usesLossPct || !'$p'.startsWith('loss.'))
+                    .join(' · '), maxLines: 2, overflow: TextOverflow.ellipsis),
+              ]],
+            ),
+          );
           return WindowsDocumentWorkspace(
-            title: 'User Administration',
-            subtitle: 'Accounts, role assignments and permissions',
+            title: 'Users & Roles',
+            subtitle: 'Manage accounts and permission assignments',
             icon: Icons.manage_accounts_outlined,
             commandBar: WindowsCommandStrip(children: [
-              Text('${users.length} ${tr('accounts')}', style: const TextStyle(fontWeight: FontWeight.w700)),
-              Text('· ${tr('Each role has its own dashboard & permissions')}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+              Text('${users.length} accounts · ${roles.length} roles',
+                  style: const TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(width: 14),
+              SizedBox(width: 250, height: 36, child: TextField(
+                decoration: const InputDecoration(
+                  hintText: 'Search users...', prefixIcon: Icon(Icons.search, size: 18),
+                  contentPadding: EdgeInsets.symmetric(vertical: 8),
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (value) => setState(() => _userQuery = value),
+              )),
               if (canManage) addUser,
             ]),
-            content: LayoutBuilder(builder: (context, constraints) {
-              final wide = constraints.maxWidth >= 1240;
-              return ListView(
-                padding: const EdgeInsets.all(14),
-                children: wide
-                    ? [
-                        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Expanded(flex: 6, child: userTable),
-                          const SizedBox(width: 12),
-                          Expanded(flex: 5, child: permissionMatrix),
-                        ]),
-                      ]
-                    : [userTable, const SizedBox(height: 12), permissionMatrix],
-              );
-            }),
+            content: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                desktopTable,
+                const SizedBox(height: 8),
+                Text('Actions require users.manage permission; server safeguards still apply.',
+                    style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                const SizedBox(height: 20),
+                desktopRoles,
+              ],
+            ),
           );
         }
 
@@ -456,13 +516,13 @@ class _UserFormDialogState extends State<UserFormDialog> {
           Flexible(child: SingleChildScrollView(
             padding: const EdgeInsets.all(20),
             child: LayoutBuilder(builder: (context, constraints) {
-              final details = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Account details', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 12),
+              final wide = constraints.maxWidth >= 720;
+              final identity = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 TextField(controller: name, decoration: InputDecoration(labelText: tr('Full name *'))),
                 const SizedBox(height: 12),
                 TextField(controller: email, enabled: !editing,
-                    decoration: InputDecoration(labelText: tr('Login ID *'))),
+                  decoration: const InputDecoration(labelText: 'Login ID *',
+                    helperText: 'App login ID, not necessarily a mailbox')),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: widget.roles.any((r) => r['id'] == role) ? role : null,
@@ -474,11 +534,12 @@ class _UserFormDialogState extends State<UserFormDialog> {
                     setState(() { role = v; customPerms = _defaultPermsFor(v); });
                   },
                 ),
-                const SizedBox(height: 12),
+              ]);
+              final credentials = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 TextField(controller: password, obscureText: true,
-                    decoration: InputDecoration(labelText: editing
-                        ? 'Reset password (leave blank to keep)' : 'Password *',
-                        hintText: 'min 6 characters')),
+                  decoration: InputDecoration(labelText: editing
+                    ? 'Reset password (leave blank to keep)' : 'Password *',
+                    helperText: 'Minimum 6 characters')),
                 if (editing) SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: Text(tr('Account active')),
@@ -486,19 +547,26 @@ class _UserFormDialogState extends State<UserFormDialog> {
                   value: active, onChanged: (v) => setState(() => active = v),
                 ),
               ]);
-              final permissions = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Permissions', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 4),
-                const Text('Permissions default to the selected role; changes are custom.',
+              return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Container(padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: const Color(0xFFE8F2FA),
+                    border: Border.all(color: const Color(0xFFB8D4E8)),
+                    borderRadius: BorderRadius.circular(4)),
+                  child: const Row(children: [Icon(Icons.info_outline, size: 17), SizedBox(width: 10),
+                    Expanded(child: Text('Permissions default to the selected role; changes are custom.'))])),
+                const SizedBox(height: 18),
+                const Text('User Details', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 12),
+                if (wide) Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Expanded(child: identity), const SizedBox(width: 24), Expanded(child: credentials),
+                ]) else ...[identity, const SizedBox(height: 12), credentials],
+                const SizedBox(height: 22),
+                const Text('Permissions', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 6),
+                const Text('Based on the selected role. Customize before saving.',
                     style: TextStyle(fontSize: 12)),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 _permissionsEditor(),
-              ]);
-              if (constraints.maxWidth < 720) return Column(children: [details,
-                const SizedBox(height: 20), permissions]);
-              return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Expanded(flex: 4, child: details), const SizedBox(width: 20),
-                Expanded(flex: 6, child: permissions),
               ]);
             }),
           )),
