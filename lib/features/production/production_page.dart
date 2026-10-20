@@ -12,6 +12,7 @@ import '../../core/theme.dart';
 import '../../state/auth.dart';
 import '../../core/offline_queue.dart';
 import '../../ui/widgets.dart';
+import 'production_batch_filters.dart';
 
 /// The factory's shrink-tray sizes — a fixed list, the SAME for every
 /// product (white vinegar or soya sauce): 610 / 740 / 1.0 L / 1.3 L.
@@ -28,10 +29,18 @@ class ProductionPage extends StatefulWidget {
 }
 
 class _ProductionPageState extends State<ProductionPage> {
+  static const _allProductsFilter = '__all_production_products__';
+
   String _status = '';
   String _query = '';
+  String? _productFilterKey;
+  String? _productFilterName;
+  DateTimeRange? _dateFilter;
   int? _expandedBatchId;
   late Future<List<Map<String, dynamic>>> _future;
+
+  bool get _hasActiveBatchFilters =>
+      _query.trim().isNotEmpty || _productFilterKey != null || _dateFilter != null;
 
   @override
   void initState() {
@@ -47,6 +56,148 @@ class _ProductionPageState extends State<ProductionPage> {
 
   void _reload() => setState(() => _future = _load());
 
+  Map<String, String> _productOptions(List<Map<String, dynamic>> rows) {
+    final options = <String, String>{};
+    for (final batch in rows) {
+      final key = productionBatchProductKey(batch);
+      if (key.isEmpty) continue;
+      final name = '${batch['product_name'] ?? ''}'.trim();
+      final itemCode = '${batch['item_code'] ?? ''}'.trim();
+      final label = name.isNotEmpty ? name : itemCode;
+      if (label.isNotEmpty) options.putIfAbsent(key, () => label);
+    }
+    final selectedKey = _productFilterKey;
+    if (selectedKey != null) {
+      options.putIfAbsent(selectedKey, () => _productFilterName ?? selectedKey);
+    }
+    final sorted = options.entries.toList()
+      ..sort((a, b) => a.value.toLowerCase().compareTo(b.value.toLowerCase()));
+    return Map.fromEntries(sorted);
+  }
+
+  Widget _searchField() => TextField(
+        onChanged: (value) => setState(() => _query = value),
+        decoration: InputDecoration(
+          prefixIcon: const Icon(Icons.search_rounded),
+          hintText: U.ize('Search batch or product'),
+          suffixIcon: _query.isEmpty
+              ? null
+              : IconButton(
+                  icon: const Icon(Icons.clear_rounded),
+                  onPressed: () => setState(() => _query = ''),
+                ),
+        ),
+      );
+
+  Widget _productFilterField(List<Map<String, dynamic>> rows) {
+    final options = _productOptions(rows);
+    final selectedValue = _productFilterKey ?? _allProductsFilter;
+    return DropdownButtonFormField<String>(
+      key: ValueKey('production-product-filter-$selectedValue'),
+      initialValue: selectedValue,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: U.ize('Product'),
+        prefixIcon: const Icon(Icons.inventory_2_outlined, size: 19),
+        isDense: true,
+      ),
+      items: [
+        DropdownMenuItem(
+          value: _allProductsFilter,
+          child: Text(U.ize('All products'), maxLines: 1, overflow: TextOverflow.ellipsis),
+        ),
+        for (final option in options.entries)
+          DropdownMenuItem(
+            value: option.key,
+            child: Text(option.value, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+      ],
+      onChanged: (value) {
+        if (value == null) return;
+        setState(() {
+          if (value == _allProductsFilter) {
+            _productFilterKey = null;
+            _productFilterName = null;
+          } else {
+            _productFilterKey = value;
+            _productFilterName = options[value];
+          }
+        });
+      },
+    );
+  }
+
+  Future<void> _pickProductionDateRange() async {
+    final selected = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100, 12, 31),
+      initialDateRange: _dateFilter,
+    );
+    if (selected == null || !mounted) return;
+    setState(() => _dateFilter = selected);
+  }
+
+  Widget _dateFilterControl() {
+    final range = _dateFilter;
+    final label = range == null
+        ? U.ize('Date')
+        : '${fmtDate(ymd(range.start))} – ${fmtDate(ymd(range.end))}';
+    return Row(children: [
+      Expanded(
+        child: OutlinedButton.icon(
+          onPressed: _pickProductionDateRange,
+          icon: const Icon(Icons.date_range_rounded, size: 18),
+          label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        ),
+      ),
+      if (range != null)
+        IconButton(
+          tooltip: U.ize('Clear date filter'),
+          onPressed: () => setState(() => _dateFilter = null),
+          icon: const Icon(Icons.close_rounded, size: 18),
+        ),
+    ]);
+  }
+
+  Widget _searchAndFilters(
+    List<Map<String, dynamic>> rows, {
+    Widget? trailing,
+  }) =>
+      LayoutBuilder(builder: (context, constraints) {
+        final search = _searchField();
+        final product = _productFilterField(rows);
+        final date = _dateFilterControl();
+        if (constraints.maxWidth >= 960) {
+          return Row(children: [
+            Expanded(flex: 4, child: search),
+            const SizedBox(width: 8),
+            SizedBox(width: 210, child: product),
+            const SizedBox(width: 8),
+            SizedBox(width: 250, child: date),
+            if (trailing != null) ...[
+              const SizedBox(width: 8),
+              trailing,
+            ],
+          ]);
+        }
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [
+            Expanded(child: search),
+            if (trailing != null) ...[
+              const SizedBox(width: 8),
+              trailing,
+            ],
+          ]),
+          const SizedBox(height: 8),
+          Row(children: [
+            Expanded(child: product),
+            const SizedBox(width: 8),
+            Expanded(child: date),
+          ]),
+        ]);
+      });
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthController>();
@@ -57,12 +208,15 @@ class _ProductionPageState extends State<ProductionPage> {
         if (snap.hasError) return ErrorState(snap.error!, onRetry: _reload);
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
         final rows = snap.data!;
-        final visibleRows = _query.trim().isEmpty
-            ? rows
-            : rows.where((b) {
-                final haystack = '${b['code'] ?? ''} ${b['product_name'] ?? ''} ${b['item_code'] ?? ''}'.toLowerCase();
-                return haystack.contains(_query.trim().toLowerCase());
-              }).toList();
+        final visibleRows = rows
+            .where((batch) => matchesProductionBatchFilters(
+                  batch: batch,
+                  query: _query,
+                  productKey: _productFilterKey,
+                  fromDate: _dateFilter?.start,
+                  throughDate: _dateFilter?.end,
+                ))
+            .toList();
         if (isWindowsPlatform) {
           return _buildWindowsRegister(rows: rows, visibleRows: visibleRows, auth: auth, canExecute: canExecute);
         }
@@ -102,21 +256,12 @@ class _ProductionPageState extends State<ProductionPage> {
               ),
             ),
           const SizedBox(height: 12),
-          TextField(
-            onChanged: (value) => setState(() => _query = value),
-            decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.search_rounded),
-              hintText: U.ize('Search batch or product'),
-              suffixIcon: _query.isEmpty
-                  ? null
-                  : IconButton(icon: const Icon(Icons.clear_rounded), onPressed: () => setState(() => _query = '')),
-            ),
-          ),
+          _searchAndFilters(rows),
           const SizedBox(height: 16),
           SectionCard(
             title: U.ize('Batch Register'),
             child: visibleRows.isEmpty
-                ? EmptyState(U.ize(_query.trim().isEmpty ? 'No batches yet' : 'No matching batches'))
+                ? EmptyState(U.ize(_hasActiveBatchFilters ? 'No matching batches' : 'No batches yet'))
                 : Column(
                     children: [
                       for (var i = 0; i < visibleRows.length; i++)
@@ -165,14 +310,6 @@ class _ProductionPageState extends State<ProductionPage> {
           onSelected: (_) => setState(() { _status = status; _future = _load(); }),
         ),
     ]);
-    final search = TextField(
-      onChanged: (value) => setState(() => _query = value),
-      decoration: InputDecoration(
-        prefixIcon: const Icon(Icons.search_rounded, size: 18),
-        hintText: U.ize('Search batch or product'),
-        suffixIcon: _query.isEmpty ? null : IconButton(icon: const Icon(Icons.clear_rounded, size: 17), onPressed: () => setState(() => _query = '')),
-      ),
-    );
     final createButton = FilledButton.icon(
       onPressed: () async {
         final saved = await showFastDialog<bool>(context, (_) => const BatchFormDialog());
@@ -186,7 +323,7 @@ class _ProductionPageState extends State<ProductionPage> {
       trailing: Text('${visibleRows.length} ${tr('of')} ${rows.length}', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
       padding: EdgeInsets.zero,
       child: visibleRows.isEmpty
-          ? EmptyState(U.ize(_query.trim().isEmpty ? 'No batches yet' : 'No matching batches'))
+          ? EmptyState(U.ize(_hasActiveBatchFilters ? 'No matching batches' : 'No batches yet'))
           : AppDataTable(
               columns: [
                 'Batch', 'Product', 'Planned ${U.cb}', 'Produced ${U.cb}',
@@ -245,19 +382,11 @@ class _ProductionPageState extends State<ProductionPage> {
           const SizedBox(height: 10),
           _WindowsProductionMetrics(rows: rows),
           const SizedBox(height: 10),
-          if (constraints.maxWidth >= 960)
-            Row(children: [
-              Expanded(flex: 6, child: filters),
-              const SizedBox(width: 10),
-              Expanded(flex: 3, child: search),
-              if (canManage) ...[const SizedBox(width: 10), createButton],
-            ])
-          else
-            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              filters,
-              const SizedBox(height: 8),
-              Row(children: [Expanded(child: search), if (canManage) ...[const SizedBox(width: 8), createButton]]),
-            ]),
+          Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            filters,
+            const SizedBox(height: 8),
+            _searchAndFilters(rows, trailing: canManage ? createButton : null),
+          ]),
           const SizedBox(height: 10),
           batchTable,
         ],
