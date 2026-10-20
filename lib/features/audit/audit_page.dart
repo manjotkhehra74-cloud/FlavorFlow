@@ -50,6 +50,7 @@ class _AuditPageState extends State<AuditPage> {
               ? const EmptyState('No audit entries')
               : AppDataTable(
                   columns: const ['When', 'User', 'Role', 'Action', 'Entity', 'Ref', 'Details'],
+                  onRowTap: isWindowsPlatform ? (index) => setState(() => _selected = logs[index]) : null,
                   rows: [
                     for (final l in logs)
                       [

@@ -12,7 +12,7 @@ These are the actual image assets present in this repository on this branch. The
 | `windows-adjustment-form-revised-concept.png` | Stock Adjustments, new request | Visual parity not verified; material API not deployed |
 | `windows-approval-history-concept.png` | Approvals, history | Visual parity not verified |
 | `windows-approvals-register-concept.png` | Approvals, pending | **Rejected early concept; do not implement as approval** |
-| `windows-audit-trail-concept.png` | Audit Log | Visual parity not verified |
+| `windows-audit-trail-concept.png` | Audit Log | Filterable live register and full-row selection to inspector; visual parity not verified |
 | `windows-daily-labour-concept.png` | Productivity & Labour, labour | Visual parity not verified |
 | `windows-daily-labour-entry-concept.png` | Productivity & Labour, entry | Visual parity not verified |
 | `windows-edit-user-concept.png` | User Management, edit user | Visual parity not verified |
@@ -22,8 +22,8 @@ These are the actual image assets present in this repository on this branch. The
 | `windows-offline-entries-concept.png` | Sync / offline entries | Visual parity not verified |
 | `windows-productivity-concept.png` | Productivity & Labour, overview | Visual parity not verified |
 | `windows-reports-library-concept.png` | Reports | Desktop metric strip/list implemented in `lib/features/reports/reports_page.dart`; **visual parity not verified** |
-| `windows-user-form-concept.png` | User Management, add user | Visual parity not verified |
-| `windows-users-roles-concept.png` | User Management, roles | Visual parity not verified |
+| `windows-user-form-concept.png` | User Management, add user | Full-width account editor and role-based permissions coded; visual parity not verified |
+| `windows-users-roles-concept.png` | User Management, roles | Searchable full-width live account register and read-only role matrix coded; visual parity not verified |
 
 `preview/windows_ui_preview.html` is an earlier interactive concept containing **illustrative fake data**. It is not a production UI specification and its sample values must not be used in Flutter. The selected previews mentioned during later design discussions (Products, Inventory, Production, Packing, Billing, etc.) are **not in this repository** in an identifiable complete approved-image set; the historical selections alone do not make any checked-in image approved. Do not silently mark them implemented or reuse rejected candidates. Find the approved assets and compare each dialog and state against a running Windows build before declaring full completion.
 
