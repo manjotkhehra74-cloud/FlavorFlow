@@ -17,6 +17,155 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  server-tests:
+    name: Test backend and drum inventory workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.x'
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - name: Install backend packages
+        run: npm ci --prefix server
+      - name: Run backend tests
+        run: npm test --prefix server
+      - name: Syntax-check backend JavaScript
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r file; do node --check "$file"; done < <(find server -path 'server/node_modules' -prune -o -name '*.js' -print)
+
+  deploy-server:
+    name: Deploy Node backend to production VPS
+    needs: server-tests
+    if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/arena/b7695262-flavorflow') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DEPLOY_HOST: ${{ secrets.FLAVORFLOW_DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.FLAVORFLOW_DEPLOY_USER }}
+      DEPLOY_SSH_KEY: ${{ secrets.FLAVORFLOW_DEPLOY_SSH_KEY }}
+      DEPLOY_PORT: ${{ secrets.FLAVORFLOW_DEPLOY_PORT }}
+      SERVER_PATH: ${{ vars.FLAVORFLOW_SERVER_DEPLOY_PATH || '/opt/flavorflow/server' }}
+      WEB_PATH: ${{ vars.FLAVORFLOW_DEPLOY_PATH || '/opt/flavorflow/web' }}
+
+    steps:
+      - name: Check whether production deployment is configured
+        id: deploy-config
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$DEPLOY_HOST" || -z "$DEPLOY_USER" || -z "$DEPLOY_SSH_KEY" ]]; then
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo '::notice title=Backend deployment skipped::Add the existing FlavorFlow deploy host, user and SSH key secrets to enable automatic backend deployment.'
+            exit 0
+          fi
+          echo 'ready=true' >> "$GITHUB_OUTPUT"
+
+      - name: Validate backend artifact and configure SSH
+        if: steps.deploy-config.outputs.ready == 'true'
+        id: ssh-config
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s server/server.js
+          test -s server/package-lock.json
+          test -s server/routes/drums.js
+          for path in "$SERVER_PATH" "$WEB_PATH"; do
+            if [[ "$path" != /* || "$path" == *".."* || "$path" == *[[:space:]]* ]]; then
+              echo '::error::Deployment paths must be absolute and contain no whitespace or parent-directory segments.'
+              exit 1
+            fi
+          done
+          port="${DEPLOY_PORT:-22}"
+          key_file="$RUNNER_TEMP/flavorflow-deploy-key"
+          known_hosts="$RUNNER_TEMP/flavorflow-known-hosts"
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$key_file"
+          chmod 600 "$key_file"
+          ssh-keyscan -p "$port" -H "$DEPLOY_HOST" > "$known_hosts" 2>/dev/null
+          test -s "$known_hosts" || { echo '::error::Could not verify the server SSH host key.'; exit 1; }
+          echo "key_file=$key_file" >> "$GITHUB_OUTPUT"
+          echo "known_hosts=$known_hosts" >> "$GITHUB_OUTPUT"
+          echo "port=$port" >> "$GITHUB_OUTPUT"
+
+      - name: Stage backend source on the VPS
+        if: steps.deploy-config.outputs.ready == 'true'
+        shell: bash
+        env:
+          SSH_KEY_FILE: ${{ steps.ssh-config.outputs.key_file }}
+          SSH_KNOWN_HOSTS: ${{ steps.ssh-config.outputs.known_hosts }}
+          SSH_PORT: ${{ steps.ssh-config.outputs.port }}
+        run: |
+          set -euo pipefail
+          remote_tmp="/tmp/flavorflow-server-${GITHUB_SHA}"
+          ssh_opts=(-i "$SSH_KEY_FILE" -p "$SSH_PORT" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$SSH_KNOWN_HOSTS")
+          tar -C server \
+            --exclude='./node_modules' --exclude='./data' --exclude='./test' \
+            --exclude='./.jwt-secret' --exclude='./.env' --exclude='./.env.*' \
+            --exclude='*.db' --exclude='*.db-*' --exclude='*.sqlite*' \
+            --exclude='./backups' -czf - . | \
+            ssh "${ssh_opts[@]}" "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$remote_tmp' && tar -xzf - -C '$remote_tmp'"
+          ssh "${ssh_opts[@]}" "$DEPLOY_USER@$DEPLOY_HOST" bash -s -- "$remote_tmp" "$SERVER_PATH" "$WEB_PATH" "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          staging="$1"
+          server="$2"
+          web="$3"
+          sha="$4"
+          [[ "$server" == /* && "$server" != *".."* && "$server" != *[[:space:]]* ]] || { echo 'Invalid backend deployment path.' >&2; exit 1; }
+          [[ "$web" == /* && "$web" != *".."* && "$web" != *[[:space:]]* ]] || { echo 'Invalid web deployment path.' >&2; exit 1; }
+          [[ -s "$staging/server.js" && -s "$staging/package-lock.json" ]] || { echo 'Staged backend source is incomplete.' >&2; exit 1; }
+          node -e 'if (Number(process.versions.node.split(".")[0]) < 24) process.exit(1)' || { echo 'Node.js 24 or newer is required for the FlavorFlow backend.' >&2; exit 1; }
+          (cd "$staging" && npm ci --omit=dev --no-audit --no-fund)
+          backup_root="$(dirname "$server")/backups/server"
+          mkdir -p "$server" "$backup_root"
+          if [[ -d "$server" && -w "$server" ]]; then :; elif [[ ! -w "$(dirname "$server")" ]]; then echo "Deploy user cannot write $server." >&2; exit 1; fi
+          if [[ -d "$web" && ! -w "$web" ]]; then echo "Deploy user cannot remove the legacy public request log from $web." >&2; exit 1; fi
+          rm -f "$web/ff-requests.txt"
+          backup="$backup_root/code-before-$sha"
+          mkdir -p "$backup"
+          shopt -s nullglob
+          for file in "$server"/*.js "$server"/package.json "$server"/package-lock.json "$server"/routes/*.js; do
+            rel="${file#"$server"/}"
+            mkdir -p "$backup/$(dirname "$rel")"
+            cp -a "$file" "$backup/$rel"
+          done
+          if [[ ! -s "$server/.jwt-secret" ]]; then
+            umask 077
+            node -e 'process.stdout.write(require("crypto").randomBytes(48).toString("hex"))' > "$server/.jwt-secret"
+          fi
+          chmod 600 "$server/.jwt-secret"
+          if [[ "$(id -u)" -eq 0 ]]; then
+            service_user="$(systemctl show -p User --value flavorflow)"
+          else
+            service_user="$(sudo -n systemctl show -p User --value flavorflow)"
+          fi
+          if [[ -n "$service_user" && "$service_user" != "$(id -un)" ]]; then
+            if [[ "$(id -u)" -eq 0 ]]; then chown "$service_user" "$server/.jwt-secret"; else sudo -n chown "$service_user" "$server/.jwt-secret"; fi
+          fi
+          cp -a "$staging"/. "$server"/
+          if [[ "$(id -u)" -eq 0 ]]; then
+            systemctl restart flavorflow
+            systemctl is-active --quiet flavorflow
+          else
+            sudo -n systemctl restart flavorflow
+            sudo -n systemctl is-active --quiet flavorflow
+          fi
+          healthy=false
+          for attempt in $(seq 1 20); do
+            if curl --silent --show-error --fail --max-time 3 http://127.0.0.1:4000/api/health >/dev/null; then healthy=true; break; fi
+            sleep 2
+          done
+          [[ "$healthy" == true ]] || { echo 'FlavorFlow backend health check failed after restart.' >&2; exit 1; }
+          rm -f "$web/ff-requests.txt"
+          rm -rf "$staging"
+          echo "Deployed backend $sha, restarted flavorflow, and removed the legacy public request log without reading it."
+          REMOTE
+
   build:
     name: Analyze, test and build web + Android APK/AAB
     runs-on: ubuntu-latest
@@ -175,7 +324,7 @@ jobs:
 
   deploy-web:
     name: Deploy Flutter web to production VPS
-    needs: build
+    needs: [build, server-tests, deploy-server]
     if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/arena/b7695262-flavorflow') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15

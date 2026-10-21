@@ -1,0 +1,20 @@
+# Runtime secrets and environment
+.env
+.env.*
+!.env.example
+.jwt-secret
+
+# Runtime database files (never commit live data)
+data/
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+
+# Installed dependencies, logs, and backups
+node_modules/
+*.log
+*.bak*
+backups/

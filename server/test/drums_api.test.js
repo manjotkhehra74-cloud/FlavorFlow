@@ -1,0 +1,135 @@
+'use strict';
+
+process.env.ERP_DB_PATH = ':memory:';
+process.env.JWT_SECRET = 'test-only-secret-that-is-never-used-in-production-123456';
+process.env.FLAVORFLOW_BOOTSTRAP_EMAIL = 'drum-test@example.invalid';
+process.env.FLAVORFLOW_BOOTSTRAP_PASSWORD = 'test-only-password-123456';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const express = require('express');
+const db = require('../db');
+const drums = require('../routes/drums');
+const { errorHandler } = require('../middleware');
+
+let server;
+let baseUrl;
+
+function call(path, { method = 'GET', body } = {}) {
+  return fetch(`${baseUrl}${path}`, {
+    method,
+    headers: { 'content-type': 'application/json' },
+    body: body == null ? undefined : JSON.stringify(body),
+  }).then(async (response) => ({
+    status: response.status,
+    body: await response.json(),
+  }));
+}
+
+test.before(async () => {
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => {
+    req.user = { id: 1, name: 'Drum API Test', role: 'super_admin', permissions: ['*'] };
+    next();
+  });
+  app.use('/api/drums', drums);
+  app.use(errorHandler);
+  server = app.listen(0, '127.0.0.1');
+  await new Promise((resolve, reject) => {
+    server.once('listening', resolve);
+    server.once('error', reject);
+  });
+  baseUrl = `http://127.0.0.1:${server.address().port}`;
+});
+
+test.after(async () => {
+  if (server) await new Promise((resolve) => server.close(resolve));
+  db.close();
+});
+
+test('drum fills keep a plant-wide sequence, individual gross weights, shelf-life expiry and outbound history', async () => {
+  const product24 = await call('/api/drums/products', {
+    method: 'POST',
+    body: { name: 'Aseptic Mango Pulp', code: 'AMP', shelfLifeMonths: 24 },
+  });
+  assert.equal(product24.status, 201);
+  const product18 = await call('/api/drums/products', {
+    method: 'POST',
+    body: { name: 'Liner Tomato Paste', shelfLifeMonths: 18 },
+  });
+  assert.equal(product18.status, 201);
+
+  const plant = await call('/api/drums/plants', { method: 'POST', body: { name: 'Test Plant' } });
+  assert.equal(plant.status, 201);
+  const plantId = plant.body.plant.id;
+
+  const firstBatch = await call('/api/drums/fills', {
+    method: 'POST',
+    body: {
+      plantId,
+      productId: product24.body.product.id,
+      batchCode: 'MANGO-01',
+      manufacturingDate: '2025-01-31',
+      packagingType: 'aseptic_bag',
+      grossWeightsKg: [230.1, 231.25],
+    },
+  });
+  assert.equal(firstBatch.status, 201);
+  assert.deepEqual(firstBatch.body.assigned_numbers, [1, 2]);
+  assert.deepEqual(firstBatch.body.fills.map((fill) => fill.gross_weight_kg), [230.1, 231.25]);
+  assert.equal(firstBatch.body.batch.expiry_date, '2027-01-31');
+
+  const secondBatch = await call('/api/drums/fills', {
+    method: 'POST',
+    body: {
+      plantId,
+      productId: product18.body.product.id,
+      batchCode: 'TOMATO-01',
+      manufacturingDate: '2025-10-01',
+      packagingType: 'liner_bag',
+      grossWeightsKg: [220.5],
+    },
+  });
+  assert.equal(secondBatch.status, 201);
+  assert.deepEqual(secondBatch.body.assigned_numbers, [3]);
+  assert.equal(secondBatch.body.batch.expiry_date, '2027-04-01');
+
+  const beforeDispatch = await call(`/api/drums/stock?plantId=${plantId}`);
+  assert.equal(beforeDispatch.body.summary.drum_count, 3);
+
+  const dispatch = await call('/api/drums/dispatches', {
+    method: 'POST',
+    body: {
+      plantId,
+      truckNumber: 'pb-02-aa-1234',
+      dispatchDateTime: '2026-10-20T10:30:00+05:30',
+      fillIds: firstBatch.body.fills.map((fill) => fill.id),
+    },
+  });
+  assert.equal(dispatch.status, 201);
+  assert.equal(dispatch.body.dispatch.destination, 'Neemrana');
+  assert.equal(dispatch.body.dispatch.dispatch_datetime, '2026-10-20T05:00:00.000Z');
+  assert.equal(dispatch.body.drum_count, 2);
+  assert.deepEqual(dispatch.body.drum_numbers, [1, 2]);
+
+  const afterDispatch = await call(`/api/drums/stock?plantId=${plantId}`);
+  assert.equal(afterDispatch.body.summary.drum_count, 1);
+  assert.equal(afterDispatch.body.stock[0].available_drums, 1);
+
+  const detail = await call(`/api/drums/dispatches/${dispatch.body.dispatch.id}`);
+  assert.equal(detail.status, 200);
+  assert.equal(detail.body.drums.length, 2);
+  assert.deepEqual(detail.body.drums.map((fill) => fill.fill_number), [1, 2]);
+
+  const duplicate = await call('/api/drums/dispatches', {
+    method: 'POST',
+    body: {
+      plantId,
+      truckNumber: 'PB-02-AA-1234',
+      dispatchDateTime: '2026-10-20T11:00:00+05:30',
+      fillIds: firstBatch.body.fills.map((fill) => fill.id),
+    },
+  });
+  assert.equal(duplicate.status, 409);
+});

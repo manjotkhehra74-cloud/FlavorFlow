@@ -1,0 +1,21 @@
+{
+  "name": "flavorflow-server",
+  "version": "1.0.0",
+  "description": "FlavorFlow ERP backend with Express and built-in SQLite",
+  "main": "server.js",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node --test test/*.test.js",
+    "smoke": "npm test"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "express": "^4.21.2"
+  }
+}

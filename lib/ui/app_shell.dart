@@ -28,6 +28,7 @@ const List<Map<String, String>> kStandardNav = [
   {'path': '/dashboard', 'label': 'Dashboard', 'icon': 'dashboard', 'perm': 'dashboard.view', 'group': 'Overview'},
   {'path': '/products', 'label': 'Product Master', 'icon': 'inventory_2', 'perm': 'products.view', 'group': 'Operations'},
   {'path': '/inventory', 'label': 'Inventory', 'icon': 'warehouse', 'perm': 'inventory.view', 'group': 'Operations'},
+  {'path': '/drums', 'label': 'Drum Stock', 'icon': 'inventory_2', 'perm': 'inventory.view', 'group': 'Operations'},
   {'path': '/stock', 'label': 'Stock Ledger', 'icon': 'history', 'perm': 'stock.view', 'group': 'Operations'},
   {'path': '/packing', 'label': 'Packing', 'icon': 'widgets', 'perm': 'packing.view', 'group': 'Operations'},
   {'path': '/raw', 'label': 'Raw Material', 'icon': 'science', 'perm': 'raw.view', 'group': 'Operations'},
