@@ -995,7 +995,6 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
   Widget _analysisMatrix(String title, Map<String, dynamic> data) {
     final rows = ((data['rows'] as List?) ?? const []).map((r) => (r as List).toList()).toList();
     final columns = ((data['columns'] as List?) ?? const ['METRIC']).map((v) => '$v').toList();
-    final headerNote = title.contains('Day') || title.contains('Night') ? null : null;
     return SectionCard(
       title: title,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
