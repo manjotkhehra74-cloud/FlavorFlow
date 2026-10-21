@@ -67,6 +67,10 @@ jobs:
           fi
           echo 'ready=true' >> "$GITHUB_OUTPUT"
 
+      - name: Check out source
+        if: steps.deploy-config.outputs.ready == 'true'
+        uses: actions/checkout@v4
+
       - name: Validate backend artifact and configure SSH
         if: steps.deploy-config.outputs.ready == 'true'
         id: ssh-config
