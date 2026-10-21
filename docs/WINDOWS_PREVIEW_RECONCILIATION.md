@@ -4,7 +4,7 @@ The Flutter executable is built from `lib/`, **not** from `Windows App/`. The la
 
 ## How to verify
 
-1. Install the Windows build produced from commit `1ef6b65` (or later) on a Windows 11 PC.
+1. Install the Windows build produced from commit `37c164d` (or later) on a Windows 11 PC. Previous reconciliations were at `1ef6b65` → `77e082c` → `7547cd4` → `37c164d` on `arena/d4964b5d-flavorflow`.
 2. Open each route listed below at 1280×800 or larger (WindowsDocumentWorkspace breakpoint).
 3. Capture a screenshot of the running route and place it beside the reference PNG at the same window size.
 4. Check headers, command strips, column order, empty states and dialogs — not just that the route opens.
