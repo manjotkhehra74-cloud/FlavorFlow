@@ -5,6 +5,7 @@ on:
     branches:
       - arena/01a0dc70-flavorflow
       - arena/02900f8a-flavorflow
+      - arena/d4964b5d-flavorflow
   workflow_dispatch:
 
 permissions:
