@@ -499,6 +499,88 @@ class _UserFormDialogState extends State<UserFormDialog> {
             },
           );
 
+  // Windows parity table — 7 capability columns mirroring windows-user-form-concept.png
+  Widget _windowsPermissionsTable() {
+    const headers = ['Module / Permission', 'View', 'Add', 'Edit', 'Delete', 'Approve', 'Export', 'Import'];
+    // Map capability column -> suffixes that count for that column
+    const suffixMap = {
+      1: ['view'],
+      2: ['create', 'add', 'receive', 'consume'],
+      3: ['edit'],
+      4: ['delete'],
+      5: ['approve'],
+      6: ['export'],
+      7: ['import'],
+    };
+    String? keyForGroupCol(AppPermissionGroup g, int col) {
+      final suffixes = suffixMap[col] ?? const [];
+      for (final s in suffixes) {
+        for (final p in g.permissions) {
+          if (p.key.split('.').last == s || p.key.endsWith('.$s')) return p.key;
+        }
+      }
+      return null;
+    }
+    bool isChecked(AppPermissionGroup g, int col) {
+      final k = keyForGroupCol(g, col);
+      if (k == null) return false;
+      // manage implies all capabilities for its group
+      final manageKey = '${g.id}.manage';
+      if (customPerms.contains(manageKey)) return true;
+      return customPerms.contains(k);
+    }
+    void toggle(AppPermissionGroup g, int col, bool v) {
+      final k = keyForGroupCol(g, col);
+      if (k == null) return;
+      setState(() {
+        if (v) { customPerms.add(k);} else { customPerms.remove(k); }
+        // If toggling individual when manage was set, remove manage to make custom explicit
+        final manageKey = '${g.id}.manage';
+        if (customPerms.contains(manageKey)) {
+          customPerms.remove(manageKey);
+          // keep other columns as they were before via manage — re-add remaining perms
+          for (var c = 1; c <= 7; c++) {
+            if (c == col && !v) continue;
+            final other = keyForGroupCol(g, c);
+            if (other != null && isChecked(g, c)) customPerms.add(other);
+          }
+        }
+      });
+    }
+    final visibleGroups = kPermissionGroups.where((g) => CompanyProfile.usesLossPct || g.id != 'loss').toList();
+    return Container(
+      decoration: BoxDecoration(border: Border.all(color: const Color(0xFFD0D7DD)), borderRadius: BorderRadius.circular(4)),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          headingRowColor: WidgetStatePropertyAll(const Color(0xFFF2F5F8)),
+          columns: [for (final h in headers) DataColumn(label: Text(h, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)))],
+          rows: [
+            for (final g in visibleGroups)
+              DataRow(cells: [
+                DataCell(Row(children: [
+                  Icon(_iconForGroup(g.icon), size: 14, color: const Color(0xFF214E6B)),
+                  const SizedBox(width: 6),
+                  Text(g.label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                ])),
+                for (var col = 1; col <= 7; col++)
+                  DataCell(
+                    keyForGroupCol(g, col) == null
+                        ? const Text('—', style: TextStyle(color: Color(0xFF9AA8B5)))
+                        : Checkbox(
+                            value: isChecked(g, col),
+                            onChanged: (v) => toggle(g, col, v ?? false),
+                            visualDensity: VisualDensity.compact,
+                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                  ),
+              ]),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _windowsForm(BuildContext context) {
     final editing = widget.user != null;
     return Dialog(
@@ -561,12 +643,21 @@ class _UserFormDialogState extends State<UserFormDialog> {
                   Expanded(child: identity), const SizedBox(width: 24), Expanded(child: credentials),
                 ]) else ...[identity, const SizedBox(height: 12), credentials],
                 const SizedBox(height: 22),
-                const Text('Permissions', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                Row(children: [
+                  const Text('Permissions', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                  const Spacer(),
+                  OutlinedButton.icon(
+                    onPressed: () => setState(() => customPerms = _defaultPermsFor(role)),
+                    icon: const Icon(Icons.restart_alt_rounded, size: 16),
+                    label: const Text('Reset to role defaults', style: TextStyle(fontSize: 12)),
+                  ),
+                ]),
                 const SizedBox(height: 6),
-                const Text('Based on the selected role. Customize before saving.',
+                const Text('Based on the selected role. Customize before saving. View · Add · Edit · Delete · Approve · Export · Import columns mirror preview.',
                     style: TextStyle(fontSize: 12)),
                 const SizedBox(height: 10),
-                _permissionsEditor(),
+                // Windows parity: table with 7 capability columns instead of chips — mirrors windows-user-form-concept.png
+                _windowsPermissionsTable(),
               ]);
             }),
           )),

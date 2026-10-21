@@ -155,7 +155,7 @@ class SyncPage extends StatelessWidget {
                         child: Text('No entries in this section.', style: TextStyle(color: scheme.onSurfaceVariant)),
                       )
                     : AppDataTable(
-                        columns: const ['Entry', 'Details', 'Created / synced', 'Attempts', 'Server reference', ''],
+                        columns: const ['Entry', 'Details', 'Created or synced', 'Attempts', 'Server reference', 'Action', 'Action'],
                         rows: [
                           for (final e in entries)
                             [
@@ -164,12 +164,11 @@ class SyncPage extends StatelessWidget {
                               _stamp(e.syncedAt ?? e.createdAt),
                               e.attempts,
                               e.serverRef ?? '—',
-                              e.state == SyncState.failed
-                                  ? Row(mainAxisSize: MainAxisSize.min, children: [
-                                      TextButton(onPressed: () => q.retry(e), child: Text(tr('Retry'))),
-                                      IconButton(tooltip: tr('Discard'), icon: const Icon(Icons.delete_outline_rounded, size: 18), onPressed: () => _confirmDiscard(context, e)),
-                                    ])
-                                  : Text(e.state == SyncState.pending ? tr('Waiting') : tr('Synced')),
+                              if (e.state == SyncState.pending || e.state == SyncState.failed)
+                                OutlinedButton(onPressed: () => q.retry(e), child: Text(tr('Retry')))
+                              else
+                                const Text('—'),
+                              OutlinedButton(onPressed: () => _confirmDiscard(context, e), child: Text(tr('Discard'))),
                             ],
                         ],
                       ),
@@ -180,9 +179,13 @@ class SyncPage extends StatelessWidget {
             subtitle: q.online ? 'Connected · ${pending.length} waiting · ${failed.length} needs review' : 'Offline · entries are saved locally on this device',
             icon: Icons.cloud_sync_outlined,
             commandBar: WindowsCommandStrip(children: [
+              // Mirrors offline preview header toggle (Online Offline) — reflects live connectivity, not a user filter.
+              ChoiceChip(label: Text(tr('Online')), selected: q.online, onSelected: null, visualDensity: VisualDensity.compact),
+              ChoiceChip(label: Text(tr('Offline')), selected: !q.online, selectedColor: const Color(0xFF0A6ED1), labelStyle: TextStyle(color: !q.online ? Colors.white : null), onSelected: null, visualDensity: VisualDensity.compact),
+              const SizedBox(width: 8),
               Icon(q.online ? Icons.cloud_done_outlined : Icons.cloud_off_outlined, size: 17, color: q.online ? AppColors.green : AppColors.amber),
               Text(q.online ? tr('Online') : tr('Offline'), style: const TextStyle(fontWeight: FontWeight.w700)),
-              const SizedBox(width: 10),
+              const Spacer(),
               FilledButton.icon(onPressed: () => q.syncNow(), icon: const Icon(Icons.sync_rounded, size: 16), label: Text(tr('Sync now'))),
             ]),
             content: LayoutBuilder(builder: (context, constraints) {

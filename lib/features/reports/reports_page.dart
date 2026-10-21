@@ -102,6 +102,7 @@ class _ReportMetric extends StatelessWidget {
 }
 
 /// Native desktop summary derived exclusively from the authorized report list.
+/// Mirrors windows-reports-library-concept.png metric strip: Reports Available / Stock Reports / Production Reports / Dispatch Reports
 class _WindowsReportSummary extends StatelessWidget {
   final List<Map<String, dynamic>> reports;
   const _WindowsReportSummary({required this.reports});
@@ -111,31 +112,55 @@ class _WindowsReportSummary extends StatelessWidget {
     int count(String pattern) => reports.where((r) => RegExp(pattern, caseSensitive: false)
         .hasMatch('${r['id'] ?? ''} ${r['title'] ?? ''}')).length;
     final tiles = [
-      ('Reports Available', reports.length, Icons.description_outlined),
-      ('Stock Reports', count('stock|inventory|material|ledger'), Icons.inventory_2_outlined),
-      ('Production Reports', count('production|batch|packing'), Icons.factory_outlined),
-      ('Dispatch Reports', count('dispatch|shipment'), Icons.local_shipping_outlined),
+      ('Reports Available', reports.length, 'from your role / industry', Icons.description_outlined),
+      ('Stock Reports', count('stock|inventory|material|ledger'), 'available', Icons.inventory_2_outlined),
+      ('Production Reports', count('production|batch|packing'), 'available', Icons.factory_outlined),
+      ('Dispatch Reports', count('dispatch|shipment'), 'available', Icons.local_shipping_outlined),
     ];
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-      padding: const EdgeInsets.symmetric(vertical: 12),
+      padding: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface,
           border: Border.all(color: const Color(0xFFC7D1DB)), borderRadius: BorderRadius.circular(4)),
       child: LayoutBuilder(builder: (context, constraints) {
-        final width = constraints.maxWidth / (constraints.maxWidth < 700 ? 2 : 4);
-        return Wrap(children: [for (final (label, value, icon) in tiles)
-          SizedBox(width: width, child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
-            child: Row(children: [
-              Icon(icon, color: const Color(0xFF214E6B), size: 25),
-              const SizedBox(width: 12),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11, color: Color(0xFF627588))),
-                Text('$value', style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
-              ])),
-            ]),
-          )),
+        final isNarrow = constraints.maxWidth < 700;
+        if (isNarrow) {
+          return Column(children: [
+            for (var i = 0; i < tiles.length; i++) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+                child: Row(children: [
+                  Icon(tiles[i].$4, color: const Color(0xFF214E6B), size: 24),
+                  const SizedBox(width: 12),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(tiles[i].$1, style: const TextStyle(fontSize: 11, color: Color(0xFF627588))),
+                    Row(children: [
+                      Text('${tiles[i].$2}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                      const SizedBox(width: 8),
+                      Flexible(child: Text(tiles[i].$3, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, color: Color(0xFF8A9BA8)))),
+                    ]),
+                  ])),
+                ]),
+              ),
+              if (i < tiles.length - 1) const Divider(height: 1, color: Color(0xFFE2E9EF)),
+            ],
+          ]);
+        }
+        return Row(children: [
+          for (var i = 0; i < tiles.length; i++)
+            Expanded(child: Container(
+              decoration: BoxDecoration(border: i < tiles.length - 1 ? const Border(right: BorderSide(color: Color(0xFFD7E0E7))) : null),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+              child: Row(children: [
+                Icon(tiles[i].$4, color: const Color(0xFF214E6B), size: 24),
+                const SizedBox(width: 10),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(tiles[i].$1, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: Color(0xFF627588))),
+                  Text('${tiles[i].$2}', style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
+                  Text(tiles[i].$3, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, color: Color(0xFF8A9BA8))),
+                ])),
+              ]),
+            )),
         ]);
       }),
     );
@@ -408,24 +433,25 @@ class _ReportsPageState extends State<ReportsPage> {
       title: U.ize(_displayTitle(_selected!)),
       stackTrailingOnNarrow: true,
       trailing: Wrap(spacing: 8, runSpacing: 8, children: [
-        FilledButton.icon(
+        // Windows preview shows PDF as neutral grey and Excel as green-accented — not solid red/green fills.
+        OutlinedButton.icon(
           onPressed: (_data == null || _exporting) ? null : _exportPdf,
-          icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
-          label: Text(tr('Export PDF')),
-          style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFFE65353),
-            foregroundColor: Colors.white,
+          icon: const Icon(Icons.picture_as_pdf_outlined, size: 16, color: Color(0xFF6B7A8A)),
+          label: Text(tr('Export PDF'), style: const TextStyle(color: Color(0xFF26394A))),
+          style: OutlinedButton.styleFrom(
+            side: const BorderSide(color: Color(0xFFC7D1DB)),
+            backgroundColor: const Color(0xFFF2F5F8),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
             minimumSize: const Size(0, 36),
           ),
         ),
-        FilledButton.icon(
+        OutlinedButton.icon(
           onPressed: _exporting ? null : _exportExcel,
-          icon: const Icon(Icons.table_view_outlined, size: 16),
-          label: Text(tr('Export Excel')),
-          style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFF4CAF70),
-            foregroundColor: Colors.white,
+          icon: const Icon(Icons.table_view_outlined, size: 16, color: Color(0xFF1A7A4B)),
+          label: Text(tr('Export Excel'), style: const TextStyle(color: Color(0xFF1E7D4B), fontWeight: FontWeight.w700)),
+          style: OutlinedButton.styleFrom(
+            side: const BorderSide(color: Color(0xFFB8D4C0)),
+            backgroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
             minimumSize: const Size(0, 36),
           ),
