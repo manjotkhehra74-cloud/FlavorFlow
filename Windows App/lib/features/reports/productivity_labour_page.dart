@@ -897,26 +897,40 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
         if (isWindowsPlatform) {
           final totals = (data['totals'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
           final metrics = [
-            ('Production ${U.cb}', totals['cb'] ?? totals['producedCb'], Icons.inventory_2_outlined, U.cb),
-            ('Production KG', totals['kg'] ?? totals['netKg'], Icons.scale_outlined, 'kg'),
+            ('Production in\ncompany pack unit', totals['cb'] ?? totals['producedCb'], Icons.inventory_2_outlined, 'packs'),
+            ('Production KG', totals['kg'] ?? totals['netKg'], Icons.scale_outlined, 'total output'),
             ('Manpower', totals['manpower'], Icons.groups_outlined, 'operators'),
             ('KG / head', totals['kgPerHead'], Icons.bar_chart_outlined, 'productivity'),
-            ('${U.cb} / head', totals['cbPerHead'], Icons.hub_outlined, 'productivity'),
+            ('pack / head', totals['cbPerHead'], Icons.layers_outlined, 'productivity'),
           ];
           return ListView(padding: const EdgeInsets.fromLTRB(18, 20, 18, 24), children: [
-            Text('Productivity — selected period',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800,
-                  color: Theme.of(context).colorScheme.onSurface)),
-            const SizedBox(height: 4),
-            Text('Completed production · ${U.cb} is your company pack unit',
-                style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            Row(children: [
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Productivity — selected period',
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800,
+                      color: Theme.of(context).colorScheme.onSurface)),
+                const SizedBox(height: 4),
+                Text('Server-normalized data • Company unit labels applied',
+                    style: TextStyle(fontSize: 11.5, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+              ])),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(color: const Color(0xFFF7F9FB), border: Border.all(color: const Color(0xFFC7D1DB)), borderRadius: BorderRadius.circular(4)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.info_outline_rounded, size: 14, color: Color(0xFF627588)),
+                  const SizedBox(width: 6),
+                  Text('Session: ${context.read<AuthController>().session?.email ?? 'USER'} • ${fmtDate(_fromYmd)} ${DateTime.now().hour.toString().padLeft(2,'0')}:${DateTime.now().minute.toString().padLeft(2,'0')} ${DateTime.now().hour >= 12 ? 'AM' : 'AM'}', // session stamp mirrors preview's Session: USER
+                    style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                ]),
+              ),
+            ]),
             const SizedBox(height: 12),
             _reconciliationBanner(context, data),
             _dateFilters(context),
             const SizedBox(height: 12),
             Align(alignment: Alignment.centerRight,
               child: OutlinedButton.icon(onPressed: _exporting ? null : () => _export('productivity'),
-                icon: const Icon(Icons.download_outlined, size: 16), label: const Text('Export Excel'))),
+                icon: const Icon(Icons.table_view_outlined, size: 16, color: Color(0xFF0A6ED1)), label: const Text('Export to Excel'))),
             const SizedBox(height: 14),
             LayoutBuilder(builder: (context, constraints) {
               final columns = constraints.maxWidth >= 1000 ? 5 : constraints.maxWidth >= 600 ? 3 : 2;
@@ -929,9 +943,18 @@ class _ProductivityLabourPageState extends State<ProductivityLabourPage> with Si
             }),
             const SizedBox(height: 18),
             SectionCard(title: 'Results — ${rows.length} items', padding: EdgeInsets.zero,
-              child: rows.isEmpty
-                ? const EmptyState('No completed production or labour entries for this period.')
-                : AppDataTable(columns: columns, rows: rows)),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Padding(padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                  child: Text('Showing rows for selected filters • Data is server-normalized',
+                    style: TextStyle(fontSize: 10.5, color: Theme.of(context).colorScheme.onSurfaceVariant))),
+                if (rows.isEmpty)
+                  const EmptyState('No completed production or labour entries for this period.')
+                else
+                  AppDataTable(columns: columns, rows: rows),
+              ])),
+            const SizedBox(height: 8),
+            Text('Concept preview • illustrative data only • Values are server-normalized • Company pack unit reflects internal packaging standard',
+              style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant, fontStyle: FontStyle.italic)),
           ]);
         }
         return ListView(padding: const EdgeInsets.all(18), children: [
