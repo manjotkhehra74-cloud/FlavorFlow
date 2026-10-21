@@ -205,7 +205,6 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
 
   Future<void> _showDispatchDetails(Map<String, dynamic> row) async {
     final id = _asInt(row['id']);
-    if (id == null) return;
     final future = context.read<AuthController>().api.get('/drums/dispatches/$id');
     await showDialog<void>(
       context: context,

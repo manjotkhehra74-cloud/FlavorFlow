@@ -87,8 +87,13 @@ jobs:
           known_hosts="$RUNNER_TEMP/flavorflow-known-hosts"
           printf '%s\n' "$DEPLOY_SSH_KEY" > "$key_file"
           chmod 600 "$key_file"
-          ssh-keyscan -p "$port" -H "$DEPLOY_HOST" > "$known_hosts" 2>/dev/null
-          test -s "$known_hosts" || { echo '::error::Could not verify the server SSH host key.'; exit 1; }
+          for attempt in 1 2 3 4 5; do
+            if ssh-keyscan -p "$port" -H "$DEPLOY_HOST" > "$known_hosts" 2>/dev/null && [[ -s "$known_hosts" ]]; then
+              break
+            fi
+            sleep 2
+          done
+          test -s "$known_hosts" || { echo '::error::Could not verify the server SSH host key; check that the configured deploy host and port are reachable.'; exit 1; }
           echo "key_file=$key_file" >> "$GITHUB_OUTPUT"
           echo "known_hosts=$known_hosts" >> "$GITHUB_OUTPUT"
           echo "port=$port" >> "$GITHUB_OUTPUT"
@@ -371,8 +376,13 @@ jobs:
           known_hosts="$RUNNER_TEMP/flavorflow-known-hosts"
           printf '%s\n' "$DEPLOY_SSH_KEY" > "$key_file"
           chmod 600 "$key_file"
-          ssh-keyscan -p "$port" -H "$DEPLOY_HOST" > "$known_hosts" 2>/dev/null
-          test -s "$known_hosts" || { echo "::error::Could not verify the server SSH host key."; exit 1; }
+          for attempt in 1 2 3 4 5; do
+            if ssh-keyscan -p "$port" -H "$DEPLOY_HOST" > "$known_hosts" 2>/dev/null && [[ -s "$known_hosts" ]]; then
+              break
+            fi
+            sleep 2
+          done
+          test -s "$known_hosts" || { echo '::error::Could not verify the server SSH host key; check that the configured deploy host and port are reachable.'; exit 1; }
           echo "key_file=$key_file" >> "$GITHUB_OUTPUT"
           echo "known_hosts=$known_hosts" >> "$GITHUB_OUTPUT"
           echo "port=$port" >> "$GITHUB_OUTPUT"
