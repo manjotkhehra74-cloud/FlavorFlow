@@ -91,6 +91,10 @@ jobs:
           known_hosts="$RUNNER_TEMP/flavorflow-known-hosts"
           printf '%s\n' "$DEPLOY_SSH_KEY" > "$key_file"
           chmod 600 "$key_file"
+          if ! ssh-keygen -y -P '' -f "$key_file" >/dev/null 2>&1; then
+            echo '::error::The configured deploy SSH secret is not a readable unencrypted private key.'
+            exit 1
+          fi
           for attempt in 1 2 3 4 5; do
             if ssh-keyscan -p "$port" -H "$DEPLOY_HOST" > "$known_hosts" 2>/dev/null && [[ -s "$known_hosts" ]]; then
               break
@@ -113,6 +117,19 @@ jobs:
           set -euo pipefail
           remote_tmp="/tmp/flavorflow-server-${GITHUB_SHA}"
           ssh_opts=(-i "$SSH_KEY_FILE" -p "$SSH_PORT" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$SSH_KNOWN_HOSTS")
+          ssh_error="$RUNNER_TEMP/flavorflow-ssh-preflight-error"
+          if ! ssh "${ssh_opts[@]}" -o ConnectTimeout=10 "$DEPLOY_USER@$DEPLOY_HOST" true 2>"$ssh_error"; then
+            if grep -Eqi 'Permission denied|Too many authentication failures|sign_and_send_pubkey' "$ssh_error"; then
+              echo '::error::The VPS rejected the configured deploy user/key; verify the Actions SSH user and authorized key pairing.'
+            elif grep -Eqi 'Host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED' "$ssh_error"; then
+              echo '::error::The VPS SSH host key did not match the scanned host key; verify the server host key.'
+            elif grep -Eqi 'Connection timed out|Connection refused|No route to host|Could not resolve hostname' "$ssh_error"; then
+              echo '::error::The VPS SSH endpoint could not be reached; verify the configured host, port, and network access.'
+            else
+              echo '::error::SSH preflight failed; check VPS access and deploy-user permissions without sharing private-key material.'
+            fi
+            exit 1
+          fi
           tar -C server \
             --exclude='./node_modules' --exclude='./data' --exclude='./test' \
             --exclude='./.jwt-secret' --exclude='./.env' --exclude='./.env.*' \
