@@ -340,7 +340,7 @@ class _ReportsPageState extends State<ReportsPage> {
                   ),
                 ),
                 const VerticalDivider(width: 1, thickness: 1, color: Color(0xFFC7D1DB)),
-                Expanded(child: Padding(padding: const EdgeInsets.all(12), child: _reportBody())),
+                Expanded(child: SingleChildScrollView(padding: const EdgeInsets.all(12), child: _reportBody())),
                 ])),
               ]),
             );
