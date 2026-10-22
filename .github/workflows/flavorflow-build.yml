@@ -187,6 +187,8 @@ jobs:
             sleep 2
           done
           [[ "$healthy" == true ]] || { echo 'FlavorFlow backend health check failed after restart.' >&2; exit 1; }
+          drum_route_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 3 http://127.0.0.1:4000/api/drums/plants || true)"
+          [[ "$drum_route_status" == 200 || "$drum_route_status" == 401 ]] || { echo "Drum API route check failed after backend restart (HTTP $drum_route_status)." >&2; exit 1; }
           rm -f "$web/ff-requests.txt"
           rm -rf "$staging"
           echo "Deployed backend $sha, restarted flavorflow, and removed the legacy public request log without reading it."
