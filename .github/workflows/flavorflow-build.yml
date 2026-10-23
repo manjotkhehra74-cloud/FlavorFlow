@@ -89,7 +89,7 @@ jobs:
           port="${DEPLOY_PORT:-22}"
           key_file="$RUNNER_TEMP/flavorflow-deploy-key"
           known_hosts="$RUNNER_TEMP/flavorflow-known-hosts"
-          printf '%s\n' "$DEPLOY_SSH_KEY" > "$key_file"
+          printf '%s\n' "$DEPLOY_SSH_KEY" | tr -d '\r' > "$key_file"
           chmod 600 "$key_file"
           if ! ssh-keygen -y -P '' -f "$key_file" >/dev/null 2>&1; then
             echo '::error::The configured deploy SSH secret is not a readable unencrypted private key.'
@@ -397,7 +397,7 @@ jobs:
           port="${DEPLOY_PORT:-22}"
           key_file="$RUNNER_TEMP/flavorflow-deploy-key"
           known_hosts="$RUNNER_TEMP/flavorflow-known-hosts"
-          printf '%s\n' "$DEPLOY_SSH_KEY" > "$key_file"
+          printf '%s\n' "$DEPLOY_SSH_KEY" | tr -d '\r' > "$key_file"
           chmod 600 "$key_file"
           for attempt in 1 2 3 4 5; do
             if ssh-keyscan -p "$port" -H "$DEPLOY_HOST" > "$known_hosts" 2>/dev/null && [[ -s "$known_hosts" ]]; then
