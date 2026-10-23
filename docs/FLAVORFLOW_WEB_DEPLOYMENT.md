@@ -23,6 +23,6 @@ Do not put private keys or passwords in chat or in the repository.
 
 ## Deploy
 
-After the secrets are configured, pushes to `main` or `arena/b7695262-flavorflow` automatically run the GitHub build. A successful web build is then deployed over SSH; no manual workflow run and no Flutter build on the VPS are needed. If the secrets are absent, the deployment job reports that it skipped.
+After the secrets are configured, pushes to `main` or `arena/b7695262-flavorflow` automatically run the GitHub build. The backend deploy and health-check run before the web deploy; after restart, the workflow verifies `/api/drums/plants` responds with an authentication status instead of `404`. A successful web build is then deployed over SSH; no manual workflow run and no Flutter build on the VPS are needed. If the secrets are absent, the deployment job reports that it skipped.
 
 Deployment backs up the current web root to a sibling `backups` directory, overlays the new Flutter web files without deleting other files such as APK downloads, writes `ff-web-version.txt`, and verifies that the live bundle contains the dispatch batch-code fix.
