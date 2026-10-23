@@ -50,6 +50,7 @@ jobs:
       DEPLOY_HOST: ${{ secrets.FLAVORFLOW_DEPLOY_HOST }}
       DEPLOY_USER: ${{ secrets.FLAVORFLOW_DEPLOY_USER }}
       DEPLOY_SSH_KEY: ${{ secrets.FLAVORFLOW_DEPLOY_SSH_KEY }}
+      DEPLOY_SSH_PASSPHRASE: ${{ secrets.FLAVORFLOW_DEPLOY_SSH_PASSPHRASE }}
       DEPLOY_PORT: ${{ secrets.FLAVORFLOW_DEPLOY_PORT }}
       SERVER_PATH: ${{ vars.FLAVORFLOW_SERVER_DEPLOY_PATH || '/opt/flavorflow/server' }}
       WEB_PATH: ${{ vars.FLAVORFLOW_DEPLOY_PATH || '/opt/flavorflow/web' }}
@@ -92,8 +93,12 @@ jobs:
           printf '%s\n' "$DEPLOY_SSH_KEY" | tr -d '\r' > "$key_file"
           chmod 600 "$key_file"
           if ! ssh-keygen -y -P '' -f "$key_file" >/dev/null 2>&1; then
-            echo '::error::The configured deploy SSH secret is not a readable unencrypted private key.'
-            exit 1
+            if [[ -z "$DEPLOY_SSH_PASSPHRASE" ]] || \
+              ! ssh-keygen -p -q -P "$DEPLOY_SSH_PASSPHRASE" -N '' -f "$key_file" >/dev/null 2>&1 || \
+              ! ssh-keygen -y -P '' -f "$key_file" >/dev/null 2>&1; then
+              echo '::error::The deploy SSH key is encrypted or invalid. For an encrypted key, add the matching FLAVORFLOW_DEPLOY_SSH_PASSPHRASE repository secret.'
+              exit 1
+            fi
           fi
           for attempt in 1 2 3 4 5; do
             if ssh-keyscan -p "$port" -H "$DEPLOY_HOST" > "$known_hosts" 2>/dev/null && [[ -s "$known_hosts" ]]; then
@@ -360,6 +365,7 @@ jobs:
       DEPLOY_HOST: ${{ secrets.FLAVORFLOW_DEPLOY_HOST }}
       DEPLOY_USER: ${{ secrets.FLAVORFLOW_DEPLOY_USER }}
       DEPLOY_SSH_KEY: ${{ secrets.FLAVORFLOW_DEPLOY_SSH_KEY }}
+      DEPLOY_SSH_PASSPHRASE: ${{ secrets.FLAVORFLOW_DEPLOY_SSH_PASSPHRASE }}
       DEPLOY_PORT: ${{ secrets.FLAVORFLOW_DEPLOY_PORT }}
       DEPLOY_PATH: ${{ vars.FLAVORFLOW_DEPLOY_PATH || '/opt/flavorflow/web' }}
 
@@ -399,6 +405,14 @@ jobs:
           known_hosts="$RUNNER_TEMP/flavorflow-known-hosts"
           printf '%s\n' "$DEPLOY_SSH_KEY" | tr -d '\r' > "$key_file"
           chmod 600 "$key_file"
+          if ! ssh-keygen -y -P '' -f "$key_file" >/dev/null 2>&1; then
+            if [[ -z "$DEPLOY_SSH_PASSPHRASE" ]] || \
+              ! ssh-keygen -p -q -P "$DEPLOY_SSH_PASSPHRASE" -N '' -f "$key_file" >/dev/null 2>&1 || \
+              ! ssh-keygen -y -P '' -f "$key_file" >/dev/null 2>&1; then
+              echo '::error::The deploy SSH key is encrypted or invalid. For an encrypted key, add the matching FLAVORFLOW_DEPLOY_SSH_PASSPHRASE repository secret.'
+              exit 1
+            fi
+          fi
           for attempt in 1 2 3 4 5; do
             if ssh-keyscan -p "$port" -H "$DEPLOY_HOST" > "$known_hosts" 2>/dev/null && [[ -s "$known_hosts" ]]; then
               break
