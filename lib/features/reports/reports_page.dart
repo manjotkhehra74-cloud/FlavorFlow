@@ -322,13 +322,7 @@ class _ReportsPageState extends State<ReportsPage> {
               ]),
               content: Column(children: [
                 _WindowsReportSummary(reports: reports),
-                Expanded(child: Scrollbar(
-                  thumbVisibility: true,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: SizedBox(
-                      width: 980,
-                      child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Expanded(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 SizedBox(
                   width: 268,
                   child: Container(
@@ -341,27 +335,13 @@ class _ReportsPageState extends State<ReportsPage> {
                         color: Theme.of(context).colorScheme.surfaceContainerHigh,
                         child: Text(tr('Report Library'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
                       ),
-                      Expanded(child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: SizedBox(
-                          width: 260,
-                          child: ListView(padding: const EdgeInsets.all(7), children: [for (final r in reports) _reportTile(r)]),
-                        ),
-                      )),
+                      Expanded(child: ListView(padding: const EdgeInsets.all(7), children: [for (final r in reports) _reportTile(r)])),
                     ]),
                   ),
                 ),
                 const VerticalDivider(width: 1, thickness: 1, color: Color(0xFFC7D1DB)),
-                Expanded(child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(12),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: SizedBox(width: 700, child: _reportBody()),
-                  ),
-                )),
+                Expanded(child: SingleChildScrollView(padding: const EdgeInsets.all(12), child: _reportBody())),
                 ])),
-                  ),
-                )),
               ]),
             );
           }
