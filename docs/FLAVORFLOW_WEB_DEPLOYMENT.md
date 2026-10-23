@@ -15,6 +15,8 @@ In the repository's **Settings → Secrets and variables → Actions**, add thes
 - `FLAVORFLOW_DEPLOY_SSH_KEY` — private key for that user.
 - `FLAVORFLOW_DEPLOY_PORT` — optional; defaults to `22`.
 
+`FLAVORFLOW_DEPLOY_SSH_KEY` must contain the full, unencrypted OpenSSH **private** key (including its `BEGIN` and `END` lines); do not use the `.pub` file, a Windows app-signing key, a PuTTY `.ppk`, or a file path. Install the matching one-line `.pub` key in `~/.ssh/authorized_keys` for the exact `FLAVORFLOW_DEPLOY_USER` account. Keep the private key only in the GitHub Actions secret; never put it in chat or the repository.
+
 The SSH user must own or otherwise have write access to the web root and its sibling `backups` directory; the workflow intentionally does not use `sudo`. For the default paths, run this one-time ownership setup in the VPS SSH terminal (it may prompt for the VPS sudo password): `sudo chown -R "$(id -un):$(id -gn)" /opt/flavorflow/web /opt/flavorflow/backups`. This leaves the server and application data untouched. The workflow uses `ssh-keyscan` to populate a per-run `known_hosts` file. If the actual web root differs from `/opt/flavorflow/web`, set the Actions variable `FLAVORFLOW_DEPLOY_PATH` to the correct absolute path and grant the SSH user write access to it and its sibling `backups` directory.
 
 Do not put private keys or passwords in chat or in the repository.
