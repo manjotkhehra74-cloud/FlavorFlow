@@ -322,26 +322,41 @@ class _ReportsPageState extends State<ReportsPage> {
               ]),
               content: Column(children: [
                 _WindowsReportSummary(reports: reports),
-                Expanded(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                SizedBox(
-                  width: 268,
-                  child: Container(
-                    decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface, border: Border.all(color: const Color(0xFFC7D1DB))),
-                    child: Column(children: [
-                      Container(
-                        height: 36,
-                        alignment: Alignment.centerLeft,
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        color: Theme.of(context).colorScheme.surfaceContainerHigh,
-                        child: Text(tr('Report Library'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                Expanded(child: LayoutBuilder(builder: (ctx, cons) {
+                  final inner = Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    SizedBox(
+                      width: 268,
+                      child: Container(
+                        decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface, border: Border.all(color: const Color(0xFFC7D1DB))),
+                        child: Column(children: [
+                          Container(
+                            height: 36,
+                            alignment: Alignment.centerLeft,
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                            child: Text(tr('Report Library'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                          ),
+                          Expanded(child: ListView(padding: const EdgeInsets.all(7), children: [for (final r in reports) _reportTile(r)])),
+                        ]),
                       ),
-                      Expanded(child: ListView(padding: const EdgeInsets.all(7), children: [for (final r in reports) _reportTile(r)])),
-                    ]),
-                  ),
-                ),
-                const VerticalDivider(width: 1, thickness: 1, color: Color(0xFFC7D1DB)),
-                Expanded(child: SingleChildScrollView(padding: const EdgeInsets.all(12), child: _reportBody())),
-                ])),
+                    ),
+                    const VerticalDivider(width: 1, thickness: 1, color: Color(0xFFC7D1DB)),
+                    SizedBox(
+                      width: 700,
+                      child: SingleChildScrollView(padding: const EdgeInsets.all(12), child: _reportBody()),
+                    ),
+                  ]);
+                  // outer horizontal swipe for narrow windows; vertical swipe lives in ListView/right SingleChildScrollView
+                  if (cons.maxWidth < 980) {
+                    return Scrollbar(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: SizedBox(width: 980, height: cons.maxHeight, child: inner),
+                      ),
+                    );
+                  }
+                  return inner;
+                })),
               ]),
             );
           }
