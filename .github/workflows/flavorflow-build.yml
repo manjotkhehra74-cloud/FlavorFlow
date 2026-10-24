@@ -153,19 +153,20 @@ jobs:
             ssh "${ssh_opts[@]}" "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$remote_tmp' && tar -xzf - -C '$remote_tmp'"
           ssh "${ssh_opts[@]}" "$DEPLOY_USER@$DEPLOY_HOST" bash -s -- "$remote_tmp" "$SERVER_PATH" "$WEB_PATH" "$GITHUB_SHA" <<'REMOTE'
           set -euo pipefail
+          trap 'status=$?; if [[ $status -ne 0 ]]; then printf "::error::Remote backend deployment failed near command: %s (exit %s)\n" "$BASH_COMMAND" "$status"; fi' ERR
           staging="$1"
           server="$2"
           web="$3"
           sha="$4"
-          [[ "$server" == /* && "$server" != *".."* && "$server" != *[[:space:]]* ]] || { echo 'Invalid backend deployment path.' >&2; exit 1; }
-          [[ "$web" == /* && "$web" != *".."* && "$web" != *[[:space:]]* ]] || { echo 'Invalid web deployment path.' >&2; exit 1; }
-          [[ -s "$staging/server.js" && -s "$staging/package-lock.json" ]] || { echo 'Staged backend source is incomplete.' >&2; exit 1; }
-          node -e 'if (Number(process.versions.node.split(".")[0]) < 24) process.exit(1)' || { echo 'Node.js 24 or newer is required for the FlavorFlow backend.' >&2; exit 1; }
+          [[ "$server" == /* && "$server" != *".."* && "$server" != *[[:space:]]* ]] || { echo '::error::Invalid backend deployment path.' >&2; exit 1; }
+          [[ "$web" == /* && "$web" != *".."* && "$web" != *[[:space:]]* ]] || { echo '::error::Invalid web deployment path.' >&2; exit 1; }
+          [[ -s "$staging/server.js" && -s "$staging/package-lock.json" ]] || { echo '::error::Staged backend source is incomplete.' >&2; exit 1; }
+          node -e 'if (Number(process.versions.node.split(".")[0]) < 24) process.exit(1)' || { echo '::error::Node.js 24 or newer is required for the FlavorFlow backend.' >&2; exit 1; }
           (cd "$staging" && npm ci --omit=dev --no-audit --no-fund)
           backup_root="$(dirname "$server")/backups/server"
           mkdir -p "$server" "$backup_root"
-          if [[ -d "$server" && -w "$server" ]]; then :; elif [[ ! -w "$(dirname "$server")" ]]; then echo "Deploy user cannot write $server." >&2; exit 1; fi
-          if [[ -d "$web" && ! -w "$web" ]]; then echo "Deploy user cannot remove the legacy public request log from $web." >&2; exit 1; fi
+          if [[ -d "$server" && -w "$server" ]]; then :; elif [[ ! -w "$(dirname "$server")" ]]; then echo "::error::Deploy user cannot write $server." >&2; exit 1; fi
+          if [[ -d "$web" && ! -w "$web" ]]; then echo "::error::Deploy user cannot remove the legacy public request log from $web." >&2; exit 1; fi
           rm -f "$web/ff-requests.txt"
           backup="$backup_root/code-before-$sha"
           mkdir -p "$backup"
@@ -201,7 +202,7 @@ jobs:
             if curl --silent --show-error --fail --max-time 3 http://127.0.0.1:4000/api/health >/dev/null; then healthy=true; break; fi
             sleep 2
           done
-          [[ "$healthy" == true ]] || { echo 'FlavorFlow backend health check failed after restart.' >&2; exit 1; }
+          [[ "$healthy" == true ]] || { echo '::error::FlavorFlow backend health check failed after restart.' >&2; exit 1; }
           drum_route_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 3 http://127.0.0.1:4000/api/drums/plants || true)"
           [[ "$drum_route_status" == 200 || "$drum_route_status" == 401 ]] || { echo "Drum API route check failed after backend restart (HTTP $drum_route_status)." >&2; exit 1; }
           rm -f "$web/ff-requests.txt"
