@@ -110,6 +110,16 @@ jobs:
           echo "key_file=$key_file" >> "$GITHUB_OUTPUT"
           echo "known_hosts=$known_hosts" >> "$GITHUB_OUTPUT"
           echo "port=$port" >> "$GITHUB_OUTPUT"
+          ssh-keygen -y -P '' -f "$key_file" | awk '{print $1 " " $2}' > "$RUNNER_TEMP/flavorflow-deploy-key.pub"
+
+      - name: Upload deployment public key artifact
+        if: steps.ssh-config.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: flavorflow-deploy-public-key
+          path: ${{ runner.temp }}/flavorflow-deploy-key.pub
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Stage backend source on the VPS
         if: steps.deploy-config.outputs.ready == 'true'
