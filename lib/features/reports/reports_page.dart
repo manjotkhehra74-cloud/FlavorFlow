@@ -346,16 +346,14 @@ class _ReportsPageState extends State<ReportsPage> {
                       child: SingleChildScrollView(padding: const EdgeInsets.all(12), child: _reportBody()),
                     ),
                   ]);
-                  // outer horizontal swipe for narrow windows; vertical swipe lives in ListView/right SingleChildScrollView
-                  if (cons.maxWidth < 980) {
-                    return Scrollbar(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: SizedBox(width: 980, height: cons.maxHeight, child: inner),
-                      ),
-                    );
-                  }
-                  return inner;
+                  // always allow khabbe-sajje swipe: outer horizontal for narrow windows, vertical lives in panes
+                  return Scrollbar(
+                    thumbVisibility: true,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: SizedBox(width: 968, height: cons.maxHeight, child: inner),
+                    ),
+                  );
                 })),
               ]),
             );
