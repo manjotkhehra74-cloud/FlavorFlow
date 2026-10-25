@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../state/auth.dart';
+import 'drum_opening_balances.dart';
 
 class DrumInventoryPage extends StatefulWidget {
   const DrumInventoryPage({super.key});
@@ -124,76 +125,109 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
       ];
 
   Widget _buildStockTab() {
-    if (_stock.isEmpty) {
-      return const _EmptyPanel(message: 'No filled drums are currently available at the source plant.');
+    if (_stock.isEmpty && drumOpeningBalances.isEmpty) {
+      return const _EmptyPanel(message: 'No drum balances are currently available.');
     }
-    final drumCount = _stock.fold<int>(0, (sum, row) => sum + _asInt(row['available_drums']));
-    final grossTotal = _stock.fold<double>(0, (sum, row) => sum + _asDouble(row['gross_weight_kg']));
-    final productBalances = <int, Map<String, dynamic>>{};
+
+    final productBalances = <String, _ProductBalance>{};
+    _ProductBalance balanceFor(String name) {
+      final key = drumProductBalanceKey(name);
+      return productBalances.putIfAbsent(key, () => _ProductBalance(productName: name));
+    }
+
+    for (final opening in drumOpeningBalances) {
+      final balance = balanceFor(opening.productName);
+      balance.openingDrums += opening.availableDrums;
+      balance.openingKg += opening.balanceKg;
+    }
     for (final row in _stock) {
-      final productId = _asInt(row['product_id']);
-      final balance = productBalances.putIfAbsent(productId, () => {
-            'product_name': _text(row['product_name']),
-            'available_drums': 0,
-            'gross_weight_kg': 0.0,
-          });
-      balance['available_drums'] = _asInt(balance['available_drums']) + _asInt(row['available_drums']);
-      balance['gross_weight_kg'] = _asDouble(balance['gross_weight_kg']) + _asDouble(row['gross_weight_kg']);
+      final balance = balanceFor(_text(row['product_name']));
+      balance.trackedDrums += _asInt(row['available_drums']);
+      balance.trackedKg += _asDouble(row['gross_weight_kg']);
     }
+
     final sortedBalances = productBalances.values.toList()
-      ..sort((a, b) => _text(a['product_name']).compareTo(_text(b['product_name'])));
+      ..sort((a, b) => a.productName.compareTo(b.productName));
+    final drumCount = sortedBalances.fold<int>(0, (sum, balance) => sum + balance.totalDrums);
+    final balanceKg = sortedBalances.fold<double>(0, (sum, balance) => sum + balance.totalKg);
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _MetricStrip(drumCount: drumCount, grossWeight: grossTotal, groupCount: _stock.length),
+        _MetricStrip(drumCount: drumCount, balanceKg: balanceKg, productCount: productBalances.length),
         const SizedBox(height: 12),
         Text('Current balance by product', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-        const Padding(
-          padding: EdgeInsets.only(top: 4, bottom: 8),
-          child: Text('Balance includes available drums only. Balance kg is the sum of each drum’s saved gross weight.'),
+        Padding(
+          padding: const EdgeInsets.only(top: 4, bottom: 8),
+          child: Text(
+            'Totals combine tracked available drums with the opening balances from the $drumOpeningBalanceSnapshotLabel report. Opening balances are aggregate-only and are not selectable for dispatch; tracked kg uses each drum’s saved gross weight.',
+          ),
         ),
         for (final balance in sortedBalances)
-          Card(
-            child: ListTile(
-              leading: const CircleAvatar(child: Icon(Icons.inventory_2_outlined)),
-              title: Text(_text(balance['product_name']), style: const TextStyle(fontWeight: FontWeight.w700)),
-              subtitle: const Text('Current available balance'),
-              trailing: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text('${_asInt(balance['available_drums'])} drums', style: const TextStyle(fontWeight: FontWeight.w700)),
-                  Text(_weightLabel(balance['gross_weight_kg'])),
-                ],
-              ),
-            ),
-          ),
-        const SizedBox(height: 8),
-        Text('Batch, packaging & plant details', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-        const SizedBox(height: 4),
-        for (final row in _stock)
           Card(
             child: Padding(
               padding: const EdgeInsets.all(14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text(balance.productName, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 10),
                   Row(
                     children: [
-                      const Icon(Icons.inventory_2_outlined),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text(_text(row['product_name']), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700))),
-                      _CountPill(count: _asInt(row['available_drums'])),
+                      Expanded(child: _BalanceValue(label: 'Balance in drums', value: '${balance.totalDrums}')),
+                      const SizedBox(width: 12),
+                      Expanded(child: _BalanceValue(label: 'Balance in kg', value: _weightLabel(balance.totalKg))),
                     ],
                   ),
-                  const SizedBox(height: 7),
-                  Text('Batch ${_text(row['batch_code'])}  ·  ${_packagingLabel(row['packaging_type'])}'),
-                  Text('Plant: ${_text(row['plant_name'])}  ·  Gross weight: ${_weightLabel(row['gross_weight_kg'])}'),
-                  Text('Manufactured ${_dateLabel(row['manufacturing_date'])}  ·  Expires ${_dateLabel(row['expiry_date'])}'),
+                  if (balance.openingDrums > 0) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'PDF opening ($drumOpeningBalanceSnapshotLabel): ${balance.openingDrums} drums · ${_weightLabel(balance.openingKg)} · aggregate only, not dispatchable',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                  if (balance.trackedDrums > 0) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Tracked available: ${balance.trackedDrums} drums · ${_weightLabel(balance.trackedKg)}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
                 ],
               ),
             ),
+          ),
+        if (_stock.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text('Tracked drum details: batch, packaging & plant', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 4),
+          for (final row in _stock)
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.inventory_2_outlined),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(_text(row['product_name']), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700))),
+                        _CountPill(count: _asInt(row['available_drums'])),
+                      ],
+                    ),
+                    const SizedBox(height: 7),
+                    Text('Batch ${_text(row['batch_code'])}  ·  ${_packagingLabel(row['packaging_type'])}'),
+                    Text('Plant: ${_text(row['plant_name'])}  ·  Gross weight: ${_weightLabel(row['gross_weight_kg'])}'),
+                    Text('Manufactured ${_dateLabel(row['manufacturing_date'])}  ·  Expires ${_dateLabel(row['expiry_date'])}'),
+                  ],
+                ),
+              ),
+            ),
+        ] else
+          const Padding(
+            padding: EdgeInsets.only(top: 12),
+            child: Text('The PDF opening balances are summary-only; there are no individual drum records for dispatch yet.'),
           ),
       ],
     );
@@ -328,6 +362,19 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
       },
     );
   }
+}
+
+class _ProductBalance {
+  final String productName;
+  int openingDrums = 0;
+  double openingKg = 0;
+  int trackedDrums = 0;
+  double trackedKg = 0;
+
+  _ProductBalance({required this.productName});
+
+  int get totalDrums => openingDrums + trackedDrums;
+  double get totalKg => openingKg + trackedKg;
 }
 
 class _DrumProductDialog extends StatefulWidget {
@@ -718,18 +765,33 @@ class _CreateDrumFillDialogState extends State<_CreateDrumFillDialog> {
 
 class _MetricStrip extends StatelessWidget {
   final int drumCount;
-  final double grossWeight;
-  final int groupCount;
-  const _MetricStrip({required this.drumCount, required this.grossWeight, required this.groupCount});
+  final double balanceKg;
+  final int productCount;
+  const _MetricStrip({required this.drumCount, required this.balanceKg, required this.productCount});
 
   @override
   Widget build(BuildContext context) => Wrap(
         spacing: 10,
         runSpacing: 10,
         children: [
-          _MetricCard(label: 'Available drums', value: '$drumCount', icon: Icons.inventory_2_outlined),
-          _MetricCard(label: 'Gross weight', value: _weightLabel(grossWeight), icon: Icons.scale_outlined),
-          _MetricCard(label: 'Stock groups', value: '$groupCount', icon: Icons.category_outlined),
+          _MetricCard(label: 'Balance in drums', value: '$drumCount', icon: Icons.inventory_2_outlined),
+          _MetricCard(label: 'Balance in kg', value: _weightLabel(balanceKg), icon: Icons.scale_outlined),
+          _MetricCard(label: 'Products', value: '$productCount', icon: Icons.category_outlined),
+        ],
+      );
+}
+
+class _BalanceValue extends StatelessWidget {
+  final String label;
+  final String value;
+  const _BalanceValue({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: Theme.of(context).textTheme.bodySmall),
+          Text(value, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
         ],
       );
 }
