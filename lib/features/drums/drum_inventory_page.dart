@@ -129,11 +129,49 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
     }
     final drumCount = _stock.fold<int>(0, (sum, row) => sum + _asInt(row['available_drums']));
     final grossTotal = _stock.fold<double>(0, (sum, row) => sum + _asDouble(row['gross_weight_kg']));
+    final productBalances = <int, Map<String, dynamic>>{};
+    for (final row in _stock) {
+      final productId = _asInt(row['product_id']);
+      final balance = productBalances.putIfAbsent(productId, () => {
+            'product_name': _text(row['product_name']),
+            'available_drums': 0,
+            'gross_weight_kg': 0.0,
+          });
+      balance['available_drums'] = _asInt(balance['available_drums']) + _asInt(row['available_drums']);
+      balance['gross_weight_kg'] = _asDouble(balance['gross_weight_kg']) + _asDouble(row['gross_weight_kg']);
+    }
+    final sortedBalances = productBalances.values.toList()
+      ..sort((a, b) => _text(a['product_name']).compareTo(_text(b['product_name'])));
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         _MetricStrip(drumCount: drumCount, grossWeight: grossTotal, groupCount: _stock.length),
         const SizedBox(height: 12),
+        Text('Current balance by product', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+        const Padding(
+          padding: EdgeInsets.only(top: 4, bottom: 8),
+          child: Text('Balance includes available drums only. Balance kg is the sum of each drum’s saved gross weight.'),
+        ),
+        for (final balance in sortedBalances)
+          Card(
+            child: ListTile(
+              leading: const CircleAvatar(child: Icon(Icons.inventory_2_outlined)),
+              title: Text(_text(balance['product_name']), style: const TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: const Text('Current available balance'),
+              trailing: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text('${_asInt(balance['available_drums'])} drums', style: const TextStyle(fontWeight: FontWeight.w700)),
+                  Text(_weightLabel(balance['gross_weight_kg'])),
+                ],
+              ),
+            ),
+          ),
+        const SizedBox(height: 8),
+        Text('Batch, packaging & plant details', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 4),
         for (final row in _stock)
           Card(
             child: Padding(
