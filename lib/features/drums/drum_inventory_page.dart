@@ -16,26 +16,12 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
   List<Map<String, dynamic>> _plants = [];
   List<Map<String, dynamic>> _stock = [];
   List<Map<String, dynamic>> _fills = [];
-  List<Map<String, dynamic>> _dispatches = [];
-  final Set<int> _selectedFillIds = {};
-  final TextEditingController _truckController = TextEditingController();
-  int? _dispatchPlantId;
-  DateTime _dispatchAt = DateTime.now();
-  bool _submittingDispatch = false;
 
   @override
   void initState() {
     super.initState();
     _loading = _load();
   }
-
-  @override
-  void dispose() {
-    _truckController.dispose();
-    super.dispose();
-  }
-
-  bool _canViewDispatch(AuthController auth) => auth.can('dispatch.view') || auth.can('dispatch.manage');
 
   List<Map<String, dynamic>> _rows(dynamic json, String key) {
     if (json is! Map) return <Map<String, dynamic>>[];
@@ -46,29 +32,16 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
 
   Future<void> _load() async {
     final auth = context.read<AuthController>();
-    final requests = <Future<dynamic>>[
+    final values = await Future.wait(<Future<dynamic>>[
       auth.api.get('/drums/products'),
       auth.api.get('/drums/plants'),
       auth.api.get('/drums/stock'),
       auth.api.get('/drums/fills?status=ALL'),
-    ];
-    final canViewDispatch = _canViewDispatch(auth);
-    if (canViewDispatch) requests.add(auth.api.get('/drums/dispatches'));
-    final values = await Future.wait(requests);
+    ]);
     _products = _rows(values[0], 'products');
     _plants = _rows(values[1], 'plants');
     _stock = _rows(values[2], 'stock');
     _fills = _rows(values[3], 'fills');
-    _dispatches = canViewDispatch ? _rows(values[4], 'dispatches') : <Map<String, dynamic>>[];
-    if (_dispatchPlantId == null && _plants.isNotEmpty) {
-      _dispatchPlantId = _asInt(_plants.first['id']);
-    }
-    final availableIds = _fills
-        .where((fill) => _upper(fill['status']) == 'AVAILABLE')
-        .map((fill) => _asInt(fill['id']))
-        .whereType<int>()
-        .toSet();
-    _selectedFillIds.removeWhere((id) => !availableIds.contains(id));
   }
 
   void _reload() {
@@ -136,138 +109,18 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
     }
   }
 
-  Future<void> _chooseDispatchDate() async {
-    final selected = await showDatePicker(
-      context: context,
-      initialDate: _dispatchAt,
-      firstDate: DateTime(2000),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-    );
-    if (selected == null || !mounted) return;
-    setState(() {
-      _dispatchAt = DateTime(
-        selected.year,
-        selected.month,
-        selected.day,
-        _dispatchAt.hour,
-        _dispatchAt.minute,
-      );
-    });
-  }
-
-  Future<void> _chooseDispatchTime() async {
-    final selected = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(_dispatchAt));
-    if (selected == null || !mounted) return;
-    setState(() {
-      _dispatchAt = DateTime(
-        _dispatchAt.year,
-        _dispatchAt.month,
-        _dispatchAt.day,
-        selected.hour,
-        selected.minute,
-      );
-    });
-  }
-
-  Future<void> _submitDispatch() async {
-    final auth = context.read<AuthController>();
-    final truck = _truckController.text.trim();
-    if (_dispatchPlantId == null) {
-      _showMessage('Add or select a source plant first.');
-      return;
-    }
-    if (truck.isEmpty) {
-      _showMessage('Enter the truck number.');
-      return;
-    }
-    if (_selectedFillIds.isEmpty) {
-      _showMessage('Select at least one available drum.');
-      return;
-    }
-    setState(() => _submittingDispatch = true);
-    try {
-      await auth.api.post('/drums/dispatches', {
-        'plantId': _dispatchPlantId,
-        'truckNumber': truck,
-        'dispatchDateTime': _isoWithOffset(_dispatchAt),
-        'fillIds': _selectedFillIds.toList()..sort(),
-      });
-      _selectedFillIds.clear();
-      _truckController.clear();
-      _reload();
-      if (mounted) _showMessage('Outbound dispatch to Neemrana recorded.');
-    } catch (error) {
-      if (mounted) _showMessage(error.toString());
-    } finally {
-      if (mounted) setState(() => _submittingDispatch = false);
-    }
-  }
-
-  Future<void> _showDispatchDetails(Map<String, dynamic> row) async {
-    final id = _asInt(row['id']);
-    final future = context.read<AuthController>().api.get('/drums/dispatches/$id');
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('Dispatch · ${_text(row['truck_number'])}'),
-        content: SizedBox(
-          width: 560,
-          child: FutureBuilder<dynamic>(
-            future: future,
-            builder: (context, snapshot) {
-              if (snapshot.hasError) return Text(snapshot.error.toString());
-              if (!snapshot.hasData) return const SizedBox(height: 90, child: Center(child: CircularProgressIndicator()));
-              final data = snapshot.data;
-              final dispatch = data is Map && data['dispatch'] is Map
-                  ? (data['dispatch'] as Map).cast<String, dynamic>()
-                  : row;
-              final drums = data is Map && data['drums'] is List
-                  ? (data['drums'] as List).whereType<Map>().map((e) => e.cast<String, dynamic>()).toList()
-                  : <Map<String, dynamic>>[];
-              return SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('${_text(dispatch['plant_name'])} → ${_text(dispatch['destination'])}'),
-                    Text('Date/time: ${_dateTimeLabel(dispatch['dispatch_datetime'])}'),
-                    Text('Drums: ${_text(dispatch['drum_count'])}  ·  Gross weight: ${_weightLabel(dispatch['gross_weight_kg'])}'),
-                    const Divider(height: 24),
-                    for (final drum in drums)
-                      ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        title: Text('Drum ${_text(drum['fill_number'])} · ${_text(drum['product_name'])}'),
-                        subtitle: Text('Batch ${_text(drum['batch_code'])} · expires ${_dateLabel(drum['expiry_date'])}'),
-                        trailing: Text(_weightLabel(drum['gross_weight_kg'])),
-                      ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ),
-        actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Close'))],
-      ),
-    );
-  }
-
   void _showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  List<Tab> _tabs(AuthController auth) => [
-        const Tab(text: 'Available stock'),
-        const Tab(text: 'Filled drums'),
-        if (_canViewDispatch(auth)) const Tab(text: 'Outbound dispatch'),
-        if (_canViewDispatch(auth)) const Tab(text: 'Dispatch history'),
+  List<Tab> _tabs() => const [
+        Tab(text: 'Available stock'),
+        Tab(text: 'Filled drums'),
       ];
 
   List<Widget> _tabViews(AuthController auth) => [
         _buildStockTab(),
         _buildFillsTab(auth),
-        if (_canViewDispatch(auth)) _buildDispatchTab(auth),
-        if (_canViewDispatch(auth)) _buildHistoryTab(),
       ];
 
   Widget _buildStockTab() {
@@ -365,139 +218,6 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
     );
   }
 
-  Widget _buildDispatchTab(AuthController auth) {
-    final canDispatch = auth.can('dispatch.manage');
-    final plantFills = _fills.where((fill) =>
-        _upper(fill['status']) == 'AVAILABLE' &&
-        (_dispatchPlantId == null || _asInt(fill['plant_id']) == _dispatchPlantId)).toList()
-      ..sort((a, b) => _asInt(a['fill_number']).compareTo(_asInt(b['fill_number'])));
-    final selectedWeight = plantFills
-        .where((fill) => _selectedFillIds.contains(_asInt(fill['id'])))
-        .fold<double>(0, (sum, fill) => sum + _asDouble(fill['gross_weight_kg']));
-
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Outbound transfer to Neemrana', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<int>(
-                  value: _dispatchPlantId,
-                  decoration: const InputDecoration(labelText: 'Source plant'),
-                  items: [
-                    for (final plant in _plants.where((p) => _asInt(p['active']) != 0))
-                      DropdownMenuItem<int>(value: _asInt(plant['id']), child: Text(_text(plant['name']))),
-                  ],
-                  onChanged: canDispatch
-                      ? (value) => setState(() {
-                            _dispatchPlantId = value;
-                            _selectedFillIds.clear();
-                          })
-                      : null,
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _truckController,
-                  enabled: canDispatch,
-                  textCapitalization: TextCapitalization.characters,
-                  decoration: const InputDecoration(labelText: 'Truck number', hintText: 'Enter vehicle number'),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    OutlinedButton.icon(
-                      onPressed: canDispatch ? _chooseDispatchDate : null,
-                      icon: const Icon(Icons.calendar_today_outlined),
-                      label: Text(_dateLabel(_ymd(_dispatchAt))),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: canDispatch ? _chooseDispatchTime : null,
-                      icon: const Icon(Icons.schedule),
-                      label: Text(TimeOfDay.fromDateTime(_dispatchAt).format(context)),
-                    ),
-                    Chip(label: Text('${_selectedFillIds.length} drums · ${_weightLabel(selectedWeight)}')),
-                  ],
-                ),
-                if (!canDispatch)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 8),
-                    child: Text('You can view available drums, but your role cannot record a dispatch.'),
-                  ),
-                const SizedBox(height: 10),
-                FilledButton.icon(
-                  onPressed: canDispatch && !_submittingDispatch ? _submitDispatch : null,
-                  icon: _submittingDispatch
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.local_shipping_outlined),
-                  label: const Text('Record dispatch'),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text('Select available drums', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-        if (plantFills.isEmpty)
-          const _EmptyPanel(message: 'There are no available drums at this plant to dispatch.')
-        else
-          for (final fill in plantFills)
-            Card(
-              child: CheckboxListTile(
-                value: _selectedFillIds.contains(_asInt(fill['id'])),
-                onChanged: canDispatch
-                    ? (checked) => setState(() {
-                          final id = _asInt(fill['id']);
-                          if (id == 0) return;
-                          if (checked == true) {
-                            _selectedFillIds.add(id);
-                          } else {
-                            _selectedFillIds.remove(id);
-                          }
-                        })
-                    : null,
-                title: Text('Drum ${_text(fill['fill_number'])} · ${_text(fill['product_name'])}'),
-                subtitle: Text('Batch ${_text(fill['batch_code'])} · ${_packagingLabel(fill['packaging_type'])} · expires ${_dateLabel(fill['expiry_date'])}'),
-                secondary: Text(_weightLabel(fill['gross_weight_kg'])),
-                controlAffinity: ListTileControlAffinity.leading,
-              ),
-            ),
-      ],
-    );
-  }
-
-  Widget _buildHistoryTab() {
-    if (_dispatches.isEmpty) return const _EmptyPanel(message: 'No outbound drum dispatches have been recorded.');
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        for (final row in _dispatches)
-          Card(
-            child: ListTile(
-              onTap: () => _showDispatchDetails(row),
-              leading: const CircleAvatar(child: Icon(Icons.local_shipping_outlined)),
-              title: Text('${_text(row['truck_number'])}  ·  ${_text(row['destination'])}'),
-              subtitle: Text('${_text(row['plant_name'])}  ·  ${_dateTimeLabel(row['dispatch_datetime'])}'),
-              trailing: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text('${_text(row['drum_count'])} drums', style: const TextStyle(fontWeight: FontWeight.w700)),
-                  Text(_weightLabel(row['gross_weight_kg'])),
-                ],
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthController>();
@@ -522,7 +242,7 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
           );
         }
         if (snapshot.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
-        final tabs = _tabs(auth);
+        final tabs = _tabs();
         final views = _tabViews(auth);
         return DefaultTabController(
           key: ValueKey(tabs.length),
@@ -545,7 +265,7 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Row(children: [
-                            const Expanded(child: Text('Drum inventory & dispatch', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700))),
+                            const Expanded(child: Text('Drum Stock', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700))),
                             actions.first,
                           ]),
                           if (actions.length > 1) Wrap(spacing: 8, children: actions.skip(1).toList()),
@@ -553,7 +273,7 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
                       );
                     }
                     return Row(children: [
-                      const Expanded(child: Text('Drum inventory & dispatch', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700))),
+                      const Expanded(child: Text('Drum Stock', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700))),
                       ...actions,
                     ]);
                   },
@@ -1053,24 +773,9 @@ String _weightLabel(dynamic value) => '${_asDouble(value).toStringAsFixed(2)} kg
 String _dateLabel(dynamic value) => value == null || value.toString().isEmpty ? '—' : value.toString().split('T').first;
 String _ymd(DateTime? date) => date == null ? '—' : '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
-String _isoWithOffset(DateTime date) {
-  final offset = date.timeZoneOffset;
-  final sign = offset.isNegative ? '-' : '+';
-  final minutes = offset.inMinutes.abs();
-  final hoursPart = (minutes ~/ 60).toString().padLeft(2, '0');
-  final minutesPart = (minutes % 60).toString().padLeft(2, '0');
-  return '${_ymd(date)}T${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}:00$sign$hoursPart:$minutesPart';
-}
 
 String _packagingLabel(dynamic value) => value == 'liner_bag' ? 'Non-aseptic liner bag' : 'Aseptic bag';
 
-String _dateTimeLabel(dynamic value) {
-  if (value == null) return '—';
-  final date = DateTime.tryParse(value.toString());
-  if (date == null) return value.toString();
-  final local = date.toLocal();
-  return '${_ymd(local)} ${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
-}
 
 DateTime? _addMonths(DateTime date, int months) {
   final monthIndex = date.month - 1 + months;
