@@ -41,8 +41,8 @@ const List<DrumOpeningBalance> drumOpeningBalances = <DrumOpeningBalance>[
   ),
   DrumOpeningBalance(
     productName: 'Carrot Paste Salt Mix (10%)',
-    availableDrums: 4757,
-    balanceKg: 1051830,
+    availableDrums: 4086,
+    balanceKg: 903267,
   ),
   DrumOpeningBalance(
     productName: 'Carrot Pulp (10%)',

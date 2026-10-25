@@ -12,6 +12,13 @@ void main() {
       expect(pearPulp.single.balanceKg, 1270);
     });
 
+    test('uses the final report balance for Carrot Paste', () {
+      final carrotPaste = drumOpeningBalances.singleWhere((balance) => balance.productName == 'Carrot Paste Salt Mix (10%)');
+
+      expect(carrotPaste.availableDrums, 4086);
+      expect(carrotPaste.balanceKg, 903267);
+    });
+
     test('combines the two distinct Red Chilli sheets by product name', () {
       final redChilli = drumOpeningBalances.where((balance) => drumProductBalanceKey(balance.productName) == 'red chilli puree salted');
 
@@ -26,8 +33,8 @@ void main() {
       final kgTotal = drumOpeningBalances.fold<double>(0, (sum, balance) => sum + balance.balanceKg);
 
       expect(productNames, hasLength(11));
-      expect(drumTotal, 20950);
-      expect(kgTotal, closeTo(4619722.5, 0.01));
+      expect(drumTotal, 20279);
+      expect(kgTotal, closeTo(4471159.5, 0.01));
       expect(drumOpeningBalanceSnapshotLabel, '22 Oct 2026');
     });
   });
