@@ -191,7 +191,9 @@ jobs:
           if [[ -n "$service_user" && "$service_user" != "$(id -un)" ]]; then
             if [[ "$(id -u)" -eq 0 ]]; then chown "$service_user" "$server/.jwt-secret"; else sudo -n chown "$service_user" "$server/.jwt-secret"; fi
           fi
-          cp -a "$staging"/. "$server"/
+          if ! cp -a "$staging"/. "$server"/; then
+            sudo -n cp -a --no-preserve=ownership "$staging"/. "$server"/ || { echo '::error::Backend files could not be copied into the server directory; check deploy-user write access or passwordless sudo.' >&2; exit 1; }
+          fi
           if [[ "$(id -u)" -eq 0 ]]; then
             systemctl restart flavorflow
             systemctl is-active --quiet flavorflow
