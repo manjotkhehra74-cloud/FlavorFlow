@@ -71,9 +71,29 @@ jobs:
       - name: Check out source
         if: steps.deploy-config.outputs.ready == 'true'
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check for backend source changes
+        if: steps.deploy-config.outputs.ready == 'true'
+        id: backend-changes
+        shell: bash
+        env:
+          EVENT_BEFORE: ${{ github.event.before }}
+          EVENT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$EVENT_BEFORE" || "$EVENT_BEFORE" =~ ^0+$ ]] || ! git cat-file -e "$EVENT_BEFORE^{commit}" 2>/dev/null; then
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+          elif git diff --quiet "$EVENT_BEFORE" "$EVENT_SHA" -- server/; then
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+            echo '::notice title=Backend deployment skipped::No server source changes in this push; the existing backend remains deployed.'
+          else
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Validate backend artifact and configure SSH
-        if: steps.deploy-config.outputs.ready == 'true'
+        if: steps.deploy-config.outputs.ready == 'true' && steps.backend-changes.outputs.changed == 'true'
         id: ssh-config
         shell: bash
         run: |
@@ -122,7 +142,7 @@ jobs:
           retention-days: 7
 
       - name: Stage backend source on the VPS
-        if: steps.deploy-config.outputs.ready == 'true'
+        if: steps.deploy-config.outputs.ready == 'true' && steps.backend-changes.outputs.changed == 'true'
         shell: bash
         env:
           SSH_KEY_FILE: ${{ steps.ssh-config.outputs.key_file }}
@@ -481,7 +501,7 @@ jobs:
           echo "Deployed GitHub web build $sha to $web; backup saved under $backup_dir."
           REMOTE
 
-      - name: Verify the production bundle contains the dispatch fix
+      - name: Verify production bundle contains Drum Dispatch and the dispatch fix
         if: steps.deploy-config.outputs.ready == 'true'
         shell: bash
         run: |
@@ -495,7 +515,11 @@ jobs:
             echo '::error::Production bundle does not contain the dispatch batch-code fix.'
             exit 1
           fi
-          echo 'Production web app is serving the dispatch batch-code fix.'
+          if ! grep -Fq 'New drum dispatch' "$bundle"; then
+            echo '::error::Production bundle does not contain the Drum Dispatch screen.'
+            exit 1
+          fi
+          echo 'Production web app is serving the Drum Dispatch screen and the dispatch batch-code fix.'
 
   build-windows:
     name: Build Windows desktop portable x64
