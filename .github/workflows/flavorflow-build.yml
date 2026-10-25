@@ -180,7 +180,9 @@ jobs:
             umask 077
             node -e 'process.stdout.write(require("crypto").randomBytes(48).toString("hex"))' > "$server/.jwt-secret"
           fi
-          chmod 600 "$server/.jwt-secret"
+          if ! chmod 600 "$server/.jwt-secret"; then
+            sudo -n chmod 600 "$server/.jwt-secret" || { echo '::error::Deploy user cannot secure the existing backend JWT secret; grant passwordless sudo for chmod or make the file writable by the deploy user.' >&2; exit 1; }
+          fi
           if [[ "$(id -u)" -eq 0 ]]; then
             service_user="$(systemctl show -p User --value flavorflow)"
           else
