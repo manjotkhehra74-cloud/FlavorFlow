@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../state/auth.dart';
-import 'drum_dispatch_page.dart';
 
 class DrumInventoryPage extends StatefulWidget {
   const DrumInventoryPage({super.key});
@@ -182,16 +181,14 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  List<Tab> _tabs(AuthController auth) => [
-        const Tab(text: 'Available stock'),
-        const Tab(text: 'Filled drums'),
-        if (auth.can('dispatch.view') || auth.can('dispatch.manage')) const Tab(text: 'Drum dispatch'),
+  List<Tab> _tabs() => const [
+        Tab(text: 'Available stock'),
+        Tab(text: 'Filled drums'),
       ];
 
   List<Widget> _tabViews(AuthController auth) => [
         _buildStockTab(),
         _buildFillsTab(auth),
-        if (auth.can('dispatch.view') || auth.can('dispatch.manage')) const DrumDispatchPage(),
       ];
 
   Widget _buildStockTab() {
@@ -382,7 +379,7 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
           );
         }
         if (snapshot.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
-        final tabs = _tabs(auth);
+        final tabs = _tabs();
         final views = _tabViews(auth);
         return DefaultTabController(
           key: ValueKey(tabs.length),
@@ -667,26 +664,43 @@ class _CreateDrumFillDialog extends StatefulWidget {
 
 class _CreateDrumFillDialogState extends State<_CreateDrumFillDialog> {
   final _batch = TextEditingController();
+  final _numberFrom = TextEditingController();
+  final _numberTo = TextEditingController();
   final List<TextEditingController> _weights = [TextEditingController()];
   late DateTime _manufacturingDate;
   DateTime? _expiryOverride;
   int? _productId;
   int? _plantId;
+  int _lastValidStartNumber = 1;
   String _packagingType = 'aseptic_bag';
   bool _saving = false;
   String? _error;
+  String? _rangeError;
 
   @override
   void initState() {
     super.initState();
     _manufacturingDate = DateTime.now();
     if (widget.products.isNotEmpty) _productId = _asInt(widget.products.first['id']);
-    if (widget.plants.isNotEmpty) _plantId = _asInt(widget.plants.first['id']);
+    if (widget.plants.isNotEmpty) {
+      final firstPlant = widget.plants.first;
+      _plantId = _asInt(firstPlant['id']);
+      _lastValidStartNumber = _nextFillNumber(firstPlant);
+    }
+    _numberFrom.text = '$_lastValidStartNumber';
+    _numberTo.text = '$_lastValidStartNumber';
+  }
+
+  int _nextFillNumber(Map<String, dynamic> plant) {
+    final value = _asInt(plant['next_fill_number']);
+    return value > 0 ? value : 1;
   }
 
   @override
   void dispose() {
     _batch.dispose();
+    _numberFrom.dispose();
+    _numberTo.dispose();
     for (final weight in _weights) {
       weight.dispose();
     }
@@ -728,35 +742,83 @@ class _CreateDrumFillDialogState extends State<_CreateDrumFillDialog> {
     if (picked != null && mounted) setState(() => _expiryOverride = picked);
   }
 
-  void _addWeightField() {
-    if (_weights.length >= 500) return;
-    setState(() => _weights.add(TextEditingController()));
+  void _resizeWeightFields(int count) {
+    while (_weights.length > count) {
+      _weights.removeLast().dispose();
+    }
+    while (_weights.length < count) {
+      _weights.add(TextEditingController());
+    }
   }
 
-  void _removeWeightField(int index) {
-    if (_weights.length <= 1) return;
+  void _updateWeightRows() {
+    final from = int.tryParse(_numberFrom.text.trim());
+    final to = int.tryParse(_numberTo.text.trim());
+    const maxSafeInteger = 9007199254740991;
+    if (from == null || to == null || from <= 0 || to < from || from > maxSafeInteger || to > maxSafeInteger) {
+      setState(() => _rangeError = 'Enter a valid positive drum number range.');
+      return;
+    }
+    final count = to - from + 1;
+    if (count > 500) {
+      setState(() => _rangeError = 'Add up to 500 drums in one batch.');
+      return;
+    }
     setState(() {
-      final removed = _weights.removeAt(index);
-      removed.dispose();
+      if (from != _lastValidStartNumber) {
+        for (final weight in _weights) {
+          weight.clear();
+        }
+        _lastValidStartNumber = from;
+      }
+      _resizeWeightFields(count);
+      _rangeError = null;
+    });
+  }
+
+  void _selectPlant(int? plantId) {
+    if (plantId == null) return;
+    final plant = widget.plants.firstWhere(
+      (row) => _asInt(row['id']) == plantId,
+      orElse: () => <String, dynamic>{'next_fill_number': 1},
+    );
+    final nextNumber = _nextFillNumber(plant);
+    setState(() {
+      _plantId = plantId;
+      _numberFrom.text = '$nextNumber';
+      _numberTo.text = '$nextNumber';
+      _lastValidStartNumber = nextNumber;
+      _rangeError = null;
+      for (final weight in _weights) {
+        weight.clear();
+      }
+      _resizeWeightFields(1);
     });
   }
 
   Future<void> _submit() async {
     final batchCode = _batch.text.trim().toUpperCase();
+    final firstNumber = int.tryParse(_numberFrom.text.trim());
+    final lastNumber = int.tryParse(_numberTo.text.trim());
+    const maxSafeInteger = 9007199254740991;
     if (_plantId == null || _productId == null || batchCode.isEmpty) {
       setState(() => _error = 'Select a plant and product, and enter a batch code.');
+      return;
+    }
+    if (firstNumber == null || lastNumber == null || firstNumber <= 0 || lastNumber < firstNumber || firstNumber > maxSafeInteger || lastNumber > maxSafeInteger || lastNumber - firstNumber + 1 != _weights.length) {
+      setState(() => _rangeError = 'Enter a valid range and one weight field for every drum number.');
       return;
     }
     final weights = <double>[];
     for (var i = 0; i < _weights.length; i++) {
       final weight = double.tryParse(_weights[i].text.trim());
       if (weight == null || !weight.isFinite || weight <= 0) {
-        setState(() => _error = 'Enter a valid gross weight for drum ${i + 1}.');
+        setState(() => _error = 'Enter the actual gross kg for drum ${firstNumber + i}.');
         return;
       }
       weights.add(weight);
     }
-    setState(() { _saving = true; _error = null; });
+    setState(() { _saving = true; _error = null; _rangeError = null; });
     try {
       await widget.onSave({
         'plantId': _plantId,
@@ -765,6 +827,8 @@ class _CreateDrumFillDialogState extends State<_CreateDrumFillDialog> {
         'manufacturingDate': _ymd(_manufacturingDate),
         'expiryDate': _expiryOverride == null ? null : _ymd(_expiryOverride!),
         'packagingType': _packagingType,
+        'fillNumberFrom': firstNumber,
+        'fillNumberTo': lastNumber,
         'grossWeightsKg': weights,
       });
       if (mounted) Navigator.pop(context, true);
@@ -791,7 +855,7 @@ class _CreateDrumFillDialogState extends State<_CreateDrumFillDialog> {
                 value: _plantId,
                 decoration: const InputDecoration(labelText: 'Source plant'),
                 items: [for (final plant in widget.plants) DropdownMenuItem<int>(value: _asInt(plant['id']), child: Text(_text(plant['name'])))],
-                onChanged: _saving ? null : (value) => setState(() => _plantId = value),
+                onChanged: _saving ? null : _selectPlant,
               ),
               DropdownButtonFormField<int>(
                 value: _productId,
@@ -834,25 +898,59 @@ class _CreateDrumFillDialogState extends State<_CreateDrumFillDialog> {
                 ],
               ),
               const Divider(height: 20),
-              Text('Individual gross weights (including the iron drum)', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-              for (var i = 0; i < _weights.length; i++)
-                Row(
-                  children: [
-                    SizedBox(width: 72, child: Text('Drum ${i + 1}')),
-                    Expanded(
-                      child: TextField(
-                        controller: _weights[i],
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        decoration: const InputDecoration(labelText: 'Gross kg'),
-                      ),
+              Text('Drum number range', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _numberFrom,
+                      enabled: !_saving,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'From number'),
+                      onChanged: (_) => _updateWeightRows(),
                     ),
-                    IconButton(tooltip: 'Remove drum', onPressed: _saving || _weights.length == 1 ? null : () => _removeWeightField(i), icon: const Icon(Icons.remove_circle_outline)),
-                  ],
-                ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(onPressed: _saving ? null : _addWeightField, icon: const Icon(Icons.add), label: const Text('Add another drum')),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _numberTo,
+                      enabled: !_saving,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'To number'),
+                      onChanged: (_) => _updateWeightRows(),
+                    ),
+                  ),
+                ],
               ),
+              if (_rangeError != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(_rangeError!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                ),
+              const SizedBox(height: 8),
+              Text(
+                'One weight field appears for each number. Weigh each filled drum and enter its actual gross kg, including the iron drum. Stock kg is the sum of these saved weights; changing the From number clears weights so they cannot be attached to the wrong drum.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 8),
+              for (var i = 0; i < _weights.length; i++)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    children: [
+                      SizedBox(width: 86, child: Text('Drum ${_lastValidStartNumber + i}')),
+                      Expanded(
+                        child: TextField(
+                          controller: _weights[i],
+                          enabled: !_saving,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: const InputDecoration(labelText: 'Actual gross kg'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
             ],
           ),

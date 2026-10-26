@@ -51,6 +51,28 @@ function validFillWeights(body) {
   }
 }
 
+function validFillNumberRange(body, weightCount) {
+  const fromValue = body.fillNumberFrom ?? body.fill_number_from;
+  const toValue = body.fillNumberTo ?? body.fill_number_to;
+  if (fromValue === undefined && toValue === undefined) return null;
+  if (fromValue == null || toValue == null) throw bad('Enter both the first and last drum number.');
+
+  const from = Number(fromValue);
+  const to = Number(toValue);
+  if (!Number.isSafeInteger(from) || from <= 0 || !Number.isSafeInteger(to) || to <= 0) {
+    throw bad('Drum numbers must be positive whole numbers.');
+  }
+  if (to < from) throw bad('Last drum number cannot be less than the first drum number.');
+  if (!Number.isSafeInteger(to + 1)) throw bad('Drum number range is too large.');
+
+  const count = to - from + 1;
+  if (count > 500) throw bad('A single fill can include at most 500 numbered drums.');
+  if (count !== weightCount) {
+    throw bad(`Drum numbers ${from}–${to} cover ${count} drums; enter one gross weight for each drum.`);
+  }
+  return { from, to };
+}
+
 function positiveDrumCount(value) {
   const count = Number(value);
   if (!Number.isSafeInteger(count) || count <= 0) throw bad('Drum count must be a positive whole number.');
@@ -199,7 +221,7 @@ router.get('/opening-balances', requirePerm('inventory.view'), (_req, res) => {
   res.json({ balances, summary });
 });
 
-/** Individual filled drums; fill_number is a per-plant, continuous fill/sticker sequence. */
+/** Individual filled drums; fill_number is a never-reused, plant-wide fill/sticker number. */
 router.get('/fills', requirePerm('inventory.view'), (req, res) => {
   const clauses = [];
   const params = [];
@@ -218,7 +240,8 @@ router.get('/fills', requirePerm('inventory.view'), (req, res) => {
 
 /**
  * Fill one or more drums for a batch. Each input weight creates a separate fill record
- * and gets its own never-reused, plant-wide number (not a permanent iron-drum ID).
+ * and gets its own never-reused, plant-wide number, optionally from an explicit range
+ * (not a permanent iron-drum ID).
  */
 router.post('/fills', requirePerm('inventory.manage'), (req, res) => {
   const body = req.body || {};
@@ -233,6 +256,7 @@ router.post('/fills', requirePerm('inventory.manage'), (req, res) => {
   let packagingType;
   try { packagingType = normalizePackagingType(packagingValue); } catch (error) { throw bad(error.message); }
   const weights = validFillWeights(body);
+  const requestedNumberRange = validFillNumberRange(body, weights.length);
 
   const plant = db.prepare('SELECT id, name, active, next_fill_number FROM drum_plants WHERE id = ?').get(plantId);
   if (!plant || !plant.active) throw bad('Source plant not found or inactive.', 404);
@@ -270,7 +294,16 @@ router.post('/fills', requirePerm('inventory.manage'), (req, res) => {
       batch = { id: Number(insertedBatch.lastInsertRowid), manufacturing_date: manufacturingDate, expiry_date: expiryDate, shelf_life_months: lockedProduct.shelf_life_months };
     }
 
-    const firstNumber = Number(lockedPlant.next_fill_number);
+    const firstNumber = requestedNumberRange ? requestedNumberRange.from : Number(lockedPlant.next_fill_number);
+    const lastNumber = requestedNumberRange ? requestedNumberRange.to : firstNumber + weights.length - 1;
+    const existingNumber = db.prepare(`
+      SELECT fill_number FROM drum_fills
+       WHERE plant_id = ? AND fill_number BETWEEN ? AND ?
+       ORDER BY fill_number LIMIT 1`).get(plantId, firstNumber, lastNumber);
+    if (existingNumber) {
+      throw bad(`Drum number ${existingNumber.fill_number} is already registered at ${plant.name}. Choose a free range.`, 409);
+    }
+
     const insertFill = db.prepare(`
       INSERT INTO drum_fills
         (plant_id, fill_number, batch_id, packaging_type, gross_weight_kg, status, created_by, created_at)
@@ -280,10 +313,11 @@ router.post('/fills', requirePerm('inventory.manage'), (req, res) => {
       const insert = insertFill.run(plantId, firstNumber + index, batch.id, packagingType, weights[index], req.user.id, createdAt);
       fillIds.push(Number(insert.lastInsertRowid));
     }
-    db.prepare('UPDATE drum_plants SET next_fill_number = ? WHERE id = ?').run(firstNumber + weights.length, plantId);
+    const nextFillNumber = Math.max(Number(lockedPlant.next_fill_number), lastNumber + 1);
+    db.prepare('UPDATE drum_plants SET next_fill_number = ? WHERE id = ?').run(nextFillNumber, plantId);
 
-    try { audit(db, req.user, 'CREATE', 'drum_fill', batch.id, `${product.name} ${batchCode}; ${weights.length} drum(s) filled starting at ${firstNumber}`); } catch (_) {}
-    return { batchId: batch.id, firstNumber, fillIds };
+    try { audit(db, req.user, 'CREATE', 'drum_fill', batch.id, `${product.name} ${batchCode}; ${weights.length} drum(s) numbered ${firstNumber}–${lastNumber}`); } catch (_) {}
+    return { batchId: batch.id, firstNumber, lastNumber, fillIds };
   });
 
   const fills = result.fillIds.map((id) => db.prepare(`${FILL_SELECT} WHERE f.id = ?`).get(id));
@@ -292,6 +326,7 @@ router.post('/fills', requirePerm('inventory.manage'), (req, res) => {
     fills,
     assigned_numbers: fills.map((fill) => fill.fill_number),
     first_fill_number: result.firstNumber,
+    last_fill_number: result.lastNumber,
   });
 });
 

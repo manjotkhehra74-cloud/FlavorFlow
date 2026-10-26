@@ -23,6 +23,7 @@ import '../../ui/widgets.dart';
 import '../../ui/windows_widgets.dart';
 import 'batch_code.dart';
 import 'destination_field.dart';
+import '../drums/drum_dispatch_page.dart';
 
 /// Destinations that older builds hard-coded for the original sauce factory
 /// (purged once from other companies' phones on upgrade — see loadSavedDests).
@@ -42,15 +43,11 @@ class _DispatchPageState extends State<DispatchPage> with SingleTickerProviderSt
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 4, vsync: this);
+    _tab = TabController(length: 5, vsync: this);
     if (widget.tab == 'history') _tab.index = 1;
     if (widget.tab == 'reports') _tab.index = 2;
     if (widget.tab == 'trucks') _tab.index = 3;
-    if (widget.tab == 'drums') {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) context.go('/drums');
-      });
-    }
+    if (widget.tab == 'drums') _tab.index = 4;
   }
 
   @override
@@ -68,12 +65,14 @@ class _DispatchPageState extends State<DispatchPage> with SingleTickerProviderSt
       const WindowsModuleTab('Dispatch History', Icons.history_rounded),
       const WindowsModuleTab('Reports', Icons.bar_chart_rounded),
       const WindowsModuleTab('Trucks', Icons.local_shipping_outlined),
+      const WindowsModuleTab('Drum Dispatch', Icons.inventory_2_outlined),
     ];
     final content = TabBarView(controller: _tab, children: [
       _EntryTab(readOnly: !canManage),
       const _HistoryTab(),
       const _ReportsTab(),
       _TrucksTab(readOnly: !canManage),
+      const DrumDispatchPage(),
     ]);
     if (isWindowsPlatform) {
       return AnimatedBuilder(
@@ -102,6 +101,7 @@ class _DispatchPageState extends State<DispatchPage> with SingleTickerProviderSt
               Tab(text: tr('Dispatch History')),
               Tab(text: tr('Reports')),
               Tab(text: tr('Trucks')),
+              const Tab(text: 'Drum Dispatch'),
             ],
           ),
         ),

@@ -95,6 +95,74 @@ test('drum fills keep a plant-wide sequence, individual gross weights, shelf-lif
   assert.deepEqual(secondBatch.body.assigned_numbers, [3]);
   assert.equal(secondBatch.body.batch.expiry_date, '2027-04-01');
 
+  const rangePlant = await call('/api/drums/plants', { method: 'POST', body: { name: 'Range Test Plant' } });
+  assert.equal(rangePlant.status, 201);
+  const rangePlantId = rangePlant.body.plant.id;
+  const rangeFill = await call('/api/drums/fills', {
+    method: 'POST',
+    body: {
+      plantId: rangePlantId,
+      productId: product24.body.product.id,
+      batchCode: 'MANGO-RANGE-01',
+      manufacturingDate: '2025-02-01',
+      packagingType: 'aseptic_bag',
+      fillNumberFrom: 40,
+      fillNumberTo: 42,
+      grossWeightsKg: [215.75, 216.25, 217],
+    },
+  });
+  assert.equal(rangeFill.status, 201);
+  assert.deepEqual(rangeFill.body.assigned_numbers, [40, 41, 42]);
+  assert.equal(rangeFill.body.first_fill_number, 40);
+  assert.equal(rangeFill.body.last_fill_number, 42);
+  assert.deepEqual(rangeFill.body.fills.map((fill) => fill.gross_weight_kg), [215.75, 216.25, 217]);
+
+  const rangePlantRows = await call('/api/drums/plants');
+  assert.equal(rangePlantRows.body.plants.find((row) => row.id === rangePlantId).next_fill_number, 43);
+  const nextAutomaticFill = await call('/api/drums/fills', {
+    method: 'POST',
+    body: {
+      plantId: rangePlantId,
+      productId: product24.body.product.id,
+      batchCode: 'MANGO-RANGE-02',
+      manufacturingDate: '2025-02-02',
+      packagingType: 'aseptic_bag',
+      grossWeightsKg: [219.5],
+    },
+  });
+  assert.equal(nextAutomaticFill.status, 201);
+  assert.deepEqual(nextAutomaticFill.body.assigned_numbers, [43]);
+
+  const mismatchedRange = await call('/api/drums/fills', {
+    method: 'POST',
+    body: {
+      plantId: rangePlantId,
+      productId: product24.body.product.id,
+      batchCode: 'MANGO-RANGE-03',
+      manufacturingDate: '2025-02-03',
+      packagingType: 'aseptic_bag',
+      fillNumberFrom: 50,
+      fillNumberTo: 52,
+      grossWeightsKg: [220, 221],
+    },
+  });
+  assert.equal(mismatchedRange.status, 400);
+
+  const duplicateRange = await call('/api/drums/fills', {
+    method: 'POST',
+    body: {
+      plantId: rangePlantId,
+      productId: product24.body.product.id,
+      batchCode: 'MANGO-RANGE-04',
+      manufacturingDate: '2025-02-04',
+      packagingType: 'aseptic_bag',
+      fillNumberFrom: 41,
+      fillNumberTo: 42,
+      grossWeightsKg: [220, 221],
+    },
+  });
+  assert.equal(duplicateRange.status, 409);
+
   const beforeDispatch = await call(`/api/drums/stock?plantId=${plantId}`);
   assert.equal(beforeDispatch.body.summary.drum_count, 3);
 

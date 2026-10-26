@@ -28,6 +28,7 @@ class _DrumDispatchPageState extends State<DrumDispatchPage> {
   int? _dispatchPlantId;
   int? _selectedOpeningBalanceId;
   DateTime _dispatchAt = DateTime.now();
+  String _dispatchStockType = 'tracked';
   bool _submittingDispatch = false;
   bool _submittingAggregateDispatch = false;
   bool _manualTruck = false;
@@ -396,6 +397,15 @@ class _DrumDispatchPageState extends State<DrumDispatchPage> {
     final selectedWeight = plantFills
         .where((fill) => _selectedFillIds.contains(_asInt(fill['id'])))
         .fold<double>(0, (sum, fill) => sum + _asDouble(fill['gross_weight_kg']));
+    Map<String, dynamic>? selectedBalance;
+    for (final balance in aggregateBalances) {
+      if (_asInt(balance['id']) == _selectedOpeningBalanceId) {
+        selectedBalance = balance;
+        break;
+      }
+    }
+    final isTracked = _dispatchStockType == 'tracked';
+    final isSubmitting = _submittingDispatch || _submittingAggregateDispatch;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -408,8 +418,22 @@ class _DrumDispatchPageState extends State<DrumDispatchPage> {
               children: [
                 Text('Outbound drum dispatch to Neemrana', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 6),
-                const Text('Drum dispatch is separate from CB dispatch; choose the same saved truck when both travel together.'),
+                const Text('Choose one stock type. The fields below change to match it; both methods use the same truck, date and dispatch record.'),
                 const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  key: ValueKey('dispatch-stock-$_dispatchStockType'),
+                  initialValue: _dispatchStockType,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Stock type to dispatch'),
+                  items: const [
+                    DropdownMenuItem(value: 'tracked', child: Text('Individually numbered drums')),
+                    DropdownMenuItem(value: 'aggregate', child: Text('Aggregate stock (PDF / opening balance)')),
+                  ],
+                  onChanged: canManage
+                      ? (value) => setState(() => _dispatchStockType = value ?? 'tracked')
+                      : null,
+                ),
+                const SizedBox(height: 8),
                 DropdownButtonFormField<int>(
                   key: ValueKey('drum-source-$_dispatchPlantId'),
                   initialValue: activePlants.any((plant) => _asInt(plant['id']) == _dispatchPlantId) ? _dispatchPlantId : null,
@@ -431,7 +455,105 @@ class _DrumDispatchPageState extends State<DrumDispatchPage> {
                     padding: EdgeInsets.only(top: 6),
                     child: Text('Add an active source plant under Drum Stock before dispatching drums.'),
                   ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
+                if (isTracked) ...[
+                  Text('Select numbered drums', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 4),
+                  const Text('Each selected drum uses its saved gross weight from Drum Stock; the dispatch total is calculated from those weights.'),
+                  if (plantFills.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8),
+                      child: Text('No individually numbered drums are available at this plant. Switch Stock type to Aggregate stock if an aggregate balance remains.'),
+                    )
+                  else
+                    for (final fill in plantFills)
+                      Card(
+                        margin: const EdgeInsets.only(top: 6),
+                        child: CheckboxListTile(
+                          value: _selectedFillIds.contains(_asInt(fill['id'])),
+                          onChanged: canManage
+                              ? (checked) => setState(() {
+                                    final id = _asInt(fill['id']);
+                                    if (id == 0) return;
+                                    if (checked == true) {
+                                      _selectedFillIds.add(id);
+                                    } else {
+                                      _selectedFillIds.remove(id);
+                                    }
+                                  })
+                              : null,
+                          title: Text('Drum ${_text(fill['fill_number'])} · ${_text(fill['product_name'])}'),
+                          subtitle: Text('Batch ${_text(fill['batch_code'])} · ${_packagingLabel(fill['packaging_type'])} · expires ${_dateLabel(fill['expiry_date'])}'),
+                          secondary: Text(_weightLabel(fill['gross_weight_kg']), style: const TextStyle(fontWeight: FontWeight.w700)),
+                          controlAffinity: ListTileControlAffinity.leading,
+                        ),
+                      ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Chip(label: Text('${_selectedFillIds.length} drums selected · ${_weightLabel(selectedWeight)}')),
+                  ),
+                ] else ...[
+                  Text('Select aggregate stock', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 4),
+                  const Text('For PDF/opening stock, enter the actual total kg being sent. Aggregate stock has no individual drum numbers or saved per-drum weights.'),
+                  if (aggregateBalances.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8),
+                      child: Text('No aggregate stock remains to dispatch.'),
+                    )
+                  else ...[
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<int>(
+                      key: ValueKey('aggregate-balance-$_selectedOpeningBalanceId'),
+                      initialValue: aggregateBalances.any((balance) => _asInt(balance['id']) == _selectedOpeningBalanceId) ? _selectedOpeningBalanceId : null,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Product · remaining aggregate balance'),
+                      items: [
+                        for (final balance in aggregateBalances)
+                          DropdownMenuItem<int>(
+                            value: _asInt(balance['id']),
+                            child: Text('${_text(balance['product_name'])} · ${_asInt(balance['available_drums'])} drums · ${_weightLabel(balance['available_kg'])}'),
+                          ),
+                      ],
+                      onChanged: canManage
+                          ? (value) => setState(() {
+                                _selectedOpeningBalanceId = value;
+                                _aggregateDrumsController.clear();
+                                _aggregateKgController.clear();
+                              })
+                          : null,
+                    ),
+                    if (selectedBalance != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text('Available: ${_asInt(selectedBalance['available_drums'])} drums · ${_weightLabel(selectedBalance['available_kg'])}'),
+                      ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _aggregateDrumsController,
+                            enabled: canManage,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(labelText: 'Drums to dispatch'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: _aggregateKgController,
+                            enabled: canManage,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: const InputDecoration(labelText: 'Actual total kg to dispatch'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+                const Divider(height: 24),
                 _truckField(canManage),
                 const SizedBox(height: 8),
                 Wrap(
@@ -448,120 +570,23 @@ class _DrumDispatchPageState extends State<DrumDispatchPage> {
                       icon: const Icon(Icons.schedule),
                       label: Text(TimeOfDay.fromDateTime(_dispatchAt).format(context)),
                     ),
-                    Chip(label: Text('${_selectedFillIds.length} drums · ${_weightLabel(selectedWeight)}')),
                   ],
                 ),
                 if (!canManage)
                   const Padding(
                     padding: EdgeInsets.only(top: 8),
-                    child: Text('You can view available drums, but your role cannot record a dispatch.'),
+                    child: Text('You can view available drums and dispatch history, but your role cannot record a dispatch.'),
                   ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 FilledButton.icon(
-                  onPressed: canManage && !_submittingDispatch ? _submitDispatch : null,
-                  icon: _submittingDispatch
+                  onPressed: canManage && !isSubmitting
+                      ? (isTracked ? _submitDispatch : _submitAggregateDispatch)
+                      : null,
+                  icon: isSubmitting
                       ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                       : const Icon(Icons.local_shipping_outlined),
                   label: const Text('Record drum dispatch'),
                 ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text('Select available drums · weight from the fill register', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-        if (plantFills.isEmpty)
-          const _EmptyPanel(message: 'No individually tracked drums are available at this plant. Use aggregate stock below if any remains.')
-        else
-          for (final fill in plantFills)
-            Card(
-              child: CheckboxListTile(
-                value: _selectedFillIds.contains(_asInt(fill['id'])),
-                onChanged: canManage
-                    ? (checked) => setState(() {
-                          final id = _asInt(fill['id']);
-                          if (id == 0) return;
-                          if (checked == true) {
-                            _selectedFillIds.add(id);
-                          } else {
-                            _selectedFillIds.remove(id);
-                          }
-                        })
-                    : null,
-                title: Text('Drum ${_text(fill['fill_number'])} · ${_text(fill['product_name'])}'),
-                subtitle: Text('Batch ${_text(fill['batch_code'])} · ${_packagingLabel(fill['packaging_type'])} · expires ${_dateLabel(fill['expiry_date'])}'),
-                secondary: Text(_weightLabel(fill['gross_weight_kg']), style: const TextStyle(fontWeight: FontWeight.w700)),
-                controlAffinity: ListTileControlAffinity.leading,
-              ),
-            ),
-        const SizedBox(height: 16),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Aggregate stock dispatch', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                const SizedBox(height: 4),
-                const Text('Dispatch part of a product balance. Enter the drum count and the actual total kg being sent; both are deducted from stock.'),
-                if (aggregateBalances.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 8),
-                    child: Text('No aggregate stock remains to dispatch.'),
-                  )
-                else ...[
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<int>(
-                    key: ValueKey('aggregate-balance-$_selectedOpeningBalanceId'),
-                    initialValue: aggregateBalances.any((balance) => _asInt(balance['id']) == _selectedOpeningBalanceId) ? _selectedOpeningBalanceId : null,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Product · remaining aggregate balance'),
-                    items: [
-                      for (final balance in aggregateBalances)
-                        DropdownMenuItem<int>(
-                          value: _asInt(balance['id']),
-                          child: Text('${_text(balance['product_name'])} · ${_asInt(balance['available_drums'])} drums · ${_weightLabel(balance['available_kg'])}'),
-                        ),
-                    ],
-                    onChanged: canManage
-                        ? (value) => setState(() {
-                              _selectedOpeningBalanceId = value;
-                              _aggregateDrumsController.clear();
-                              _aggregateKgController.clear();
-                            })
-                        : null,
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _aggregateDrumsController,
-                          enabled: canManage,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(labelText: 'Drums to dispatch'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: _aggregateKgController,
-                          enabled: canManage,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          decoration: const InputDecoration(labelText: 'Total kg to dispatch'),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  FilledButton.icon(
-                    onPressed: canManage && !_submittingAggregateDispatch ? _submitAggregateDispatch : null,
-                    icon: _submittingAggregateDispatch
-                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.local_shipping_outlined),
-                    label: const Text('Record aggregate dispatch'),
-                  ),
-                ],
               ],
             ),
           ),
