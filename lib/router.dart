@@ -16,6 +16,7 @@ import 'features/dashboard/dashboard_page.dart';
 import 'features/dispatch/dispatch_detail_page.dart';
 import 'features/dispatch/dispatch_page.dart';
 import 'features/inventory/inventory_page.dart';
+import 'features/drums/drum_inventory_page.dart';
 import 'features/notifications/notifications_page.dart';
 import 'features/sync/sync_page.dart';
 import 'features/packing/loss_page.dart';
@@ -39,6 +40,7 @@ import 'ui/app_shell.dart';
 String? permForPath(String path) {
   if (path.startsWith('/products')) return 'products.view';
   if (path.startsWith('/inventory')) return 'inventory.view';
+  if (path.startsWith('/drums')) return 'inventory.view';
   if (path.startsWith('/stock')) return 'stock.view';
   if (path.startsWith('/packing')) {
     if (path.contains('/bom')) return 'packing.bom.view';
@@ -112,6 +114,7 @@ GoRouter buildRouter(AuthController auth) {
             path: '/inventory',
             builder: (c, s) => InventoryPage(lowOnly: s.uri.queryParameters['filter'] == 'low'),
           ),
+          GoRoute(path: '/drums', builder: (c, s) => const DrumInventoryPage()),
           GoRoute(
             path: '/stock',
             builder: (c, s) => StockLedgerPage(tab: s.uri.queryParameters['tab']),
