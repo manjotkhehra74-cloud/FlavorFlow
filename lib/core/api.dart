@@ -335,6 +335,10 @@ class ApiClient {
   /// ff-idempotency patch answers a repeated request with the first reply.
   Future<dynamic> post(String path, [Map<String, dynamic>? body, String? idempotencyKey]) =>
       _send('POST', path, body, idempotencyKey);
+
+  /// Long-running, read-only requests such as register-photo OCR may need more than the normal POST timeout.
+  Future<dynamic> postWithTimeout(String path, Map<String, dynamic> body, Duration timeout) =>
+      _send('POST', path, body, null, timeout);
   Future<dynamic> put(String path, [Map<String, dynamic>? body, String? idempotencyKey]) =>
       _send('PUT', path, body, idempotencyKey);
   Future<dynamic> delete(String path) => _send('DELETE', path);

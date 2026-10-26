@@ -16,6 +16,7 @@ class DrumDispatchPage extends StatefulWidget {
 class _DrumDispatchPageState extends State<DrumDispatchPage> {
   late Future<void> _loading;
   List<Map<String, dynamic>> _plants = [];
+  List<Map<String, dynamic>> _destinations = [];
   List<Map<String, dynamic>> _availableFills = [];
   List<Map<String, dynamic>> _openingBalances = [];
   List<Map<String, dynamic>> _dispatches = [];
@@ -26,6 +27,7 @@ class _DrumDispatchPageState extends State<DrumDispatchPage> {
   final TextEditingController _aggregateDrumsController = TextEditingController();
   final TextEditingController _aggregateKgController = TextEditingController();
   int? _dispatchPlantId;
+  String _dispatchDestination = 'Neemrana';
   int? _selectedOpeningBalanceId;
   DateTime _dispatchAt = DateTime.now();
   String _dispatchStockType = 'tracked';
@@ -63,6 +65,7 @@ class _DrumDispatchPageState extends State<DrumDispatchPage> {
       auth.api.get('/drums/plants'),
       auth.api.get('/drums/fills?status=AVAILABLE'),
       auth.api.get('/drums/opening-balances'),
+      if (canViewDispatch) auth.api.get('/drums/destinations') else Future<dynamic>.value({'destinations': <dynamic>[]}),
       if (canViewDispatch) auth.api.get('/drums/dispatches') else Future<dynamic>.value({'dispatches': <dynamic>[]}),
       if (canViewDispatch) auth.api.get('/drums/aggregate-dispatches') else Future<dynamic>.value({'dispatches': <dynamic>[]}),
     ]);
@@ -70,11 +73,25 @@ class _DrumDispatchPageState extends State<DrumDispatchPage> {
     _plants = _rows(values[0], 'plants');
     _availableFills = _rows(values[1], 'fills');
     _openingBalances = _rows(values[2], 'balances');
-    _dispatches = canViewDispatch ? _rows(values[3], 'dispatches') : <Map<String, dynamic>>[];
-    _aggregateDispatches = canViewDispatch ? _rows(values[4], 'dispatches') : <Map<String, dynamic>>[];
+    _destinations = canViewDispatch ? _rows(values[3], 'destinations') : <Map<String, dynamic>>[];
+    _dispatches = canViewDispatch ? _rows(values[4], 'dispatches') : <Map<String, dynamic>>[];
+    _aggregateDispatches = canViewDispatch ? _rows(values[5], 'dispatches') : <Map<String, dynamic>>[];
     final activePlants = _plants.where((plant) => _asInt(plant['active']) != 0).toList();
     if (!_plants.any((plant) => _asInt(plant['id']) == _dispatchPlantId && _asInt(plant['active']) != 0)) {
-      _dispatchPlantId = activePlants.isEmpty ? null : _asInt(activePlants.first['id']);
+      Map<String, dynamic>? defaultPlant;
+      for (final plant in activePlants) {
+        if (_upper(plant['name']).trim() == 'KHADUR SAHIB') { defaultPlant = plant; break; }
+      }
+      _dispatchPlantId = defaultPlant == null
+          ? (activePlants.isEmpty ? null : _asInt(activePlants.first['id']))
+          : _asInt(defaultPlant['id']);
+    }
+    final destinationNames = _destinations.map((row) => _text(row['name'])).toList();
+    if (!destinationNames.contains(_dispatchDestination)) {
+      final defaultDestination = _destinations.where((row) => _upper(row['name']).trim() == 'NEEMRANA');
+      _dispatchDestination = defaultDestination.isNotEmpty
+          ? _text(defaultDestination.first['name'])
+          : (destinationNames.isEmpty ? 'Neemrana' : destinationNames.first);
     }
 
     // The same truck master used by carton dispatch is available here too.
@@ -102,6 +119,58 @@ class _DrumDispatchPageState extends State<DrumDispatchPage> {
   void _reload() {
     if (!mounted) return;
     setState(() => _loading = _load());
+  }
+
+  Future<void> _refreshAndWait() async {
+    final future = _load();
+    if (mounted) setState(() => _loading = future);
+    await future;
+    if (mounted) setState(() {});
+  }
+
+  Future<String?> _askForName({required String title, required String label}) async {
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: TextField(controller: controller, autofocus: true, textCapitalization: TextCapitalization.words, decoration: InputDecoration(labelText: label)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, controller.text.trim()), child: const Text('Save')),
+        ],
+      ),
+    );
+    controller.dispose();
+    return name == null || name.trim().isEmpty ? null : name.trim();
+  }
+
+  Future<void> _addDispatchPlant() async {
+    final name = await _askForName(title: 'Add dispatch source location', label: 'Dispatch from');
+    if (name == null || !mounted) return;
+    try {
+      final response = await context.read<AuthController>().api.post('/drums/dispatch-plants', {'name': name});
+      final data = response is Map ? response['plant'] : null;
+      final plantId = data is Map ? _asInt(data['id']) : 0;
+      await _refreshAndWait();
+      if (mounted && plantId > 0) setState(() { _dispatchPlantId = plantId; _selectedFillIds.clear(); });
+    } catch (error) {
+      if (mounted) _showMessage(error.toString());
+    }
+  }
+
+  Future<void> _addDestination() async {
+    final name = await _askForName(title: 'Add dispatch destination', label: 'Dispatch to');
+    if (name == null || !mounted) return;
+    try {
+      final response = await context.read<AuthController>().api.post('/drums/destinations', {'name': name});
+      final data = response is Map ? response['destination'] : null;
+      final savedName = data is Map ? _text(data['name']) : name;
+      await _refreshAndWait();
+      if (mounted) setState(() => _dispatchDestination = savedName);
+    } catch (error) {
+      if (mounted) _showMessage(error.toString());
+    }
   }
 
   Future<void> _chooseDispatchDate() async {
@@ -142,7 +211,7 @@ class _DrumDispatchPageState extends State<DrumDispatchPage> {
     final typed = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Truck number'),
+        title: const Text('Add truck number'),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -151,16 +220,25 @@ class _DrumDispatchPageState extends State<DrumDispatchPage> {
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, controller.text.trim().toUpperCase()), child: const Text('Use truck')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, controller.text.trim().toUpperCase()), child: const Text('Save truck')),
         ],
       ),
     );
     controller.dispose();
-    if (typed == null || !mounted) return;
-    setState(() {
-      _truckController.text = typed;
-      _manualTruck = true;
-    });
+    if (typed == null || typed.trim().isEmpty || !mounted) return;
+    try {
+      await context.read<AuthController>().api.post('/dispatch/trucks', {
+        'number': typed,
+        'destination': _dispatchDestination.toUpperCase(),
+      });
+      await _refreshAndWait();
+      if (mounted) setState(() { _truckController.text = typed; _manualTruck = false; });
+    } catch (error) {
+      if (mounted) {
+        setState(() { _truckController.text = typed; _manualTruck = true; });
+        _showMessage('Truck could not be added to the saved list: $error');
+      }
+    }
   }
 
   Future<void> _submitDispatch() async {
@@ -184,6 +262,7 @@ class _DrumDispatchPageState extends State<DrumDispatchPage> {
       await auth.api.post('/drums/dispatches', {
         'plantId': _dispatchPlantId,
         'truckNumber': truck,
+        'destination': _dispatchDestination,
         'dispatchDateTime': _isoWithOffset(_dispatchAt),
         'fillIds': _selectedFillIds.toList()..sort(),
       });
@@ -191,7 +270,7 @@ class _DrumDispatchPageState extends State<DrumDispatchPage> {
       _truckController.clear();
       _manualTruck = false;
       _reload();
-      if (mounted) _showMessage('Drum dispatch to Neemrana recorded. Each drum number and its register weight are saved.');
+      if (mounted) _showMessage('Drum dispatch to $_dispatchDestination recorded. Each drum number and its register weight are saved.');
     } catch (error) {
       if (mounted) _showMessage(error.toString());
     } finally {
@@ -242,6 +321,7 @@ class _DrumDispatchPageState extends State<DrumDispatchPage> {
         'openingBalanceId': _selectedOpeningBalanceId,
         'plantId': _dispatchPlantId,
         'truckNumber': truck,
+        'destination': _dispatchDestination,
         'dispatchDateTime': _isoWithOffset(_dispatchAt),
         'drumCount': drumCount,
         'grossWeightKg': grossWeightKg,
@@ -332,8 +412,7 @@ class _DrumDispatchPageState extends State<DrumDispatchPage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  List<String> get _neemranaTrucks => _trucks
-      .where((truck) => _upper(truck['destination']) == 'NEEMRANA')
+  List<String> get _truckNumbers => _trucks
       .map((truck) => _text(truck['number']).trim().toUpperCase())
       .where((number) => number.isNotEmpty && number != '—')
       .toSet()
@@ -341,42 +420,53 @@ class _DrumDispatchPageState extends State<DrumDispatchPage> {
     ..sort();
 
   Widget _truckField(bool canManage) {
-    final options = _neemranaTrucks;
+    final options = _truckNumbers;
     if (_manualTruck || options.isEmpty) {
-      return TextField(
-        controller: _truckController,
-        enabled: canManage,
-        textCapitalization: TextCapitalization.characters,
-        decoration: InputDecoration(
-          labelText: 'Truck / vehicle number',
-          hintText: 'Enter the same truck used for carton dispatch',
-          suffixIcon: options.isEmpty
-              ? null
-              : IconButton(
-                  tooltip: 'Choose a saved truck',
-                  onPressed: canManage ? () => setState(() => _manualTruck = false) : null,
-                  icon: const Icon(Icons.list_alt_outlined),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _truckController,
+            enabled: canManage,
+            textCapitalization: TextCapitalization.characters,
+            decoration: const InputDecoration(labelText: 'Truck number'),
+            onChanged: (_) => setState(() => _manualTruck = true),
+          ),
+          if (canManage)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Wrap(spacing: 8, children: [
+                OutlinedButton.icon(
+                  onPressed: _enterOtherTruck,
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Add new truck to saved list'),
                 ),
-        ),
-        onChanged: (_) => setState(() => _manualTruck = true),
+                if (options.isNotEmpty)
+                  TextButton.icon(
+                    onPressed: () => setState(() { _manualTruck = false; _truckController.clear(); }),
+                    icon: const Icon(Icons.list_alt_outlined),
+                    label: const Text('Choose saved truck'),
+                  ),
+              ]),
+            ),
+        ],
       );
     }
     return DropdownButtonFormField<String>(
       key: ValueKey('drum-truck-${_truckController.text}'),
       initialValue: options.contains(_truckController.text) ? _truckController.text : null,
       isExpanded: true,
-      decoration: const InputDecoration(labelText: 'Truck / vehicle number'),
+      decoration: const InputDecoration(labelText: 'Truck number'),
       items: [
         for (final number in options) DropdownMenuItem<String>(value: number, child: Text(number)),
-        const DropdownMenuItem<String>(value: '__other__', child: Text('Other / new truck…')),
+        const DropdownMenuItem<String>(value: '__other__', child: Text('Add new truck…')),
       ],
       onChanged: canManage
           ? (value) {
               if (value == '__other__') {
-                setState(() => _manualTruck = true);
                 _enterOtherTruck();
               } else if (value != null) {
-                setState(() => _truckController.text = value);
+                setState(() { _truckController.text = value; _manualTruck = false; });
               }
             }
           : null,
@@ -416,7 +506,7 @@ class _DrumDispatchPageState extends State<DrumDispatchPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Outbound drum dispatch to Neemrana', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                Text('Outbound drum dispatch', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 6),
                 const Text('Choose one stock type. The fields below change to match it; both methods use the same truck, date and dispatch record.'),
                 const SizedBox(height: 12),
@@ -434,22 +524,69 @@ class _DrumDispatchPageState extends State<DrumDispatchPage> {
                       : null,
                 ),
                 const SizedBox(height: 8),
-                DropdownButtonFormField<int>(
-                  key: ValueKey('drum-source-$_dispatchPlantId'),
-                  initialValue: activePlants.any((plant) => _asInt(plant['id']) == _dispatchPlantId) ? _dispatchPlantId : null,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Source plant'),
-                  items: [
-                    for (final plant in activePlants)
-                      DropdownMenuItem<int>(value: _asInt(plant['id']), child: Text(_text(plant['name']))),
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<int>(
+                        key: ValueKey('drum-source-$_dispatchPlantId'),
+                        initialValue: activePlants.any((plant) => _asInt(plant['id']) == _dispatchPlantId) ? _dispatchPlantId : null,
+                        isExpanded: true,
+                        decoration: const InputDecoration(labelText: 'Dispatch from'),
+                        items: [
+                          for (final plant in activePlants)
+                            DropdownMenuItem<int>(value: _asInt(plant['id']), child: Text(_text(plant['name']))),
+                        ],
+                        onChanged: canManage && activePlants.isNotEmpty
+                            ? (value) => setState(() {
+                                  _dispatchPlantId = value;
+                                  _selectedFillIds.clear();
+                                })
+                            : null,
+                      ),
+                    ),
+                    if (canManage) ...[
+                      const SizedBox(width: 6),
+                      IconButton.filledTonal(
+                        tooltip: 'Add dispatch source location',
+                        onPressed: _addDispatchPlant,
+                        icon: const Icon(Icons.add_rounded),
+                      ),
+                    ],
                   ],
-                  onChanged: canManage && activePlants.isNotEmpty
-                      ? (value) => setState(() {
-                            _dispatchPlantId = value;
-                            _selectedFillIds.clear();
-                          })
-                      : null,
                 ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        key: ValueKey('drum-destination-$_dispatchDestination'),
+                        initialValue: _destinations.any((row) => _text(row['name']) == _dispatchDestination) ? _dispatchDestination : null,
+                        isExpanded: true,
+                        decoration: const InputDecoration(labelText: 'Dispatch to'),
+                        items: [
+                          for (final destination in _destinations)
+                            DropdownMenuItem<String>(value: _text(destination['name']), child: Text(_text(destination['name']))),
+                        ],
+                        onChanged: canManage
+                            ? (value) { if (value != null) setState(() => _dispatchDestination = value); }
+                            : null,
+                      ),
+                    ),
+                    if (canManage) ...[
+                      const SizedBox(width: 6),
+                      IconButton.filledTonal(
+                        tooltip: 'Add dispatch destination',
+                        onPressed: _addDestination,
+                        icon: const Icon(Icons.add_rounded),
+                      ),
+                    ],
+                  ],
+                ),
+                if (_destinations.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 6),
+                    child: Text('No dispatch destination is available. Add one before recording dispatch.'),
+                  ),
                 if (activePlants.isEmpty)
                   const Padding(
                     padding: EdgeInsets.only(top: 6),
@@ -610,7 +747,7 @@ class _DrumDispatchPageState extends State<DrumDispatchPage> {
                 onTap: () => _showAggregateDispatchDetails(row),
                 leading: const CircleAvatar(child: Icon(Icons.inventory_2_outlined)),
                 title: Text('${_text(row['product_name'])} · ${_text(row['truck_number'])}'),
-                subtitle: Text('${_text(row['plant_name'])} · ${_dateTimeLabel(row['dispatch_datetime'])}'),
+                subtitle: Text('${_text(row['plant_name'])} → ${_text(row['destination'])} · ${_dateTimeLabel(row['dispatch_datetime'])}'),
                 trailing: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -629,8 +766,8 @@ class _DrumDispatchPageState extends State<DrumDispatchPage> {
               child: ListTile(
                 onTap: () => _showDispatchDetails(row),
                 leading: const CircleAvatar(child: Icon(Icons.local_shipping_outlined)),
-                title: Text('${_text(row['truck_number'])} · ${_text(row['destination'])}'),
-                subtitle: Text('${_text(row['plant_name'])} · ${_dateTimeLabel(row['dispatch_datetime'])}'),
+                title: Text('${_text(row['truck_number'])}'),
+                subtitle: Text('${_text(row['plant_name'])} → ${_text(row['destination'])} · ${_dateTimeLabel(row['dispatch_datetime'])}'),
                 trailing: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -678,7 +815,7 @@ class _DrumDispatchPageState extends State<DrumDispatchPage> {
                 padding: const EdgeInsets.fromLTRB(16, 10, 8, 4),
                 child: Row(
                   children: [
-                    const Expanded(child: Text('Drum Dispatch · Neemrana', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
+                    const Expanded(child: Text('Drum Dispatch', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
                     IconButton(tooltip: 'Refresh', onPressed: _reload, icon: const Icon(Icons.refresh)),
                   ],
                 ),

@@ -10,7 +10,8 @@ const db = require('./db'); // also migrates + seeds
 const app = express();
 if (process.env.TRUST_PROXY === '1') app.set('trust proxy', 1); // behind Caddy/nginx on the cloud
 app.use(cors());
-app.use(express.json({ limit: '1mb' }));
+// A single compressed register photo is base64-encoded in JSON for OCR (5 MB image cap).
+app.use(express.json({ limit: '8mb' }));
 
 
 /* routes */

@@ -59,6 +59,27 @@ test('drum fills keep a plant-wide sequence, individual gross weights, shelf-lif
     body: { name: 'Liner Tomato Paste', shelfLifeMonths: 18 },
   });
   assert.equal(product18.status, 201);
+  const invalidRegisterPhoto = await call('/api/drums/register-ocr', {
+    method: 'POST',
+    body: { imageBase64: Buffer.from('not an image').toString('base64'), fillNumberFrom: 1, fillNumberTo: 1 },
+  });
+  assert.equal(invalidRegisterPhoto.status, 400);
+
+  const defaultPlants = await call('/api/drums/plants');
+  assert.ok(defaultPlants.body.plants.some((row) => row.name === 'Khadur Sahib'));
+  const defaultDestinations = await call('/api/drums/destinations');
+  assert.ok(defaultDestinations.body.destinations.some((row) => row.name === 'Neemrana'));
+  const customDestination = await call('/api/drums/destinations', {
+    method: 'POST',
+    body: { name: 'Delhi Hub' },
+  });
+  assert.equal(customDestination.status, 201);
+  const dispatchPlant = await call('/api/drums/dispatch-plants', {
+    method: 'POST',
+    body: { name: 'Dispatch Yard' },
+  });
+  assert.equal(dispatchPlant.status, 201);
+  assert.equal(dispatchPlant.body.plant.name, 'Dispatch Yard');
 
   const plant = await call('/api/drums/plants', { method: 'POST', body: { name: 'Test Plant' } });
   assert.equal(plant.status, 201);
@@ -171,12 +192,13 @@ test('drum fills keep a plant-wide sequence, individual gross weights, shelf-lif
     body: {
       plantId,
       truckNumber: 'pb-02-aa-1234',
+      destination: 'Delhi Hub',
       dispatchDateTime: '2026-10-20T10:30:00+05:30',
       fillIds: firstBatch.body.fills.map((fill) => fill.id),
     },
   });
   assert.equal(dispatch.status, 201);
-  assert.equal(dispatch.body.dispatch.destination, 'Neemrana');
+  assert.equal(dispatch.body.dispatch.destination, 'Delhi Hub');
   assert.equal(dispatch.body.dispatch.dispatch_datetime, '2026-10-20T05:00:00.000Z');
   assert.equal(dispatch.body.drum_count, 2);
   assert.deepEqual(dispatch.body.drum_numbers, [1, 2]);
@@ -218,6 +240,7 @@ test('drum fills keep a plant-wide sequence, individual gross weights, shelf-lif
       openingBalanceId: pearPulpBalance.id,
       plantId,
       truckNumber: 'pb-02-aa-1234',
+      destination: 'Neemrana',
       dispatchDateTime: '2026-10-22T11:30:00+05:30',
       drumCount: 2,
       grossWeightKg: 420.5,
@@ -262,4 +285,31 @@ test('drum fills keep a plant-wide sequence, individual gross weights, shelf-lif
   const pearPulpAfterRejectedDispatch = unchangedBalance.body.balances.find((balance) => balance.product_name === 'Pear Pulp');
   assert.equal(pearPulpAfterRejectedDispatch.available_drums, 4);
   assert.equal(pearPulpAfterRejectedDispatch.available_kg, 849.5);
+
+  const trackedDrumsBeforeCorrection = await call('/api/drums/stock');
+  const mangoTracked = trackedDrumsBeforeCorrection.body.stock
+    .filter((row) => row.product_name === 'Aseptic Mango Pulp')
+    .reduce((total, row) => ({ drums: total.drums + row.available_drums, kg: total.kg + row.gross_weight_kg }), { drums: 0, kg: 0 });
+  assert.equal(mangoTracked.drums, 4);
+  const tooLowCorrection = await call('/api/drums/stock-adjustments', {
+    method: 'POST',
+    body: { productName: 'Aseptic Mango Pulp', targetDrums: 3, targetKg: 800, reason: 'Below tracked stock' },
+  });
+  assert.equal(tooLowCorrection.status, 409);
+
+  const correction = await call('/api/drums/stock-adjustments', {
+    method: 'POST',
+    body: { productName: 'Aseptic Mango Pulp', targetDrums: 6, targetKg: 1300, reason: 'Verified physical count' },
+  });
+  assert.equal(correction.status, 201);
+  assert.equal(correction.body.adjustment.previous_drums, 4);
+  assert.equal(correction.body.adjustment.corrected_drums, 6);
+  assert.equal(correction.body.balance.available_drums, 2);
+  assert.equal(correction.body.balance.available_kg, 431.5);
+  const adjustmentHistory = await call('/api/drums/stock-adjustments');
+  assert.equal(adjustmentHistory.body.adjustments.length, 1);
+  assert.equal(adjustmentHistory.body.adjustments[0].reason, 'Verified physical count');
+  const trackedAfterCorrection = await call('/api/drums/fills?status=ALL');
+  assert.equal(trackedAfterCorrection.body.fills.length, 7);
+  assert.ok(trackedAfterCorrection.body.fills.some((row) => row.status === 'DISPATCHED'));
 });

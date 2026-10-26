@@ -1,6 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/platform_support.dart';
 import '../../state/auth.dart';
 
 class DrumInventoryPage extends StatefulWidget {
@@ -17,6 +21,7 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
   List<Map<String, dynamic>> _stock = [];
   List<Map<String, dynamic>> _fills = [];
   List<Map<String, dynamic>> _openingBalances = [];
+  List<Map<String, dynamic>> _stockAdjustments = [];
 
   @override
   void initState() {
@@ -39,12 +44,14 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
       auth.api.get('/drums/stock'),
       auth.api.get('/drums/fills?status=ALL'),
       auth.api.get('/drums/opening-balances'),
+      auth.api.get('/drums/stock-adjustments'),
     ]);
     _products = _rows(values[0], 'products');
     _plants = _rows(values[1], 'plants');
     _stock = _rows(values[2], 'stock');
     _fills = _rows(values[3], 'fills');
     _openingBalances = _rows(values[4], 'balances');
+    _stockAdjustments = _rows(values[5], 'adjustments');
   }
 
   void _reload() {
@@ -88,6 +95,31 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
       if (mounted) _showMessage('Drum product added. You can now add filled drums for it.');
     } catch (error) {
       if (mounted) _showMessage(error.toString());
+    }
+  }
+
+  Future<void> _editStockBalance(_ProductBalance balance, List<_ProductBalance> balances) async {
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => _DrumStockAdjustDialog(
+        initialBalance: balance,
+        balances: balances,
+        onSave: (productName, targetDrums, targetKg, reason) async {
+          await context.read<AuthController>().api.post('/drums/stock-adjustments', {
+            'productName': productName,
+            'targetDrums': targetDrums,
+            'targetKg': targetKg,
+            'reason': reason,
+          });
+        },
+      ),
+    );
+    if (saved != true) return;
+    try {
+      await _reloadAndWait();
+      if (mounted) _showMessage('Stock correction recorded. Individual fill and dispatch history was not changed.');
+    } catch (error) {
+      if (mounted) _showMessage('Correction saved, but the current balance could not be refreshed: $error');
     }
   }
 
@@ -187,12 +219,12 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
       ];
 
   List<Widget> _tabViews(AuthController auth) => [
-        _buildStockTab(),
+        _buildStockTab(auth),
         _buildFillsTab(auth),
       ];
 
-  Widget _buildStockTab() {
-    if (_stock.isEmpty && _openingBalances.isEmpty) {
+  Widget _buildStockTab(AuthController auth) {
+    if (_stock.isEmpty && _openingBalances.isEmpty && _products.isEmpty) {
       return const _EmptyPanel(message: 'No drum balances are currently available.');
     }
 
@@ -202,6 +234,9 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
       return productBalances.putIfAbsent(key, () => _ProductBalance(productName: name));
     }
 
+    for (final product in _products.where((row) => _asInt(row['active']) != 0)) {
+      balanceFor(_text(product['name']));
+    }
     for (final opening in _openingBalances) {
       final balance = balanceFor(_text(opening['product_name']));
       balance.openingDrums += _asInt(opening['available_drums']);
@@ -226,7 +261,7 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
         Text('Current balance by product', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
         const Padding(
           padding: EdgeInsets.only(top: 4, bottom: 8),
-          child: Text('Totals combine individually tracked stock and remaining aggregate stock. Aggregate stock can be dispatched by entering its drum count and total kg.'),
+          child: Text('Current balance combines official aggregate stock with available, individually tracked fills. A correction changes only aggregate availability; saved fill and dispatch records remain unchanged.'),
         ),
         for (final balance in sortedBalances)
           Card(
@@ -235,8 +270,18 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(balance.productName, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(child: Text(balance.productName, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700))),
+                      if (auth.can('inventory.manage'))
+                        IconButton(
+                          tooltip: 'Correct product stock',
+                          onPressed: () => _editStockBalance(balance, sortedBalances),
+                          icon: const Icon(Icons.edit_note_outlined),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
                   Row(
                     children: [
                       Expanded(child: _BalanceValue(label: 'Balance in drums', value: '${balance.totalDrums}')),
@@ -244,17 +289,15 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
                       Expanded(child: _BalanceValue(label: 'Balance in kg', value: _weightLabel(balance.totalKg))),
                     ],
                   ),
-                  if (balance.openingDrums > 0) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      'Aggregate stock remaining: ${balance.openingDrums} drums · ${_weightLabel(balance.openingKg)}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
+                  const SizedBox(height: 8),
+                  Text(
+                    'Official aggregate stock remaining: ${balance.openingDrums} drums · ${_weightLabel(balance.openingKg)}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                   if (balance.trackedDrums > 0) ...[
                     const SizedBox(height: 4),
                     Text(
-                      'Individually tracked: ${balance.trackedDrums} drums · ${_weightLabel(balance.trackedKg)}',
+                      'Individually tracked available: ${balance.trackedDrums} drums · ${_weightLabel(balance.trackedKg)}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
@@ -262,6 +305,19 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
               ),
             ),
           ),
+        if (_stockAdjustments.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text('Recent stock corrections', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+          for (final adjustment in _stockAdjustments.take(10))
+            Card(
+              child: ListTile(
+                dense: true,
+                leading: const Icon(Icons.history_rounded),
+                title: Text('${_text(adjustment['product_name'])} · ${_asInt(adjustment['previous_drums'])} drums / ${_weightLabel(adjustment['previous_kg'])} → ${_asInt(adjustment['corrected_drums'])} drums / ${_weightLabel(adjustment['corrected_kg'])}'),
+                subtitle: Text('${_text(adjustment['reason'])} · ${_text(adjustment['created_by_name'])} · ${_dateLabel(adjustment['created_at'])}'),
+              ),
+            ),
+        ],
         if (_stock.isNotEmpty) ...[
           const SizedBox(height: 8),
           Text('Tracked drum details: batch, packaging & plant', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
@@ -446,6 +502,149 @@ class _ProductBalance {
 
   int get totalDrums => openingDrums + trackedDrums;
   double get totalKg => openingKg + trackedKg;
+}
+
+class _DrumStockAdjustDialog extends StatefulWidget {
+  final _ProductBalance initialBalance;
+  final List<_ProductBalance> balances;
+  final Future<void> Function(String productName, int targetDrums, double targetKg, String reason) onSave;
+
+  const _DrumStockAdjustDialog({
+    required this.initialBalance,
+    required this.balances,
+    required this.onSave,
+  });
+
+  @override
+  State<_DrumStockAdjustDialog> createState() => _DrumStockAdjustDialogState();
+}
+
+class _DrumStockAdjustDialogState extends State<_DrumStockAdjustDialog> {
+  late String _productName;
+  late final TextEditingController _drums;
+  late final TextEditingController _kg;
+  final TextEditingController _reason = TextEditingController();
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _productName = widget.initialBalance.productName;
+    _drums = TextEditingController(text: '${widget.initialBalance.totalDrums}');
+    _kg = TextEditingController(text: widget.initialBalance.totalKg.toStringAsFixed(3));
+  }
+
+  @override
+  void dispose() {
+    _drums.dispose();
+    _kg.dispose();
+    _reason.dispose();
+    super.dispose();
+  }
+
+  _ProductBalance _balanceFor(String name) => widget.balances.firstWhere(
+        (balance) => balance.productName == name,
+        orElse: () => widget.initialBalance,
+      );
+
+  void _selectProduct(String? name) {
+    if (name == null) return;
+    final balance = _balanceFor(name);
+    setState(() {
+      _productName = name;
+      _drums.text = '${balance.totalDrums}';
+      _kg.text = balance.totalKg.toStringAsFixed(3);
+      _error = null;
+    });
+  }
+
+  Future<void> _save() async {
+    final drums = int.tryParse(_drums.text.trim());
+    final kg = double.tryParse(_kg.text.trim().replaceAll(',', '.'));
+    final reason = _reason.text.trim();
+    if (drums == null || drums < 0 || kg == null || !kg.isFinite || kg < 0) {
+      setState(() => _error = 'Enter a non-negative whole drum count and a valid total kg.');
+      return;
+    }
+    if (reason.length < 3) {
+      setState(() => _error = 'Enter why this stock correction is needed.');
+      return;
+    }
+    setState(() { _saving = true; _error = null; });
+    try {
+      await widget.onSave(_productName, drums, kg, reason);
+      if (mounted) Navigator.pop(context, true);
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final balance = _balanceFor(_productName);
+    return AlertDialog(
+      title: const Text('Correct drum stock balance'),
+      content: SizedBox(
+        width: 520,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              DropdownButtonFormField<String>(
+                value: _productName,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Product'),
+                items: [
+                  for (final item in widget.balances)
+                    DropdownMenuItem<String>(value: item.productName, child: Text(item.productName, overflow: TextOverflow.ellipsis)),
+                ],
+                onChanged: _saving ? null : _selectProduct,
+              ),
+              const SizedBox(height: 10),
+              Text('Current official aggregate: ${balance.openingDrums} drums · ${_weightLabel(balance.openingKg)}'),
+              Text('Current individually tracked available: ${balance.trackedDrums} drums · ${_weightLabel(balance.trackedKg)}'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _drums,
+                enabled: !_saving,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Correct total available drums'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _kg,
+                enabled: !_saving,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'Correct total available kg'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _reason,
+                enabled: !_saving,
+                maxLines: 2,
+                decoration: const InputDecoration(labelText: 'Correction reason *', hintText: 'e.g. verified physical count'),
+              ),
+              const SizedBox(height: 8),
+              const Text('This adjusts only aggregate stock. The target cannot be lower than available tracked drums or their saved gross kg; fill and dispatch history is never rewritten.'),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: _saving ? null : () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(onPressed: _saving ? null : _save, child: Text(_saving ? 'Saving…' : 'Save correction')),
+      ],
+    );
+  }
 }
 
 class _DrumProductDialog extends StatefulWidget {
@@ -672,8 +871,15 @@ class _CreateDrumFillDialogState extends State<_CreateDrumFillDialog> {
   int? _productId;
   int? _plantId;
   int _lastValidStartNumber = 1;
+  int _lastValidEndNumber = 1;
   String _packagingType = 'aseptic_bag';
   bool _saving = false;
+  bool _checkingRegisterPhoto = false;
+  bool _registerOcrUsed = false;
+  bool _confirmedOcrReview = false;
+  String? _registerPhotoName;
+  String? _registerOcrMessage;
+  final Set<int> _uncertainOcrNumbers = {};
   String? _error;
   String? _rangeError;
 
@@ -687,8 +893,9 @@ class _CreateDrumFillDialogState extends State<_CreateDrumFillDialog> {
       _plantId = _asInt(firstPlant['id']);
       _lastValidStartNumber = _nextFillNumber(firstPlant);
     }
+    _lastValidEndNumber = _lastValidStartNumber;
     _numberFrom.text = '$_lastValidStartNumber';
-    _numberTo.text = '$_lastValidStartNumber';
+    _numberTo.text = '$_lastValidEndNumber';
   }
 
   int _nextFillNumber(Map<String, dynamic> plant) {
@@ -751,6 +958,14 @@ class _CreateDrumFillDialogState extends State<_CreateDrumFillDialog> {
     }
   }
 
+  void _clearOcrDraft() {
+    _registerOcrUsed = false;
+    _confirmedOcrReview = false;
+    _registerPhotoName = null;
+    _registerOcrMessage = null;
+    _uncertainOcrNumbers.clear();
+  }
+
   void _updateWeightRows() {
     final from = int.tryParse(_numberFrom.text.trim());
     final to = int.tryParse(_numberTo.text.trim());
@@ -765,11 +980,13 @@ class _CreateDrumFillDialogState extends State<_CreateDrumFillDialog> {
       return;
     }
     setState(() {
-      if (from != _lastValidStartNumber) {
+      if (from != _lastValidStartNumber || to != _lastValidEndNumber) {
         for (final weight in _weights) {
           weight.clear();
         }
         _lastValidStartNumber = from;
+        _lastValidEndNumber = to;
+        _clearOcrDraft();
       }
       _resizeWeightFields(count);
       _rangeError = null;
@@ -788,12 +1005,82 @@ class _CreateDrumFillDialogState extends State<_CreateDrumFillDialog> {
       _numberFrom.text = '$nextNumber';
       _numberTo.text = '$nextNumber';
       _lastValidStartNumber = nextNumber;
+      _lastValidEndNumber = nextNumber;
       _rangeError = null;
+      _clearOcrDraft();
       for (final weight in _weights) {
         weight.clear();
       }
       _resizeWeightFields(1);
     });
+  }
+
+  Future<void> _scanRegisterPhoto(ImageSource source) async {
+    final from = int.tryParse(_numberFrom.text.trim());
+    final to = int.tryParse(_numberTo.text.trim());
+    if (from == null || to == null || from <= 0 || to < from || to - from + 1 != _weights.length) {
+      setState(() => _rangeError = 'Set a valid drum-number range before checking a register photo.');
+      return;
+    }
+    try {
+      final photo = await ImagePicker().pickImage(source: source, maxWidth: 2200, imageQuality: 80);
+      if (photo == null || !mounted) return;
+      final bytes = await photo.readAsBytes();
+      if (bytes.length > 5 * 1024 * 1024) {
+        setState(() => _error = 'Choose a register photo under 5 MB.');
+        return;
+      }
+      setState(() {
+        _checkingRegisterPhoto = true;
+        _registerOcrUsed = false;
+        _confirmedOcrReview = false;
+        _registerPhotoName = photo.name;
+        _registerOcrMessage = null;
+        _uncertainOcrNumbers.clear();
+        _error = null;
+      });
+      final result = await context.read<AuthController>().api.postWithTimeout(
+        '/drums/register-ocr',
+        {
+          'imageBase64': base64Encode(bytes),
+          'fillNumberFrom': from,
+          'fillNumberTo': to,
+        },
+        const Duration(seconds: 120),
+      );
+      final readings = result is Map && result['readings'] is List
+          ? (result['readings'] as List).whereType<Map>().map((row) => row.cast<String, dynamic>()).toList()
+          : <Map<String, dynamic>>[];
+      var recognized = 0;
+      final uncertain = <int>{};
+      for (final reading in readings) {
+        final number = _asInt(reading['fill_number']);
+        final weight = _asDouble(reading['gross_weight_kg']);
+        final index = number - from;
+        if (index < 0 || index >= _weights.length || weight <= 0) continue;
+        _weights[index].text = weight.toString();
+        recognized++;
+        if (reading['uncertain'] == true) uncertain.add(number);
+      }
+      final missingNumbers = result is Map && result['missing_numbers'] is List
+          ? (result['missing_numbers'] as List).map(_asInt).where((number) => number > 0).toList()
+          : <int>[];
+      if (!mounted) return;
+      setState(() {
+        _registerOcrUsed = true;
+        _confirmedOcrReview = false;
+        _uncertainOcrNumbers
+          ..clear()
+          ..addAll(uncertain);
+        final caution = uncertain.isEmpty ? '' : ' · ${uncertain.length} uncertain';
+        final gaps = missingNumbers.isEmpty ? '' : ' · ${missingNumbers.length} not read';
+        _registerOcrMessage = 'OCR draft: $recognized of ${_weights.length} weights suggested$caution$gaps. Check every number and weight below; nothing is saved until you confirm and press Save.';
+      });
+    } catch (error) {
+      if (mounted) setState(() => _error = 'Photo OCR failed. You can enter the weights manually. $error');
+    } finally {
+      if (mounted) setState(() => _checkingRegisterPhoto = false);
+    }
   }
 
   Future<void> _submit() async {
@@ -807,6 +1094,10 @@ class _CreateDrumFillDialogState extends State<_CreateDrumFillDialog> {
     }
     if (firstNumber == null || lastNumber == null || firstNumber <= 0 || lastNumber < firstNumber || firstNumber > maxSafeInteger || lastNumber > maxSafeInteger || lastNumber - firstNumber + 1 != _weights.length) {
       setState(() => _rangeError = 'Enter a valid range and one weight field for every drum number.');
+      return;
+    }
+    if (_registerOcrUsed && !_confirmedOcrReview) {
+      setState(() => _error = 'Review every OCR suggestion and confirm the draft before saving.');
       return;
     }
     final weights = <double>[];
@@ -830,6 +1121,7 @@ class _CreateDrumFillDialogState extends State<_CreateDrumFillDialog> {
         'fillNumberFrom': firstNumber,
         'fillNumberTo': lastNumber,
         'grossWeightsKg': weights,
+        'registerOcrChecked': _registerOcrUsed && _confirmedOcrReview,
       });
       if (mounted) Navigator.pop(context, true);
     } catch (error) {
@@ -855,7 +1147,7 @@ class _CreateDrumFillDialogState extends State<_CreateDrumFillDialog> {
                 value: _plantId,
                 decoration: const InputDecoration(labelText: 'Source plant'),
                 items: [for (final plant in widget.plants) DropdownMenuItem<int>(value: _asInt(plant['id']), child: Text(_text(plant['name'])))],
-                onChanged: _saving ? null : _selectPlant,
+                onChanged: _saving || _checkingRegisterPhoto ? null : _selectPlant,
               ),
               DropdownButtonFormField<int>(
                 value: _productId,
@@ -905,7 +1197,7 @@ class _CreateDrumFillDialogState extends State<_CreateDrumFillDialog> {
                   Expanded(
                     child: TextField(
                       controller: _numberFrom,
-                      enabled: !_saving,
+                      enabled: !_saving && !_checkingRegisterPhoto,
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(labelText: 'From number'),
                       onChanged: (_) => _updateWeightRows(),
@@ -915,7 +1207,7 @@ class _CreateDrumFillDialogState extends State<_CreateDrumFillDialog> {
                   Expanded(
                     child: TextField(
                       controller: _numberTo,
-                      enabled: !_saving,
+                      enabled: !_saving && !_checkingRegisterPhoto,
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(labelText: 'To number'),
                       onChanged: (_) => _updateWeightRows(),
@@ -929,8 +1221,47 @@ class _CreateDrumFillDialogState extends State<_CreateDrumFillDialog> {
                   child: Text(_rangeError!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
                 ),
               const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: _saving || _checkingRegisterPhoto ? null : () => _scanRegisterPhoto(ImageSource.gallery),
+                    icon: _checkingRegisterPhoto
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.document_scanner_outlined),
+                    label: Text(_checkingRegisterPhoto ? 'Checking photo…' : 'Upload register photo & check'),
+                  ),
+                  if (isPhonePlatform)
+                    OutlinedButton.icon(
+                      onPressed: _saving || _checkingRegisterPhoto ? null : () => _scanRegisterPhoto(ImageSource.camera),
+                      icon: const Icon(Icons.photo_camera_outlined),
+                      label: const Text('Take photo'),
+                    ),
+                ],
+              ),
+              if (_registerPhotoName != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text('Register photo: $_registerPhotoName', style: Theme.of(context).textTheme.bodySmall),
+                ),
+              if (_registerOcrMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(_registerOcrMessage!, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
+                ),
+              if (_registerOcrUsed)
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  value: _confirmedOcrReview,
+                  onChanged: _saving ? null : (checked) => setState(() { _confirmedOcrReview = checked == true; _error = null; }),
+                  title: const Text('I checked/corrected every drum number and gross weight above.'),
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+              const SizedBox(height: 8),
               Text(
-                'One weight field appears for each number. Weigh each filled drum and enter its actual gross kg, including the iron drum. Stock kg is the sum of these saved weights; changing the From number clears weights so they cannot be attached to the wrong drum.',
+                'One weight field appears for each number. Weigh each filled drum and enter its actual gross kg, including the iron drum. Stock kg is the sum of these saved weights; changing the number range clears values so they cannot be attached to the wrong drum.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 8),
@@ -939,13 +1270,30 @@ class _CreateDrumFillDialogState extends State<_CreateDrumFillDialog> {
                   padding: const EdgeInsets.only(bottom: 4),
                   child: Row(
                     children: [
-                      SizedBox(width: 86, child: Text('Drum ${_lastValidStartNumber + i}')),
+                      SizedBox(
+                        width: 104,
+                        child: Row(
+                          children: [
+                            Expanded(child: Text('Drum ${_lastValidStartNumber + i}')),
+                            if (_uncertainOcrNumbers.contains(_lastValidStartNumber + i))
+                              Tooltip(
+                                message: 'OCR reading is uncertain — verify this value',
+                                child: Icon(Icons.warning_amber_rounded, size: 18, color: Theme.of(context).colorScheme.error),
+                              ),
+                          ],
+                        ),
+                      ),
                       Expanded(
                         child: TextField(
                           controller: _weights[i],
-                          enabled: !_saving,
+                          enabled: !_saving && !_checkingRegisterPhoto,
                           keyboardType: const TextInputType.numberWithOptions(decimal: true),
                           decoration: const InputDecoration(labelText: 'Actual gross kg'),
+                          onChanged: (_) {
+                            if (_registerOcrUsed && _confirmedOcrReview) {
+                              setState(() => _confirmedOcrReview = false);
+                            }
+                          },
                         ),
                       ),
                     ],
@@ -958,7 +1306,7 @@ class _CreateDrumFillDialogState extends State<_CreateDrumFillDialog> {
       ),
       actions: [
         TextButton(onPressed: _saving ? null : () => Navigator.pop(context), child: const Text('Cancel')),
-        FilledButton(onPressed: _saving ? null : _submit, child: Text(_saving ? 'Saving…' : 'Save filled drums')),
+        FilledButton(onPressed: _saving || _checkingRegisterPhoto ? null : _submit, child: Text(_saving ? 'Saving…' : 'Save filled drums')),
       ],
     );
   }

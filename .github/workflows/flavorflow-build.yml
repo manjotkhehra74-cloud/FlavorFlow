@@ -237,7 +237,7 @@ jobs:
             sleep 2
           done
           [[ "$healthy" == true ]] || { echo '::error::FlavorFlow backend health check failed after restart.' >&2; exit 1; }
-          for route in plants opening-balances aggregate-dispatches; do
+          for route in plants destinations opening-balances stock-adjustments aggregate-dispatches; do
             drum_route_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 3 "http://127.0.0.1:4000/api/drums/$route" || true)"
             [[ "$drum_route_status" == 200 || "$drum_route_status" == 401 ]] || { echo "Drum API route $route failed after backend restart (HTTP $drum_route_status)." >&2; exit 1; }
           done

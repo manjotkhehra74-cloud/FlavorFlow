@@ -6,6 +6,9 @@ const { requirePerm, bad } = require('../middleware');
 const { audit, nowIso } = require('../helpers');
 const { tx } = require('../sqlite');
 const { parseIsoDate, addMonths, normalizePackagingType, normalizeGrossWeight } = require('../drum_utils');
+const { recognizeRegisterImage } = require('../drum_ocr');
+
+const MAX_REGISTER_PHOTO_BYTES = 5 * 1024 * 1024;
 
 const router = express.Router();
 const FILL_SELECT = `
@@ -70,6 +73,24 @@ function validFillNumberRange(body, weightCount) {
   if (count !== weightCount) {
     throw bad(`Drum numbers ${from}–${to} cover ${count} drums; enter one gross weight for each drum.`);
   }
+  return { from, to };
+}
+
+function validDestination(value) {
+  const name = String(value == null || value === '' ? 'Neemrana' : value).trim();
+  if (!name || name.length > 120) throw bad('Dispatch to is required and must be 120 characters or fewer.');
+  const saved = db.prepare('SELECT name FROM drum_destinations WHERE name = ? COLLATE NOCASE AND active = 1').get(name);
+  if (!saved) throw bad('Select a saved dispatch destination or add it first.');
+  return saved.name;
+}
+
+function validOcrRange(body) {
+  const from = Number(body.fillNumberFrom ?? body.fill_number_from);
+  const to = Number(body.fillNumberTo ?? body.fill_number_to);
+  if (!Number.isSafeInteger(from) || from <= 0 || !Number.isSafeInteger(to) || to < from) {
+    throw bad('Enter a valid first and last drum number before checking the register photo.');
+  }
+  if (to - from + 1 > 500) throw bad('A single register photo can cover at most 500 drum numbers.');
   return { from, to };
 }
 
@@ -141,18 +162,50 @@ router.get('/plants', requirePerm('inventory.view'), (_req, res) => {
   res.json({ plants });
 });
 
-router.post('/plants', requirePerm('inventory.manage'), (req, res) => {
-  const name = String((req.body || {}).name || '').trim();
-  if (!name || name.length > 120) throw bad('Plant name is required and must be 120 characters or fewer.');
+function savePlant(name, user, source) {
   const existing = db.prepare('SELECT id, name, active, next_fill_number FROM drum_plants WHERE name = ? COLLATE NOCASE').get(name);
   if (existing) {
     if (!existing.active) db.prepare('UPDATE drum_plants SET active = 1 WHERE id = ?').run(existing.id);
-    return res.json({ plant: { ...existing, active: 1 } });
+    return { plant: { ...existing, active: 1 }, created: false };
   }
   const result = db.prepare('INSERT INTO drum_plants (name, active, next_fill_number, created_at) VALUES (?, 1, 1, ?)').run(name, nowIso());
   const plant = db.prepare('SELECT id, name, active, next_fill_number FROM drum_plants WHERE id = ?').get(Number(result.lastInsertRowid));
-  try { audit(db, req.user, 'CREATE', 'drum_plant', plant.id, name); } catch (_) {}
-  res.status(201).json({ plant });
+  try { audit(db, user, 'CREATE', 'drum_plant', plant.id, `${name}${source ? `; added from ${source}` : ''}`); } catch (_) {}
+  return { plant, created: true };
+}
+
+router.post('/plants', requirePerm('inventory.manage'), (req, res) => {
+  const name = String((req.body || {}).name || '').trim();
+  if (!name || name.length > 120) throw bad('Plant name is required and must be 120 characters or fewer.');
+  const saved = savePlant(name, req.user, 'Drum Stock');
+  res.status(saved.created ? 201 : 200).json({ plant: saved.plant });
+});
+
+// Dispatch managers can add a route source without granting stock-management rights.
+router.post('/dispatch-plants', requirePerm('dispatch.manage'), (req, res) => {
+  const name = String((req.body || {}).name || '').trim();
+  if (!name || name.length > 120) throw bad('Dispatch from is required and must be 120 characters or fewer.');
+  const saved = savePlant(name, req.user, 'Drum Dispatch');
+  res.status(saved.created ? 201 : 200).json({ plant: saved.plant });
+});
+
+router.get('/destinations', requirePerm('dispatch.view'), (_req, res) => {
+  const destinations = db.prepare('SELECT id, name, active FROM drum_destinations WHERE active = 1 ORDER BY name COLLATE NOCASE').all();
+  res.json({ destinations });
+});
+
+router.post('/destinations', requirePerm('dispatch.manage'), (req, res) => {
+  const name = String((req.body || {}).name || '').trim();
+  if (!name || name.length > 120) throw bad('Dispatch to is required and must be 120 characters or fewer.');
+  const existing = db.prepare('SELECT id, name, active FROM drum_destinations WHERE name = ? COLLATE NOCASE').get(name);
+  if (existing) {
+    if (!existing.active) db.prepare('UPDATE drum_destinations SET active = 1 WHERE id = ?').run(existing.id);
+    return res.json({ destination: { ...existing, active: 1 } });
+  }
+  const result = db.prepare('INSERT INTO drum_destinations (name, active, created_at) VALUES (?, 1, ?)').run(name, nowIso());
+  const destination = db.prepare('SELECT id, name, active FROM drum_destinations WHERE id = ?').get(Number(result.lastInsertRowid));
+  try { audit(db, req.user, 'CREATE', 'drum_destination', destination.id, name); } catch (_) {}
+  res.status(201).json({ destination });
 });
 
 router.get('/batches', requirePerm('inventory.view'), (req, res) => {
@@ -222,6 +275,94 @@ router.get('/opening-balances', requirePerm('inventory.view'), (_req, res) => {
 });
 
 /** Individual filled drums; fill_number is a never-reused, plant-wide fill/sticker number. */
+router.get('/stock-adjustments', requirePerm('inventory.view'), (_req, res) => {
+  const adjustments = db.prepare(`
+    SELECT a.id, a.product_name, a.previous_drums, ROUND(a.previous_kg, 3) AS previous_kg,
+           a.corrected_drums, ROUND(a.corrected_kg, 3) AS corrected_kg,
+           a.reason, a.created_by, u.name AS created_by_name, a.created_at
+      FROM drum_stock_adjustments a
+      LEFT JOIN users u ON u.id = a.created_by
+     ORDER BY a.id DESC LIMIT 100`).all();
+  res.json({ adjustments });
+});
+
+/** Correct the official aggregate balance without changing tracked fill or dispatch history. */
+router.post('/stock-adjustments', requirePerm('inventory.manage'), (req, res) => {
+  const body = req.body || {};
+  const productName = String(body.productName ?? body.product_name ?? '').trim();
+  const rawDrums = body.targetDrums ?? body.target_drums;
+  const rawKg = body.targetKg ?? body.target_kg;
+  const reason = String(body.reason || '').trim();
+  if (!productName || productName.length > 120) throw bad('Product name is required and must be 120 characters or fewer.');
+  if (rawDrums == null || String(rawDrums).trim() === '') throw bad('Enter the corrected total drum balance.');
+  if (rawKg == null || String(rawKg).trim() === '') throw bad('Enter the corrected total kg balance.');
+  const targetDrums = Number(rawDrums);
+  if (!Number.isSafeInteger(targetDrums) || targetDrums < 0) throw bad('Corrected drum balance must be a non-negative whole number.');
+  const kgInput = Number(rawKg);
+  if (!Number.isFinite(kgInput) || kgInput < 0 || kgInput > 100000000) throw bad('Corrected kg balance must be between 0 and 100,000,000 kg.');
+  const targetKg = Math.round(kgInput * 1000) / 1000;
+  if (reason.length < 3 || reason.length > 500) throw bad('Enter a correction reason from 3 to 500 characters.');
+  const createdAt = nowIso();
+
+  const adjustmentId = tx(db, () => {
+    let balance = db.prepare('SELECT * FROM drum_opening_balances WHERE product_name = ? COLLATE NOCASE').get(productName);
+    if (!balance) {
+      const insert = db.prepare(`
+        INSERT INTO drum_opening_balances
+          (product_name, snapshot_date, opening_drums, opening_kg, available_drums, available_kg, created_at, updated_at)
+        VALUES (?, ?, 0, 0, 0, 0, ?, ?)`
+      ).run(productName, createdAt.slice(0, 10), createdAt, createdAt);
+      balance = db.prepare('SELECT * FROM drum_opening_balances WHERE id = ?').get(Number(insert.lastInsertRowid));
+    }
+
+    const tracked = db.prepare(`
+      SELECT COUNT(*) AS drums, COALESCE(SUM(f.gross_weight_kg), 0) AS kg
+        FROM drum_fills f
+        JOIN drum_batches b ON b.id = f.batch_id
+        JOIN drum_products p ON p.id = b.product_id
+       WHERE p.name = ? COLLATE NOCASE AND f.status = 'AVAILABLE'`).get(balance.product_name);
+    const trackedDrums = Number(tracked.drums || 0);
+    const trackedKg = Math.round(Number(tracked.kg || 0) * 1000) / 1000;
+    if (targetDrums < trackedDrums) {
+      throw bad(`Corrected balance cannot be below ${trackedDrums} available individually tracked drums.`, 409);
+    }
+    if (targetKg + 0.0005 < trackedKg) {
+      throw bad(`Corrected kg cannot be below ${trackedKg} kg held in available individually tracked drums.`, 409);
+    }
+
+    const previousDrums = Number(balance.available_drums) + trackedDrums;
+    const previousKg = Math.round((Number(balance.available_kg) + trackedKg) * 1000) / 1000;
+    const aggregateDrums = targetDrums - trackedDrums;
+    const aggregateKg = Math.round(Math.max(0, targetKg - trackedKg) * 1000) / 1000;
+    db.prepare(`
+      UPDATE drum_opening_balances
+         SET available_drums = ?, available_kg = ?, updated_at = ?
+       WHERE id = ?`).run(aggregateDrums, aggregateKg, createdAt, balance.id);
+    const result = db.prepare(`
+      INSERT INTO drum_stock_adjustments
+        (product_name, previous_drums, previous_kg, corrected_drums, corrected_kg, reason, created_by, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(balance.product_name, previousDrums, previousKg, targetDrums, targetKg, reason, req.user.id, createdAt);
+    const id = Number(result.lastInsertRowid);
+    try {
+      audit(db, req.user, 'CORRECT', 'drum_stock', id,
+        `${balance.product_name}; ${previousDrums} drums / ${previousKg} kg -> ${targetDrums} drums / ${targetKg} kg; ${reason}`);
+    } catch (_) {}
+    return id;
+  });
+
+  const adjustment = db.prepare(`
+    SELECT id, product_name, previous_drums, ROUND(previous_kg, 3) AS previous_kg,
+           corrected_drums, ROUND(corrected_kg, 3) AS corrected_kg,
+           reason, created_by, created_at
+      FROM drum_stock_adjustments WHERE id = ?`).get(adjustmentId);
+  const balance = db.prepare(`
+    SELECT id, product_name, snapshot_date, opening_drums, opening_kg,
+           available_drums, ROUND(available_kg, 3) AS available_kg
+      FROM drum_opening_balances WHERE product_name = ? COLLATE NOCASE`).get(productName);
+  res.status(201).json({ adjustment, balance });
+});
+
 router.get('/fills', requirePerm('inventory.view'), (req, res) => {
   const clauses = [];
   const params = [];
@@ -243,6 +384,33 @@ router.get('/fills', requirePerm('inventory.view'), (req, res) => {
  * and gets its own never-reused, plant-wide number, optionally from an explicit range
  * (not a permanent iron-drum ID).
  */
+router.post('/register-ocr', requirePerm('inventory.manage'), (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const { from, to } = validOcrRange(body);
+    let encoded = String(body.imageBase64 || '').trim();
+    encoded = encoded.replace(/^data:image\/(?:jpeg|jpg|png|webp);base64,/i, '');
+    if (!encoded || encoded.length > Math.ceil(MAX_REGISTER_PHOTO_BYTES * 4 / 3) + 8) {
+      throw bad('Register photo must be 5 MB or smaller.');
+    }
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) throw bad('Register photo data is invalid.');
+    const image = Buffer.from(encoded, 'base64');
+    if (!image.length || image.length > MAX_REGISTER_PHOTO_BYTES) throw bad('Register photo must be 5 MB or smaller.');
+    const isJpeg = image.length >= 3 && image[0] === 0xff && image[1] === 0xd8 && image[2] === 0xff;
+    const isPng = image.length >= 8 && image.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    const isWebp = image.length >= 12 && image.toString('ascii', 0, 4) === 'RIFF' && image.toString('ascii', 8, 12) === 'WEBP';
+    if (!isJpeg && !isPng && !isWebp) throw bad('Use a JPG, PNG or WebP register photo.');
+    recognizeRegisterImage(image, from, to)
+      .then((draft) => res.json(draft))
+      .catch((error) => {
+        console.error('[drums] register OCR failed:', error.message);
+        next(bad('Could not read this register photo. Try a clearer image or enter the weights manually.', 422));
+      });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.post('/fills', requirePerm('inventory.manage'), (req, res) => {
   const body = req.body || {};
   const plantId = positiveId(body.plantId ?? body.plant_id, 'Plant');
@@ -316,7 +484,8 @@ router.post('/fills', requirePerm('inventory.manage'), (req, res) => {
     const nextFillNumber = Math.max(Number(lockedPlant.next_fill_number), lastNumber + 1);
     db.prepare('UPDATE drum_plants SET next_fill_number = ? WHERE id = ?').run(nextFillNumber, plantId);
 
-    try { audit(db, req.user, 'CREATE', 'drum_fill', batch.id, `${product.name} ${batchCode}; ${weights.length} drum(s) numbered ${firstNumber}–${lastNumber}`); } catch (_) {}
+    const details = `${product.name} ${batchCode}; ${weights.length} drum(s) numbered ${firstNumber}–${lastNumber}${body.registerOcrChecked === true ? '; register photo OCR draft reviewed' : ''}`;
+    try { audit(db, req.user, 'CREATE', 'drum_fill', batch.id, details); } catch (_) {}
     return { batchId: batch.id, firstNumber, lastNumber, fillIds };
   });
 
@@ -364,6 +533,7 @@ router.get('/dispatches/:id', requirePerm('dispatch.view'), (req, res) => {
 router.post('/dispatches', requirePerm('dispatch.manage'), (req, res) => {
   const body = req.body || {};
   const plantId = positiveId(body.plantId ?? body.plant_id, 'Source plant');
+  const destination = validDestination(body.destination ?? body.dispatchTo ?? body.dispatch_to);
   const truckNumber = String(body.truckNumber ?? body.truck_number ?? '').trim().toUpperCase();
   if (!truckNumber || truckNumber.length > 50) throw bad('Truck number is required and must be 50 characters or fewer.');
   const rawDateTime = body.dispatchDateTime ?? body.dispatch_datetime;
@@ -392,8 +562,8 @@ router.post('/dispatches', requirePerm('dispatch.manage'), (req, res) => {
     const insertedDispatch = db.prepare(`
       INSERT INTO drum_dispatches
         (plant_id, dispatch_datetime, truck_number, destination, drum_count, gross_weight_kg, created_by, created_at)
-      VALUES (?, ?, ?, 'Neemrana', ?, ?, ?, ?)`
-    ).run(plantId, dispatchDateTime, truckNumber, count, totalGross, req.user.id, createdAt);
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(plantId, dispatchDateTime, truckNumber, destination, count, totalGross, req.user.id, createdAt);
     const dispatchId = Number(insertedDispatch.lastInsertRowid);
     const insertItem = db.prepare('INSERT INTO drum_dispatch_items (dispatch_id, fill_id, fill_number, gross_weight_kg) VALUES (?, ?, ?, ?)');
     const updateFill = db.prepare("UPDATE drum_fills SET status = 'DISPATCHED', dispatched_at = ? WHERE id = ? AND status = 'AVAILABLE'");
@@ -402,7 +572,7 @@ router.post('/dispatches', requirePerm('dispatch.manage'), (req, res) => {
       const update = updateFill.run(dispatchDateTime, fill.id);
       if (Number(update.changes) !== 1) throw bad(`Drum ${fill.fill_number} is no longer available.`, 409);
     }
-    try { audit(db, req.user, 'DISPATCH', 'drum_dispatch', dispatchId, `${count} drum(s), truck ${truckNumber}, outbound to Neemrana`); } catch (_) {}
+    try { audit(db, req.user, 'DISPATCH', 'drum_dispatch', dispatchId, `${count} drum(s), truck ${truckNumber}, ${plant.name} -> ${destination}`); } catch (_) {}
     return { dispatchId, count, totalGross, fillNumbers: fills.map((fill) => fill.fill_number) };
   });
 
@@ -434,6 +604,7 @@ router.post('/aggregate-dispatches', requirePerm('dispatch.manage'), (req, res) 
   const body = req.body || {};
   const openingBalanceId = positiveId(body.openingBalanceId ?? body.opening_balance_id, 'Opening balance');
   const plantId = positiveId(body.plantId ?? body.plant_id, 'Source plant');
+  const destination = validDestination(body.destination ?? body.dispatchTo ?? body.dispatch_to);
   const truckNumber = String(body.truckNumber ?? body.truck_number ?? '').trim().toUpperCase();
   if (!truckNumber || truckNumber.length > 50) throw bad('Truck number is required and must be 50 characters or fewer.');
   const rawDateTime = body.dispatchDateTime ?? body.dispatch_datetime;
@@ -471,13 +642,13 @@ router.post('/aggregate-dispatches', requirePerm('dispatch.manage'), (req, res) 
       INSERT INTO drum_aggregate_dispatches
         (opening_balance_id, product_name, plant_id, dispatch_datetime, truck_number,
          destination, drum_count, gross_weight_kg, created_by, created_at)
-      VALUES (?, ?, ?, ?, ?, 'Neemrana', ?, ?, ?, ?)`)
-      .run(openingBalanceId, balance.product_name, plantId, dispatchDateTime, truckNumber,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(openingBalanceId, balance.product_name, plantId, dispatchDateTime, truckNumber, destination,
         drumCount, grossWeightKg, req.user.id, createdAt);
     const id = Number(inserted.lastInsertRowid);
     try {
       audit(db, req.user, 'DISPATCH', 'drum_aggregate_dispatch', id,
-        `${balance.product_name}; ${drumCount} drum(s), ${grossWeightKg} kg, truck ${truckNumber}`);
+        `${balance.product_name}; ${drumCount} drum(s), ${grossWeightKg} kg, truck ${truckNumber}, ${plant.name} -> ${destination}`);
     } catch (_) {}
     return id;
   });

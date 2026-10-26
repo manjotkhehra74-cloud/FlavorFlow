@@ -44,10 +44,10 @@ class _DispatchPageState extends State<DispatchPage> with SingleTickerProviderSt
   void initState() {
     super.initState();
     _tab = TabController(length: 5, vsync: this);
-    if (widget.tab == 'history') _tab.index = 1;
-    if (widget.tab == 'reports') _tab.index = 2;
-    if (widget.tab == 'trucks') _tab.index = 3;
-    if (widget.tab == 'drums') _tab.index = 4;
+    if (widget.tab == 'drums') _tab.index = 1;
+    if (widget.tab == 'history') _tab.index = 2;
+    if (widget.tab == 'reports') _tab.index = 3;
+    if (widget.tab == 'trucks') _tab.index = 4;
   }
 
   @override
@@ -59,20 +59,20 @@ class _DispatchPageState extends State<DispatchPage> with SingleTickerProviderSt
   @override
   Widget build(BuildContext context) {
     final canManage = context.watch<AuthController>().can('dispatch.manage');
-    final entryTitle = canManage ? 'Dispatch Entry' : 'Dispatch Entry (view only)';
+    final entryTitle = canManage ? 'CB Dispatch' : 'CB Dispatch (view only)';
     final tabs = <WindowsModuleTab>[
       WindowsModuleTab(entryTitle, Icons.local_shipping_outlined),
+      const WindowsModuleTab('Drum Dispatch', Icons.inventory_2_outlined),
       const WindowsModuleTab('Dispatch History', Icons.history_rounded),
       const WindowsModuleTab('Reports', Icons.bar_chart_rounded),
       const WindowsModuleTab('Trucks', Icons.local_shipping_outlined),
-      const WindowsModuleTab('Drum Dispatch', Icons.inventory_2_outlined),
     ];
     final content = TabBarView(controller: _tab, children: [
       _EntryTab(readOnly: !canManage),
+      const DrumDispatchPage(),
       const _HistoryTab(),
       const _ReportsTab(),
       _TrucksTab(readOnly: !canManage),
-      const DrumDispatchPage(),
     ]);
     if (isWindowsPlatform) {
       return AnimatedBuilder(
@@ -98,10 +98,10 @@ class _DispatchPageState extends State<DispatchPage> with SingleTickerProviderSt
             tabAlignment: TabAlignment.start,
             tabs: [
               Tab(text: tr(entryTitle)),
+              const Tab(text: 'Drum Dispatch'),
               Tab(text: tr('Dispatch History')),
               Tab(text: tr('Reports')),
               Tab(text: tr('Trucks')),
-              const Tab(text: 'Drum Dispatch'),
             ],
           ),
         ),

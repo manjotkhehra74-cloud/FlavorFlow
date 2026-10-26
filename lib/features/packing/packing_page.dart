@@ -221,6 +221,14 @@ class _StockTabState extends State<_StockTab> {
 
   void _reload() => setState(() => _future = _load());
 
+  Future<void> _consumeAsepticBags() async {
+    final saved = await showFastDialog<bool>(
+      context,
+      (_) => const _TxnDialog(kind: 'consume', initialMaterialName: 'Aseptic Bags'),
+    );
+    if (saved == true) _reload();
+  }
+
   bool _exporting = false;
 
   /// Export the raw-material stock as PDF (client-built) or Excel (server report).
@@ -354,6 +362,12 @@ class _StockTabState extends State<_StockTab> {
                   icon: const Icon(Icons.south_west_rounded, size: 16),
                   label: Text(tr('Receive Stock')),
                 ),
+                if (!widget.rawOnly)
+                  OutlinedButton.icon(
+                    onPressed: _consumeAsepticBags,
+                    icon: const Icon(Icons.inventory_2_outlined, size: 16),
+                    label: Text(tr('Aseptic Bags Use')),
+                  ),
                 OutlinedButton.icon(
                   onPressed: () async {
                     final saved = await showFastDialog<bool>(context, (_) => _TxnDialog(kind: 'consume', rawOnly: widget.rawOnly));
@@ -529,6 +543,12 @@ class _StockTabState extends State<_StockTab> {
                     icon: const Icon(Icons.south_west_rounded, size: 18),
                     label: Text(tr('Receive Stock')),
                   )),
+                  if (!widget.rawOnly)
+                    action(OutlinedButton.icon(
+                      onPressed: _consumeAsepticBags,
+                      icon: const Icon(Icons.inventory_2_outlined, size: 18),
+                      label: Text(tr('Aseptic Bags Use')),
+                    )),
                   action(OutlinedButton.icon(
                     onPressed: () async {
                       final saved = await showFastDialog<bool>(context, (_) => _TxnDialog(kind: 'consume', rawOnly: widget.rawOnly));
@@ -1035,7 +1055,8 @@ class _LedgerTabState extends State<_LedgerTab> {
 class _TxnDialog extends StatefulWidget {
   final String kind; // 'receive' | 'consume'
   final bool rawOnly; // Raw Material screen → only raw materials in the list
-  const _TxnDialog({required this.kind, this.rawOnly = false});
+  final String? initialMaterialName;
+  const _TxnDialog({required this.kind, this.rawOnly = false, this.initialMaterialName});
   @override
   State<_TxnDialog> createState() => _TxnDialogState();
 }
@@ -1067,7 +1088,17 @@ class _TxnDialogState extends State<_TxnDialog> {
             ? list.where((m) => m['category'] == 'Raw Material').toList()
             : list.where((m) => m['category'] != 'Raw Material').toList();
         materials = list;
-        materialId = materials.isNotEmpty ? materials.first['id'] as int : null;
+        int? preferredMaterialId;
+        final preferredName = widget.initialMaterialName?.trim().toLowerCase();
+        if (preferredName != null && preferredName.isNotEmpty) {
+          for (final material in materials) {
+            if ('${material['name']}'.trim().toLowerCase() == preferredName) {
+              preferredMaterialId = material['id'] as int?;
+              break;
+            }
+          }
+        }
+        materialId = preferredMaterialId ?? (materials.isNotEmpty ? materials.first['id'] as int : null);
         _applyProductOrder();
       });
     }).catchError((e) { setState(() => loadError = '$e'); });

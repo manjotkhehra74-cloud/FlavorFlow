@@ -172,7 +172,8 @@ function migrate() {
     reference TEXT DEFAULT '',
     remark TEXT DEFAULT '',
     batch_id INTEGER,
-    created_by INTEGER, created_at TEXT NOT NULL
+    created_by INTEGER, created_at TEXT NOT NULL,
+    product_id INTEGER REFERENCES products(id)
   );
 
   CREATE TABLE IF NOT EXISTS notifications (
@@ -199,6 +200,25 @@ function migrate() {
     name TEXT NOT NULL UNIQUE,
     active INTEGER NOT NULL DEFAULT 1,
     next_fill_number INTEGER NOT NULL DEFAULT 1 CHECK (next_fill_number > 0),
+    created_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS drum_destinations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS drum_stock_adjustments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_name TEXT NOT NULL,
+    previous_drums INTEGER NOT NULL,
+    previous_kg REAL NOT NULL,
+    corrected_drums INTEGER NOT NULL,
+    corrected_kg REAL NOT NULL,
+    reason TEXT NOT NULL,
+    created_by INTEGER REFERENCES users(id),
     created_at TEXT NOT NULL
   );
 
@@ -291,6 +311,7 @@ function migrate() {
   CREATE INDEX IF NOT EXISTS idx_drum_dispatch_items_dispatch ON drum_dispatch_items(dispatch_id);
   CREATE INDEX IF NOT EXISTS idx_drum_aggregate_dispatch_date ON drum_aggregate_dispatches(dispatch_datetime);
   CREATE INDEX IF NOT EXISTS idx_drum_aggregate_dispatch_stock ON drum_aggregate_dispatches(opening_balance_id, dispatch_datetime);
+  CREATE INDEX IF NOT EXISTS idx_drum_stock_adjustments_created ON drum_stock_adjustments(created_at);
 
   CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read);
   CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_logs(entity, entity_id);
@@ -320,6 +341,8 @@ function migrate() {
   ensureColumn('dispatch_items', 'batch_code', 'batch_code TEXT');
   ensureColumn('dispatch_items', 'trays', 'trays INTEGER NOT NULL DEFAULT 0');
   ensureColumn('dispatch_items', 'tray_weight', 'tray_weight REAL NOT NULL DEFAULT 0');
+  // Product-tagged manual packing consumption predates this column on some installs.
+  ensureColumn('packing_txns', 'product_id', 'product_id INTEGER REFERENCES products(id)');
 
   /* default tray specs for tray-packed products (editable in Product Master) */
   const trayDefaults = [
@@ -467,6 +490,39 @@ function seedPacking() {
   console.log('[db] seeded packing material catalog');
 }
 
+function seedAsepticBags() {
+  const existing = db.prepare('SELECT id FROM packing_materials WHERE name = ? COLLATE NOCASE').get('Aseptic Bags');
+  if (existing) return;
+  db.prepare(`
+    INSERT INTO packing_materials (name, category, unit, stock, min_stock, created_at)
+    VALUES ('Aseptic Bags', 'Drum Packaging', 'pcs', 0, 0, ?)
+  `).run(ts(0));
+  console.log('[db] ensured Aseptic Bags packing material');
+}
+
+function seedDrumDefaults() {
+  const createdAt = new Date().toISOString();
+  db.prepare(`
+    INSERT OR IGNORE INTO drum_plants (name, active, next_fill_number, created_at)
+    VALUES ('Khadur Sahib', 1, 1, ?)
+  `).run(createdAt);
+  db.prepare(`
+    INSERT OR IGNORE INTO drum_destinations (name, active, created_at)
+    VALUES ('Neemrana', 1, ?)
+  `).run(createdAt);
+  // Preserve any destinations already present in dispatch history as options.
+  db.prepare(`
+    INSERT OR IGNORE INTO drum_destinations (name, active, created_at)
+    SELECT DISTINCT TRIM(destination), 1, ? FROM drum_dispatches
+     WHERE TRIM(COALESCE(destination, '')) <> ''
+  `).run(createdAt);
+  db.prepare(`
+    INSERT OR IGNORE INTO drum_destinations (name, active, created_at)
+    SELECT DISTINCT TRIM(destination), 1, ? FROM drum_aggregate_dispatches
+     WHERE TRIM(COALESCE(destination, '')) <> ''
+  `).run(createdAt);
+}
+
 function seedDrumOpeningBalances() {
   const now = new Date().toISOString();
   const insert = db.prepare(`
@@ -493,6 +549,8 @@ function seedDrumOpeningBalances() {
 migrate();
 seedUsers();
 seedPacking();
+seedAsepticBags();
+seedDrumDefaults();
 seedDrumOpeningBalances();
 
 /* one-time fix: trays & tray caps are consumed per TRAY produced, never per CB */

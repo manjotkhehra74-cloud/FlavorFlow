@@ -61,6 +61,16 @@ test('full backend mounts drum APIs and blocks the legacy request-log path', asy
   const aggregateDispatches = await fetchJson('/api/drums/aggregate-dispatches', token);
   assert.equal(aggregateDispatches.status, 200);
   assert.deepEqual(aggregateDispatches.body.dispatches, []);
+  const destinations = await fetchJson('/api/drums/destinations', token);
+  assert.equal(destinations.status, 200);
+  assert.ok(destinations.body.destinations.some((row) => row.name === 'Neemrana'));
+  const stockAdjustments = await fetchJson('/api/drums/stock-adjustments', token);
+  assert.equal(stockAdjustments.status, 200);
+  assert.deepEqual(stockAdjustments.body.adjustments, []);
+  const packingMaterials = await fetchJson('/api/packing/materials', token);
+  assert.equal(packingMaterials.status, 200);
+  assert.ok(packingMaterials.body.materials.some((row) => row.name === 'Aseptic Bags'));
+  assert.ok(db.prepare('PRAGMA table_info(packing_txns)').all().some((column) => column.name === 'product_id'));
   const protectedOpeningBalances = await fetchJson('/api/drums/opening-balances');
   assert.equal(protectedOpeningBalances.status, 401);
 
