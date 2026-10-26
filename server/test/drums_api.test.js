@@ -132,4 +132,66 @@ test('drum fills keep a plant-wide sequence, individual gross weights, shelf-lif
     },
   });
   assert.equal(duplicate.status, 409);
+
+  const openingBalances = await call('/api/drums/opening-balances');
+  assert.equal(openingBalances.status, 200);
+  assert.equal(openingBalances.body.summary.available_drums, 20279);
+  assert.equal(openingBalances.body.summary.available_kg, 4471159.5);
+  const pearPulpBalance = openingBalances.body.balances.find((balance) => balance.product_name === 'Pear Pulp');
+  const carrotPasteBalance = openingBalances.body.balances.find((balance) => balance.product_name === 'Carrot Paste Salt Mix (10%)');
+  assert.equal(pearPulpBalance.available_drums, 6);
+  assert.equal(pearPulpBalance.available_kg, 1270);
+  assert.equal(carrotPasteBalance.available_drums, 4086);
+  assert.equal(carrotPasteBalance.available_kg, 903267);
+
+  const aggregateDispatch = await call('/api/drums/aggregate-dispatches', {
+    method: 'POST',
+    body: {
+      openingBalanceId: pearPulpBalance.id,
+      plantId,
+      truckNumber: 'pb-02-aa-1234',
+      dispatchDateTime: '2026-10-22T11:30:00+05:30',
+      drumCount: 2,
+      grossWeightKg: 420.5,
+    },
+  });
+  assert.equal(aggregateDispatch.status, 201);
+  assert.equal(aggregateDispatch.body.dispatch.product_name, 'Pear Pulp');
+  assert.equal(aggregateDispatch.body.dispatch.drum_count, 2);
+  assert.equal(aggregateDispatch.body.dispatch.gross_weight_kg, 420.5);
+  assert.equal(aggregateDispatch.body.balance.available_drums, 4);
+  assert.equal(aggregateDispatch.body.balance.available_kg, 849.5);
+
+  const aggregateHistory = await call('/api/drums/aggregate-dispatches');
+  assert.equal(aggregateHistory.status, 200);
+  assert.equal(aggregateHistory.body.dispatches.length, 1);
+  assert.equal(aggregateHistory.body.dispatches[0].product_name, 'Pear Pulp');
+
+  const overdraw = await call('/api/drums/aggregate-dispatches', {
+    method: 'POST',
+    body: {
+      openingBalanceId: pearPulpBalance.id,
+      plantId,
+      truckNumber: 'PB-02-AA-1234',
+      drumCount: 5,
+      grossWeightKg: 100,
+    },
+  });
+  assert.equal(overdraw.status, 409);
+
+  const kgOverdraw = await call('/api/drums/aggregate-dispatches', {
+    method: 'POST',
+    body: {
+      openingBalanceId: pearPulpBalance.id,
+      plantId,
+      truckNumber: 'PB-02-AA-1234',
+      drumCount: 1,
+      grossWeightKg: 900,
+    },
+  });
+  assert.equal(kgOverdraw.status, 409);
+  const unchangedBalance = await call('/api/drums/opening-balances');
+  const pearPulpAfterRejectedDispatch = unchangedBalance.body.balances.find((balance) => balance.product_name === 'Pear Pulp');
+  assert.equal(pearPulpAfterRejectedDispatch.available_drums, 4);
+  assert.equal(pearPulpAfterRejectedDispatch.available_kg, 849.5);
 });

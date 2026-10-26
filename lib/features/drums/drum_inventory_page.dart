@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../state/auth.dart';
-import 'drum_opening_balances.dart';
 
 class DrumInventoryPage extends StatefulWidget {
   const DrumInventoryPage({super.key});
@@ -17,6 +16,7 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
   List<Map<String, dynamic>> _plants = [];
   List<Map<String, dynamic>> _stock = [];
   List<Map<String, dynamic>> _fills = [];
+  List<Map<String, dynamic>> _openingBalances = [];
 
   @override
   void initState() {
@@ -38,11 +38,13 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
       auth.api.get('/drums/plants'),
       auth.api.get('/drums/stock'),
       auth.api.get('/drums/fills?status=ALL'),
+      auth.api.get('/drums/opening-balances'),
     ]);
     _products = _rows(values[0], 'products');
     _plants = _rows(values[1], 'plants');
     _stock = _rows(values[2], 'stock');
     _fills = _rows(values[3], 'fills');
+    _openingBalances = _rows(values[4], 'balances');
   }
 
   void _reload() {
@@ -125,20 +127,20 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
       ];
 
   Widget _buildStockTab() {
-    if (_stock.isEmpty && drumOpeningBalances.isEmpty) {
+    if (_stock.isEmpty && _openingBalances.isEmpty) {
       return const _EmptyPanel(message: 'No drum balances are currently available.');
     }
 
     final productBalances = <String, _ProductBalance>{};
     _ProductBalance balanceFor(String name) {
-      final key = drumProductBalanceKey(name);
+      final key = name.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
       return productBalances.putIfAbsent(key, () => _ProductBalance(productName: name));
     }
 
-    for (final opening in drumOpeningBalances) {
-      final balance = balanceFor(opening.productName);
-      balance.openingDrums += opening.availableDrums;
-      balance.openingKg += opening.balanceKg;
+    for (final opening in _openingBalances) {
+      final balance = balanceFor(_text(opening['product_name']));
+      balance.openingDrums += _asInt(opening['available_drums']);
+      balance.openingKg += _asDouble(opening['available_kg']);
     }
     for (final row in _stock) {
       final balance = balanceFor(_text(row['product_name']));
@@ -157,11 +159,9 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
         _MetricStrip(drumCount: drumCount, balanceKg: balanceKg, productCount: productBalances.length),
         const SizedBox(height: 12),
         Text('Current balance by product', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-        Padding(
-          padding: const EdgeInsets.only(top: 4, bottom: 8),
-          child: Text(
-            'Totals combine tracked available drums with the opening balances from the $drumOpeningBalanceSnapshotLabel report. Opening balances are aggregate-only and are not selectable for dispatch; tracked kg uses each drum’s saved gross weight.',
-          ),
+        const Padding(
+          padding: EdgeInsets.only(top: 4, bottom: 8),
+          child: Text('Totals combine individually tracked stock and remaining aggregate stock. Aggregate stock can be dispatched by entering its drum count and total kg.'),
         ),
         for (final balance in sortedBalances)
           Card(
@@ -182,14 +182,14 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
                   if (balance.openingDrums > 0) ...[
                     const SizedBox(height: 8),
                     Text(
-                      'PDF opening ($drumOpeningBalanceSnapshotLabel): ${balance.openingDrums} drums · ${_weightLabel(balance.openingKg)} · aggregate only, not dispatchable',
+                      'Aggregate stock remaining: ${balance.openingDrums} drums · ${_weightLabel(balance.openingKg)}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
                   if (balance.trackedDrums > 0) ...[
                     const SizedBox(height: 4),
                     Text(
-                      'Tracked available: ${balance.trackedDrums} drums · ${_weightLabel(balance.trackedKg)}',
+                      'Individually tracked: ${balance.trackedDrums} drums · ${_weightLabel(balance.trackedKg)}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
@@ -227,7 +227,7 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
         ] else
           const Padding(
             padding: EdgeInsets.only(top: 12),
-            child: Text('The PDF opening balances are summary-only; there are no individual drum records for dispatch yet.'),
+            child: Text('No individually tracked drums are currently available. Aggregate stock can still be dispatched by entering a product, drum count and total kg.'),
           ),
       ],
     );

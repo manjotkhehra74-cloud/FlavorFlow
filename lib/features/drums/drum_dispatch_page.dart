@@ -17,13 +17,19 @@ class _DrumDispatchPageState extends State<DrumDispatchPage> {
   late Future<void> _loading;
   List<Map<String, dynamic>> _plants = [];
   List<Map<String, dynamic>> _availableFills = [];
+  List<Map<String, dynamic>> _openingBalances = [];
   List<Map<String, dynamic>> _dispatches = [];
+  List<Map<String, dynamic>> _aggregateDispatches = [];
   List<Map<String, dynamic>> _trucks = [];
   final Set<int> _selectedFillIds = {};
   final TextEditingController _truckController = TextEditingController();
+  final TextEditingController _aggregateDrumsController = TextEditingController();
+  final TextEditingController _aggregateKgController = TextEditingController();
   int? _dispatchPlantId;
+  int? _selectedOpeningBalanceId;
   DateTime _dispatchAt = DateTime.now();
   bool _submittingDispatch = false;
+  bool _submittingAggregateDispatch = false;
   bool _manualTruck = false;
 
   @override
@@ -35,6 +41,8 @@ class _DrumDispatchPageState extends State<DrumDispatchPage> {
   @override
   void dispose() {
     _truckController.dispose();
+    _aggregateDrumsController.dispose();
+    _aggregateKgController.dispose();
     super.dispose();
   }
 
@@ -50,15 +58,19 @@ class _DrumDispatchPageState extends State<DrumDispatchPage> {
   Future<void> _load() async {
     final auth = context.read<AuthController>();
     final canViewDispatch = _canViewDispatch(auth);
-    final values = await Future.wait([
+    final values = await Future.wait(<Future<dynamic>>[
       auth.api.get('/drums/plants'),
       auth.api.get('/drums/fills?status=AVAILABLE'),
+      auth.api.get('/drums/opening-balances'),
       if (canViewDispatch) auth.api.get('/drums/dispatches') else Future<dynamic>.value({'dispatches': <dynamic>[]}),
+      if (canViewDispatch) auth.api.get('/drums/aggregate-dispatches') else Future<dynamic>.value({'dispatches': <dynamic>[]}),
     ]);
 
     _plants = _rows(values[0], 'plants');
     _availableFills = _rows(values[1], 'fills');
-    _dispatches = canViewDispatch ? _rows(values[2], 'dispatches') : <Map<String, dynamic>>[];
+    _openingBalances = _rows(values[2], 'balances');
+    _dispatches = canViewDispatch ? _rows(values[3], 'dispatches') : <Map<String, dynamic>>[];
+    _aggregateDispatches = canViewDispatch ? _rows(values[4], 'dispatches') : <Map<String, dynamic>>[];
     final activePlants = _plants.where((plant) => _asInt(plant['active']) != 0).toList();
     if (!_plants.any((plant) => _asInt(plant['id']) == _dispatchPlantId && _asInt(plant['active']) != 0)) {
       _dispatchPlantId = activePlants.isEmpty ? null : _asInt(activePlants.first['id']);
@@ -78,6 +90,12 @@ class _DrumDispatchPageState extends State<DrumDispatchPage> {
         .whereType<int>()
         .toSet();
     _selectedFillIds.removeWhere((id) => !availableIds.contains(id));
+    final availableOpeningBalances = _openingBalances
+        .where((balance) => _asInt(balance['available_drums']) > 0 && _asDouble(balance['available_kg']) > 0)
+        .toList();
+    if (!availableOpeningBalances.any((balance) => _asInt(balance['id']) == _selectedOpeningBalanceId)) {
+      _selectedOpeningBalanceId = availableOpeningBalances.isEmpty ? null : _asInt(availableOpeningBalances.first['id']);
+    }
   }
 
   void _reload() {
@@ -178,6 +196,86 @@ class _DrumDispatchPageState extends State<DrumDispatchPage> {
     } finally {
       if (mounted) setState(() => _submittingDispatch = false);
     }
+  }
+
+  Future<void> _submitAggregateDispatch() async {
+    final auth = context.read<AuthController>();
+    final truck = _truckController.text.trim().toUpperCase();
+    final selectedBalances = _openingBalances.where((row) => _asInt(row['id']) == _selectedOpeningBalanceId);
+    final balance = selectedBalances.isEmpty ? null : selectedBalances.first;
+    final drumCount = int.tryParse(_aggregateDrumsController.text.trim());
+    final grossWeightKg = double.tryParse(_aggregateKgController.text.trim().replaceAll(',', ''));
+
+    if (_dispatchPlantId == null) {
+      _showMessage('Add or select a source plant first.');
+      return;
+    }
+    if (truck.isEmpty) {
+      _showMessage('Enter or select the truck number.');
+      return;
+    }
+    if (balance == null) {
+      _showMessage('Select an aggregate stock product with drums remaining.');
+      return;
+    }
+    if (drumCount == null || drumCount <= 0) {
+      _showMessage('Enter a positive whole number of drums to dispatch.');
+      return;
+    }
+    if (drumCount > _asInt(balance['available_drums'])) {
+      _showMessage('Only ${_asInt(balance['available_drums'])} drums remain for this product.');
+      return;
+    }
+    if (grossWeightKg == null || !grossWeightKg.isFinite || grossWeightKg <= 0) {
+      _showMessage('Enter the actual total kg for these drums.');
+      return;
+    }
+    if (grossWeightKg > _asDouble(balance['available_kg']) + 0.0005) {
+      _showMessage('Entered kg is higher than this product’s remaining aggregate kg.');
+      return;
+    }
+
+    setState(() => _submittingAggregateDispatch = true);
+    try {
+      await auth.api.post('/drums/aggregate-dispatches', {
+        'openingBalanceId': _selectedOpeningBalanceId,
+        'plantId': _dispatchPlantId,
+        'truckNumber': truck,
+        'dispatchDateTime': _isoWithOffset(_dispatchAt),
+        'drumCount': drumCount,
+        'grossWeightKg': grossWeightKg,
+      });
+      _aggregateDrumsController.clear();
+      _aggregateKgController.clear();
+      _reload();
+      if (mounted) _showMessage('Aggregate drum dispatch saved; this count and kg were deducted from the product balance.');
+    } catch (error) {
+      if (mounted) _showMessage(error.toString());
+    } finally {
+      if (mounted) setState(() => _submittingAggregateDispatch = false);
+    }
+  }
+
+  Future<void> _showAggregateDispatchDetails(Map<String, dynamic> row) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Aggregate drum dispatch · ${_text(row['truck_number'])}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Product: ${_text(row['product_name'])}'),
+            Text('${_text(row['plant_name'])} → ${_text(row['destination'])}'),
+            Text('Date/time: ${_dateTimeLabel(row['dispatch_datetime'])}'),
+            Text('Drums: ${_text(row['drum_count'])} · Total kg: ${_weightLabel(row['gross_weight_kg'])}'),
+            const SizedBox(height: 8),
+            const Text('This aggregate stock dispatch records product, drum count and total kg; it does not list individual drum numbers.'),
+          ],
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Close'))],
+      ),
+    );
   }
 
   Future<void> _showDispatchDetails(Map<String, dynamic> row) async {
@@ -292,6 +390,9 @@ class _DrumDispatchPageState extends State<DrumDispatchPage> {
             (_dispatchPlantId == null || _asInt(fill['plant_id']) == _dispatchPlantId))
         .toList()
       ..sort((a, b) => _asInt(a['fill_number']).compareTo(_asInt(b['fill_number'])));
+    final aggregateBalances = _openingBalances
+        .where((balance) => _asInt(balance['available_drums']) > 0 && _asDouble(balance['available_kg']) > 0)
+        .toList();
     final selectedWeight = plantFills
         .where((fill) => _selectedFillIds.contains(_asInt(fill['id'])))
         .fold<double>(0, (sum, fill) => sum + _asDouble(fill['gross_weight_kg']));
@@ -370,7 +471,7 @@ class _DrumDispatchPageState extends State<DrumDispatchPage> {
         const SizedBox(height: 8),
         Text('Select available drums · weight from the fill register', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
         if (plantFills.isEmpty)
-          const _EmptyPanel(message: 'There are no available drums at this plant to dispatch.')
+          const _EmptyPanel(message: 'No individually tracked drums are available at this plant. Use aggregate stock below if any remains.')
         else
           for (final fill in plantFills)
             Card(
@@ -393,32 +494,129 @@ class _DrumDispatchPageState extends State<DrumDispatchPage> {
                 controlAffinity: ListTileControlAffinity.leading,
               ),
             ),
+        const SizedBox(height: 16),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Aggregate stock dispatch', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                const Text('Dispatch part of a product balance. Enter the drum count and the actual total kg being sent; both are deducted from stock.'),
+                if (aggregateBalances.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Text('No aggregate stock remains to dispatch.'),
+                  )
+                else ...[
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<int>(
+                    key: ValueKey('aggregate-balance-$_selectedOpeningBalanceId'),
+                    initialValue: aggregateBalances.any((balance) => _asInt(balance['id']) == _selectedOpeningBalanceId) ? _selectedOpeningBalanceId : null,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Product · remaining aggregate balance'),
+                    items: [
+                      for (final balance in aggregateBalances)
+                        DropdownMenuItem<int>(
+                          value: _asInt(balance['id']),
+                          child: Text('${_text(balance['product_name'])} · ${_asInt(balance['available_drums'])} drums · ${_weightLabel(balance['available_kg'])}'),
+                        ),
+                    ],
+                    onChanged: canManage
+                        ? (value) => setState(() {
+                              _selectedOpeningBalanceId = value;
+                              _aggregateDrumsController.clear();
+                              _aggregateKgController.clear();
+                            })
+                        : null,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _aggregateDrumsController,
+                          enabled: canManage,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(labelText: 'Drums to dispatch'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: _aggregateKgController,
+                          enabled: canManage,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: const InputDecoration(labelText: 'Total kg to dispatch'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  FilledButton.icon(
+                    onPressed: canManage && !_submittingAggregateDispatch ? _submitAggregateDispatch : null,
+                    icon: _submittingAggregateDispatch
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.local_shipping_outlined),
+                    label: const Text('Record aggregate dispatch'),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }
 
   Widget _buildHistory() {
-    if (_dispatches.isEmpty) return const _EmptyPanel(message: 'No outbound drum dispatches have been recorded.');
+    if (_dispatches.isEmpty && _aggregateDispatches.isEmpty) {
+      return const _EmptyPanel(message: 'No outbound drum dispatches have been recorded.');
+    }
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        for (final row in _dispatches)
-          Card(
-            child: ListTile(
-              onTap: () => _showDispatchDetails(row),
-              leading: const CircleAvatar(child: Icon(Icons.local_shipping_outlined)),
-              title: Text('${_text(row['truck_number'])}  ·  ${_text(row['destination'])}'),
-              subtitle: Text('${_text(row['plant_name'])}  ·  ${_dateTimeLabel(row['dispatch_datetime'])}'),
-              trailing: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text('${_text(row['drum_count'])} drums', style: const TextStyle(fontWeight: FontWeight.w700)),
-                  Text(_weightLabel(row['gross_weight_kg'])),
-                ],
+        if (_aggregateDispatches.isNotEmpty) ...[
+          Text('Aggregate stock dispatches', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+          for (final row in _aggregateDispatches)
+            Card(
+              child: ListTile(
+                onTap: () => _showAggregateDispatchDetails(row),
+                leading: const CircleAvatar(child: Icon(Icons.inventory_2_outlined)),
+                title: Text('${_text(row['product_name'])} · ${_text(row['truck_number'])}'),
+                subtitle: Text('${_text(row['plant_name'])} · ${_dateTimeLabel(row['dispatch_datetime'])}'),
+                trailing: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text('${_text(row['drum_count'])} drums', style: const TextStyle(fontWeight: FontWeight.w700)),
+                    Text(_weightLabel(row['gross_weight_kg'])),
+                  ],
+                ),
               ),
             ),
-          ),
+        ],
+        if (_dispatches.isNotEmpty) ...[
+          Text('Individual drum dispatches', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+          for (final row in _dispatches)
+            Card(
+              child: ListTile(
+                onTap: () => _showDispatchDetails(row),
+                leading: const CircleAvatar(child: Icon(Icons.local_shipping_outlined)),
+                title: Text('${_text(row['truck_number'])} · ${_text(row['destination'])}'),
+                subtitle: Text('${_text(row['plant_name'])} · ${_dateTimeLabel(row['dispatch_datetime'])}'),
+                trailing: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text('${_text(row['drum_count'])} drums', style: const TextStyle(fontWeight: FontWeight.w700)),
+                    Text(_weightLabel(row['gross_weight_kg'])),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ],
     );
   }

@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const bcrypt = require('bcryptjs');
 const { audit } = require('./helpers');
+const { SNAPSHOT_DATE, OPENING_DRUM_BALANCES } = require('./drum_opening_balances');
 const { DatabaseSync: Database, tx, pragma } = require('./sqlite');
 
 const DB_PATH = process.env.ERP_DB_PATH || path.join(__dirname, 'data', 'erp.db');
@@ -258,10 +259,38 @@ function migrate() {
     gross_weight_kg REAL NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS drum_opening_balances (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+    snapshot_date TEXT NOT NULL,
+    opening_drums INTEGER NOT NULL CHECK (opening_drums >= 0),
+    opening_kg REAL NOT NULL CHECK (opening_kg >= 0),
+    available_drums INTEGER NOT NULL CHECK (available_drums >= 0),
+    available_kg REAL NOT NULL CHECK (available_kg >= 0),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS drum_aggregate_dispatches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    opening_balance_id INTEGER NOT NULL REFERENCES drum_opening_balances(id),
+    product_name TEXT NOT NULL,
+    plant_id INTEGER NOT NULL REFERENCES drum_plants(id),
+    dispatch_datetime TEXT NOT NULL,
+    truck_number TEXT NOT NULL,
+    destination TEXT NOT NULL DEFAULT 'Neemrana',
+    drum_count INTEGER NOT NULL CHECK (drum_count > 0),
+    gross_weight_kg REAL NOT NULL CHECK (gross_weight_kg > 0),
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL
+  );
+
   CREATE INDEX IF NOT EXISTS idx_drum_fills_stock ON drum_fills(plant_id, status, batch_id);
   CREATE INDEX IF NOT EXISTS idx_drum_batches_product ON drum_batches(product_id, plant_id, batch_code);
   CREATE INDEX IF NOT EXISTS idx_drum_dispatch_date ON drum_dispatches(dispatch_datetime);
   CREATE INDEX IF NOT EXISTS idx_drum_dispatch_items_dispatch ON drum_dispatch_items(dispatch_id);
+  CREATE INDEX IF NOT EXISTS idx_drum_aggregate_dispatch_date ON drum_aggregate_dispatches(dispatch_datetime);
+  CREATE INDEX IF NOT EXISTS idx_drum_aggregate_dispatch_stock ON drum_aggregate_dispatches(opening_balance_id, dispatch_datetime);
 
   CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read);
   CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_logs(entity, entity_id);
@@ -438,9 +467,33 @@ function seedPacking() {
   console.log('[db] seeded packing material catalog');
 }
 
+function seedDrumOpeningBalances() {
+  const now = new Date().toISOString();
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO drum_opening_balances
+      (product_name, snapshot_date, opening_drums, opening_kg, available_drums, available_kg, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+  let added = 0;
+  for (const balance of OPENING_DRUM_BALANCES) {
+    const result = insert.run(
+      balance.productName,
+      SNAPSHOT_DATE,
+      balance.drums,
+      balance.kg,
+      balance.drums,
+      balance.kg,
+      now,
+      now,
+    );
+    added += Number(result.changes || 0);
+  }
+  if (added) console.log(`[db] seeded ${added} aggregate drum opening balance(s)`);
+}
+
 migrate();
 seedUsers();
 seedPacking();
+seedDrumOpeningBalances();
 
 /* one-time fix: trays & tray caps are consumed per TRAY produced, never per CB */
 db.prepare(

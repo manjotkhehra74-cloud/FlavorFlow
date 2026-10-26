@@ -51,6 +51,20 @@ function validFillWeights(body) {
   }
 }
 
+function positiveDrumCount(value) {
+  const count = Number(value);
+  if (!Number.isSafeInteger(count) || count <= 0) throw bad('Drum count must be a positive whole number.');
+  return count;
+}
+
+function positiveAggregateWeight(value) {
+  const weight = Number(value);
+  if (!Number.isFinite(weight) || weight <= 0 || weight > 100000000) {
+    throw bad('Total gross weight must be greater than 0 kg and at most 100,000,000 kg.');
+  }
+  return Math.round(weight * 1000) / 1000;
+}
+
 function rowsForDispatch(dispatchId) {
   return db.prepare(`${FILL_SELECT}
       JOIN drum_dispatch_items di ON di.fill_id = f.id
@@ -167,6 +181,22 @@ router.get('/stock', requirePerm('inventory.view'), (req, res) => {
   }, { drum_count: 0, gross_weight_kg: 0 });
   summary.gross_weight_kg = Math.round(summary.gross_weight_kg * 1000) / 1000;
   res.json({ stock, summary });
+});
+
+/** Mutable product-level opening balances imported from the report PDF. */
+router.get('/opening-balances', requirePerm('inventory.view'), (_req, res) => {
+  const balances = db.prepare(`
+    SELECT id, product_name, snapshot_date, opening_drums, opening_kg,
+           available_drums, ROUND(available_kg, 3) AS available_kg
+      FROM drum_opening_balances
+     ORDER BY product_name COLLATE NOCASE`).all();
+  const summary = balances.reduce((total, balance) => {
+    total.available_drums += Number(balance.available_drums || 0);
+    total.available_kg += Number(balance.available_kg || 0);
+    return total;
+  }, { available_drums: 0, available_kg: 0 });
+  summary.available_kg = Math.round(summary.available_kg * 1000) / 1000;
+  res.json({ balances, summary });
 });
 
 /** Individual filled drums; fill_number is a per-plant, continuous fill/sticker sequence. */
@@ -347,6 +377,89 @@ router.post('/dispatches', requirePerm('dispatch.manage'), (req, res) => {
            d.created_by, d.created_at
       FROM drum_dispatches d JOIN drum_plants pl ON pl.id = d.plant_id WHERE d.id = ?`).get(result.dispatchId);
   res.status(201).json({ dispatch, drum_numbers: result.fillNumbers, drum_count: result.count, gross_weight_kg: result.totalGross });
+});
+
+/** Aggregate opening-stock dispatches track product, count and kg without inventing drum IDs. */
+router.get('/aggregate-dispatches', requirePerm('dispatch.view'), (_req, res) => {
+  const dispatches = db.prepare(`
+    SELECT d.id, d.opening_balance_id, d.product_name, d.plant_id,
+           pl.name AS plant_name, d.dispatch_datetime, d.truck_number,
+           d.destination, d.drum_count, d.gross_weight_kg,
+           d.created_by, u.name AS created_by_name, d.created_at
+      FROM drum_aggregate_dispatches d
+      JOIN drum_plants pl ON pl.id = d.plant_id
+      LEFT JOIN users u ON u.id = d.created_by
+     ORDER BY d.dispatch_datetime DESC, d.id DESC
+     LIMIT 500`).all();
+  res.json({ dispatches });
+});
+
+/** Partial dispatch from the aggregate opening balance; the operator enters the actual total kg. */
+router.post('/aggregate-dispatches', requirePerm('dispatch.manage'), (req, res) => {
+  const body = req.body || {};
+  const openingBalanceId = positiveId(body.openingBalanceId ?? body.opening_balance_id, 'Opening balance');
+  const plantId = positiveId(body.plantId ?? body.plant_id, 'Source plant');
+  const truckNumber = String(body.truckNumber ?? body.truck_number ?? '').trim().toUpperCase();
+  if (!truckNumber || truckNumber.length > 50) throw bad('Truck number is required and must be 50 characters or fewer.');
+  const rawDateTime = body.dispatchDateTime ?? body.dispatch_datetime;
+  const dispatchTime = rawDateTime ? new Date(rawDateTime) : new Date();
+  if (!Number.isFinite(dispatchTime.getTime())) throw bad('Dispatch date/time is invalid.');
+  const dispatchDateTime = dispatchTime.toISOString();
+  const drumCount = positiveDrumCount(body.drumCount ?? body.drum_count);
+  const grossWeightKg = positiveAggregateWeight(body.grossWeightKg ?? body.gross_weight_kg ?? body.totalKg ?? body.total_kg);
+  const createdAt = nowIso();
+
+  const dispatchId = tx(db, () => {
+    const plant = db.prepare('SELECT id, name, active FROM drum_plants WHERE id = ?').get(plantId);
+    if (!plant || !plant.active) throw bad('Source plant not found or inactive.', 404);
+    const balance = db.prepare(`
+      SELECT id, product_name, available_drums, available_kg
+        FROM drum_opening_balances WHERE id = ?`).get(openingBalanceId);
+    if (!balance) throw bad('Aggregate opening balance not found.', 404);
+    if (drumCount > Number(balance.available_drums)) {
+      throw bad(`Only ${balance.available_drums} aggregate drum(s) remain for ${balance.product_name}.`, 409);
+    }
+    if (grossWeightKg > Number(balance.available_kg) + 0.0005) {
+      throw bad(`Only ${balance.available_kg} kg remain for ${balance.product_name}.`, 409);
+    }
+
+    const update = db.prepare(`
+      UPDATE drum_opening_balances
+         SET available_drums = available_drums - ?,
+             available_kg = MAX(0, ROUND(available_kg - ?, 3)),
+             updated_at = ?
+       WHERE id = ? AND available_drums >= ? AND available_kg + 0.0005 >= ?`)
+      .run(drumCount, grossWeightKg, createdAt, openingBalanceId, drumCount, grossWeightKg);
+    if (Number(update.changes) !== 1) throw bad('This aggregate stock changed; refresh and try again.', 409);
+
+    const inserted = db.prepare(`
+      INSERT INTO drum_aggregate_dispatches
+        (opening_balance_id, product_name, plant_id, dispatch_datetime, truck_number,
+         destination, drum_count, gross_weight_kg, created_by, created_at)
+      VALUES (?, ?, ?, ?, ?, 'Neemrana', ?, ?, ?, ?)`)
+      .run(openingBalanceId, balance.product_name, plantId, dispatchDateTime, truckNumber,
+        drumCount, grossWeightKg, req.user.id, createdAt);
+    const id = Number(inserted.lastInsertRowid);
+    try {
+      audit(db, req.user, 'DISPATCH', 'drum_aggregate_dispatch', id,
+        `${balance.product_name}; ${drumCount} drum(s), ${grossWeightKg} kg, truck ${truckNumber}`);
+    } catch (_) {}
+    return id;
+  });
+
+  const dispatch = db.prepare(`
+    SELECT d.id, d.opening_balance_id, d.product_name, d.plant_id,
+           pl.name AS plant_name, d.dispatch_datetime, d.truck_number,
+           d.destination, d.drum_count, d.gross_weight_kg,
+           d.created_by, d.created_at
+      FROM drum_aggregate_dispatches d
+      JOIN drum_plants pl ON pl.id = d.plant_id
+     WHERE d.id = ?`).get(dispatchId);
+  const balance = db.prepare(`
+    SELECT id, product_name, snapshot_date, opening_drums, opening_kg,
+           available_drums, ROUND(available_kg, 3) AS available_kg
+      FROM drum_opening_balances WHERE id = ?`).get(openingBalanceId);
+  res.status(201).json({ dispatch, balance });
 });
 
 module.exports = router;

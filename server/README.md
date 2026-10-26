@@ -21,3 +21,5 @@ A fresh, empty database creates no built-in accounts. To bootstrap one administr
 ## Drum traceability
 
 Drum inventory is stored separately from bottled/carton finished-goods inventory. A filled drum receives a unique sequential fill/sticker number within its plant; empty iron drums are reusable, while historic fill records remain. Gross weight includes the iron drum. Outbound drum dispatches are recorded only at the source plant; no Neemrana receiving workflow is provided.
+
+The 22 October 2026 report is loaded as product-level aggregate opening stock. Partial aggregate dispatches record a product, drum count, and operator-entered total kg, then decrement the remaining opening balance; they do not create or infer individual drum IDs or weights. Individually recorded fills continue to use the per-drum dispatch workflow.
