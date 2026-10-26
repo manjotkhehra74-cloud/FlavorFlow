@@ -183,18 +183,28 @@ jobs:
           [[ -s "$staging/server.js" && -s "$staging/package-lock.json" ]] || { echo '::error::Staged backend source is incomplete.' >&2; exit 1; }
           node -e 'if (Number(process.versions.node.split(".")[0]) < 24) process.exit(1)' || { echo '::error::Node.js 24 or newer is required for the FlavorFlow backend.' >&2; exit 1; }
           (cd "$staging" && npm ci --omit=dev --no-audit --no-fund)
+          run_with_privileges() {
+            if [[ "$(id -u)" -eq 0 ]]; then "$@"; else sudo -n "$@"; fi
+          }
           backup_root="$(dirname "$server")/backups/server"
-          mkdir -p "$server" "$backup_root"
-          if [[ -d "$server" && -w "$server" ]]; then :; elif [[ ! -w "$(dirname "$server")" ]]; then echo "::error::Deploy user cannot write $server." >&2; exit 1; fi
+          if ! mkdir -p "$server" "$backup_root" 2>/dev/null; then
+            run_with_privileges mkdir -p "$server" "$backup_root" || { echo "::error::Deploy user cannot create $server and $backup_root; check writable ownership or passwordless sudo for mkdir/cp." >&2; exit 1; }
+          fi
           if [[ -d "$web" && ! -w "$web" ]]; then echo "::error::Deploy user cannot remove the legacy public request log from $web." >&2; exit 1; fi
           rm -f "$web/ff-requests.txt"
           backup="$backup_root/code-before-$sha"
-          mkdir -p "$backup"
+          if ! mkdir -p "$backup" 2>/dev/null; then
+            run_with_privileges mkdir -p "$backup" || { echo "::error::Could not create backend backup directory $backup; check writable ownership or passwordless sudo." >&2; exit 1; }
+          fi
           shopt -s nullglob
           for file in "$server"/*.js "$server"/package.json "$server"/package-lock.json "$server"/routes/*.js; do
             rel="${file#"$server"/}"
-            mkdir -p "$backup/$(dirname "$rel")"
-            cp -a "$file" "$backup/$rel"
+            if ! mkdir -p "$backup/$(dirname "$rel")" 2>/dev/null; then
+              run_with_privileges mkdir -p "$backup/$(dirname "$rel")" || { echo "::error::Could not create backend backup subdirectory for $rel." >&2; exit 1; }
+            fi
+            if ! cp -a "$file" "$backup/$rel" 2>/dev/null; then
+              run_with_privileges cp -a --no-preserve=ownership "$file" "$backup/$rel" || { echo "::error::Could not back up existing backend file $rel." >&2; exit 1; }
+            fi
           done
           if [[ ! -s "$server/.jwt-secret" ]]; then
             umask 077
@@ -227,8 +237,10 @@ jobs:
             sleep 2
           done
           [[ "$healthy" == true ]] || { echo '::error::FlavorFlow backend health check failed after restart.' >&2; exit 1; }
-          drum_route_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 3 http://127.0.0.1:4000/api/drums/plants || true)"
-          [[ "$drum_route_status" == 200 || "$drum_route_status" == 401 ]] || { echo "Drum API route check failed after backend restart (HTTP $drum_route_status)." >&2; exit 1; }
+          for route in plants opening-balances aggregate-dispatches; do
+            drum_route_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 3 "http://127.0.0.1:4000/api/drums/$route" || true)"
+            [[ "$drum_route_status" == 200 || "$drum_route_status" == 401 ]] || { echo "Drum API route $route failed after backend restart (HTTP $drum_route_status)." >&2; exit 1; }
+          done
           rm -f "$web/ff-requests.txt"
           rm -rf "$staging"
           echo "Deployed backend $sha, restarted flavorflow, and removed the legacy public request log without reading it."

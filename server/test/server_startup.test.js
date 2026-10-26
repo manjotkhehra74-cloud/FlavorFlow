@@ -55,6 +55,15 @@ test('full backend mounts drum APIs and blocks the legacy request-log path', asy
   const protectedProducts = await fetchJson('/api/drums/products');
   assert.equal(protectedProducts.status, 401);
 
+  const openingBalances = await fetchJson('/api/drums/opening-balances', token);
+  assert.equal(openingBalances.status, 200);
+  assert.equal(openingBalances.body.balances.length, 11);
+  const aggregateDispatches = await fetchJson('/api/drums/aggregate-dispatches', token);
+  assert.equal(aggregateDispatches.status, 200);
+  assert.deepEqual(aggregateDispatches.body.dispatches, []);
+  const protectedOpeningBalances = await fetchJson('/api/drums/opening-balances');
+  assert.equal(protectedOpeningBalances.status, 401);
+
   const trucks = await fetchJson('/api/dispatch/trucks', token);
   assert.equal(trucks.status, 200);
   const productionBatches = await fetchJson('/api/production/batches', token);
