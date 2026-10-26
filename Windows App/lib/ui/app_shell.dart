@@ -28,6 +28,7 @@ const List<Map<String, String>> kStandardNav = [
   {'path': '/dashboard', 'label': 'Dashboard', 'icon': 'dashboard', 'perm': 'dashboard.view', 'group': 'Overview'},
   {'path': '/products', 'label': 'Product Master', 'icon': 'inventory_2', 'perm': 'products.view', 'group': 'Operations'},
   {'path': '/inventory', 'label': 'Inventory', 'icon': 'warehouse', 'perm': 'inventory.view', 'group': 'Operations'},
+  {'path': '/drums', 'label': 'Drum Stock', 'icon': 'inventory_2', 'perm': 'inventory.view', 'group': 'Operations'},
   {'path': '/stock', 'label': 'Stock Ledger', 'icon': 'history', 'perm': 'stock.view', 'group': 'Operations'},
   {'path': '/packing', 'label': 'Packing', 'icon': 'widgets', 'perm': 'packing.view', 'group': 'Operations'},
   {'path': '/raw', 'label': 'Raw Material', 'icon': 'science', 'perm': 'raw.view', 'group': 'Operations'},
@@ -1137,31 +1138,17 @@ class LanguageDialog extends StatelessWidget {
               color: const Color(0xFFE2E9EF),
               child: Text('${tr('Language')} · ਭਾਸ਼ਾ · भाषा',
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(18, 18, 18, 12),
-              child: Text('Select your preferred language. The change applies immediately.',
-                  style: TextStyle(fontSize: 12.5)),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18),
-              child: Column(children: [
-                for (final lang in L10n.languages)
-                  RadioListTile<String>(
-                    title: Text(lang[1]),
-                    value: lang[0],
-                    groupValue: l10n.code,
-                    selected: l10n.code == lang[0],
-                    selectedTileColor: const Color(0xFFE6F1FC),
-                    shape: const RoundedRectangleBorder(
-                        side: BorderSide(color: Color(0xFFCCD7E2))),
-                    onChanged: (v) async {
-                      if (v == null) return;
-                      await L10n.instance.set(v);
-                      if (context.mounted) Navigator.pop(context);
-                    },
-                  ),
-              ]),
-            ),
+            for (final lang in L10n.languages)
+              RadioListTile<String>(
+                title: Text(lang[1]),
+                value: lang[0],
+                groupValue: l10n.code,
+                onChanged: (v) async {
+                  if (v == null) return;
+                  await L10n.instance.set(v);
+                  if (context.mounted) Navigator.pop(context);
+                },
+              ),
             const Divider(height: 1),
             Padding(padding: const EdgeInsets.all(10), child: Align(
               alignment: Alignment.centerRight,
