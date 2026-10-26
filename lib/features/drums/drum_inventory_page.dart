@@ -65,7 +65,10 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
         },
       ),
     );
-    if (saved == true) _reload();
+    if (saved == true) {
+      _reload();
+      if (mounted) _showMessage('Drum product added. You can now add filled drums for it.');
+    }
   }
 
   Future<void> _editShelfLife(Map<String, dynamic> product) async {
@@ -245,7 +248,7 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
             child: FilledButton.icon(
               onPressed: _products.isEmpty || _plants.isEmpty ? null : _addFilledDrums,
               icon: const Icon(Icons.add),
-              label: const Text('Record filled drums'),
+              label: const Text('Add filled drums'),
             ),
           ),
         const Padding(
@@ -325,14 +328,20 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                 child: LayoutBuilder(
                   builder: (context, constraints) {
+                    final canManage = auth.can('inventory.manage');
                     final actions = <Widget>[
                       IconButton(tooltip: 'Refresh', onPressed: _reload, icon: const Icon(Icons.refresh)),
-                      if (auth.can('inventory.manage')) ...[
-                        OutlinedButton.icon(onPressed: _addProduct, icon: const Icon(Icons.category_outlined), label: const Text('Product')),
-                        OutlinedButton.icon(onPressed: _addPlant, icon: const Icon(Icons.factory_outlined), label: const Text('Plant')),
+                      if (canManage) ...[
+                        OutlinedButton.icon(onPressed: _addProduct, icon: const Icon(Icons.category_outlined), label: const Text('Add product')),
+                        OutlinedButton.icon(onPressed: _addPlant, icon: const Icon(Icons.factory_outlined), label: const Text('Add plant')),
+                        OutlinedButton.icon(
+                          onPressed: _products.isEmpty || _plants.isEmpty ? null : _addFilledDrums,
+                          icon: const Icon(Icons.inventory_2_outlined),
+                          label: const Text('Add filled drums'),
+                        ),
                       ],
                     ];
-                    if (constraints.maxWidth < 580) {
+                    if (constraints.maxWidth < 760) {
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -340,7 +349,7 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
                             const Expanded(child: Text('Drum Stock', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700))),
                             actions.first,
                           ]),
-                          if (actions.length > 1) Wrap(spacing: 8, children: actions.skip(1).toList()),
+                          if (actions.length > 1) Wrap(spacing: 8, runSpacing: 8, children: actions.skip(1).toList()),
                         ],
                       );
                     }
@@ -676,7 +685,7 @@ class _CreateDrumFillDialogState extends State<_CreateDrumFillDialog> {
   Widget build(BuildContext context) {
     final calculated = _calculatedExpiry;
     return AlertDialog(
-      title: const Text('Record filled drums'),
+      title: const Text('Add filled drums'),
       content: SizedBox(
         width: 560,
         child: SingleChildScrollView(
