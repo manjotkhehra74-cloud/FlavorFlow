@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../state/auth.dart';
+import 'drum_dispatch_page.dart';
 
 class DrumInventoryPage extends StatefulWidget {
   const DrumInventoryPage({super.key});
@@ -52,10 +53,17 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
     setState(() => _loading = _load());
   }
 
-  Future<void> _addProduct() async {
+  Future<bool> _showAddProductDialog() async {
+    final suggestedNames = _openingBalances
+        .map((balance) => _text(balance['product_name']).trim())
+        .where((name) => name.isNotEmpty && name != '—')
+        .toSet()
+        .toList()
+      ..sort();
     final saved = await showDialog<bool>(
       context: context,
       builder: (_) => _DrumProductDialog(
+        suggestedNames: suggestedNames,
         onSave: (name, code, months) async {
           await context.read<AuthController>().api.post('/drums/products', {
             'name': name,
@@ -65,9 +73,22 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
         },
       ),
     );
-    if (saved == true) {
-      _reload();
+    return saved == true;
+  }
+
+  Future<void> _reloadAndWait() async {
+    if (!mounted) return;
+    await _load();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _addProduct() async {
+    if (!await _showAddProductDialog()) return;
+    try {
+      await _reloadAndWait();
       if (mounted) _showMessage('Drum product added. You can now add filled drums for it.');
+    } catch (error) {
+      if (mounted) _showMessage(error.toString());
     }
   }
 
@@ -88,7 +109,7 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
     }
   }
 
-  Future<void> _addPlant() async {
+  Future<bool> _showAddPlantDialog() async {
     final saved = await showDialog<bool>(
       context: context,
       builder: (_) => _PlantDialog(
@@ -97,21 +118,63 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
         },
       ),
     );
-    if (saved == true) _reload();
+    return saved == true;
+  }
+
+  Future<void> _addPlant() async {
+    if (!await _showAddPlantDialog()) return;
+    try {
+      await _reloadAndWait();
+      if (mounted) _showMessage('Source plant added.');
+    } catch (error) {
+      if (mounted) _showMessage(error.toString());
+    }
   }
 
   Future<void> _addFilledDrums() async {
+    if (_products.where((product) => _asInt(product['active']) != 0).isEmpty) {
+      final productAdded = await _showAddProductDialog();
+      if (!productAdded || !mounted) return;
+      try {
+        await _reloadAndWait();
+      } catch (error) {
+        if (mounted) _showMessage(error.toString());
+        return;
+      }
+    }
+    if (_plants.where((plant) => _asInt(plant['active']) != 0).isEmpty) {
+      final plantAdded = await _showAddPlantDialog();
+      if (!plantAdded || !mounted) return;
+      try {
+        await _reloadAndWait();
+      } catch (error) {
+        if (mounted) _showMessage(error.toString());
+        return;
+      }
+    }
+    if (!mounted) return;
+    final products = _products.where((product) => _asInt(product['active']) != 0).toList();
+    final plants = _plants.where((plant) => _asInt(plant['active']) != 0).toList();
+    if (products.isEmpty || plants.isEmpty) {
+      _showMessage('Add an active drum product and source plant before recording fills.');
+      return;
+    }
+
     final saved = await showDialog<bool>(
       context: context,
       builder: (_) => _CreateDrumFillDialog(
-        products: _products.where((p) => _asInt(p['active']) != 0).toList(),
-        plants: _plants.where((p) => _asInt(p['active']) != 0).toList(),
+        products: products,
+        plants: plants,
         onSave: (body) async => context.read<AuthController>().api.post('/drums/fills', body),
       ),
     );
     if (saved == true) {
-      _reload();
-      if (mounted) _showMessage('Filled drum records saved.');
+      try {
+        await _reloadAndWait();
+        if (mounted) _showMessage('Filled drum records saved.');
+      } catch (error) {
+        if (mounted) _showMessage('Drums were saved, but stock could not be refreshed: $error');
+      }
     }
   }
 
@@ -119,14 +182,16 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  List<Tab> _tabs() => const [
-        Tab(text: 'Available stock'),
-        Tab(text: 'Filled drums'),
+  List<Tab> _tabs(AuthController auth) => [
+        const Tab(text: 'Available stock'),
+        const Tab(text: 'Filled drums'),
+        if (auth.can('dispatch.view') || auth.can('dispatch.manage')) const Tab(text: 'Drum dispatch'),
       ];
 
   List<Widget> _tabViews(AuthController auth) => [
         _buildStockTab(),
         _buildFillsTab(auth),
+        if (auth.can('dispatch.view') || auth.can('dispatch.manage')) const DrumDispatchPage(),
       ];
 
   Widget _buildStockTab() {
@@ -246,7 +311,7 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
           Align(
             alignment: Alignment.centerLeft,
             child: FilledButton.icon(
-              onPressed: _products.isEmpty || _plants.isEmpty ? null : _addFilledDrums,
+              onPressed: _addFilledDrums,
               icon: const Icon(Icons.add),
               label: const Text('Add filled drums'),
             ),
@@ -258,7 +323,7 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
         if (canManage && (_products.isEmpty || _plants.isEmpty))
           const Padding(
             padding: EdgeInsets.only(top: 8),
-            child: Text('Add a drum product and source plant before recording fills.'),
+            child: Text('Tap Add filled drums; if a product or source plant is missing, the app will ask you to add it first.'),
           ),
         if (canManage && _products.isNotEmpty)
           Card(
@@ -317,7 +382,7 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
           );
         }
         if (snapshot.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
-        final tabs = _tabs();
+        final tabs = _tabs(auth);
         final views = _tabViews(auth);
         return DefaultTabController(
           key: ValueKey(tabs.length),
@@ -335,7 +400,7 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
                         OutlinedButton.icon(onPressed: _addProduct, icon: const Icon(Icons.category_outlined), label: const Text('Add product')),
                         OutlinedButton.icon(onPressed: _addPlant, icon: const Icon(Icons.factory_outlined), label: const Text('Add plant')),
                         OutlinedButton.icon(
-                          onPressed: _products.isEmpty || _plants.isEmpty ? null : _addFilledDrums,
+                          onPressed: _addFilledDrums,
                           icon: const Icon(Icons.inventory_2_outlined),
                           label: const Text('Add filled drums'),
                         ),
@@ -387,8 +452,9 @@ class _ProductBalance {
 }
 
 class _DrumProductDialog extends StatefulWidget {
+  final List<String> suggestedNames;
   final Future<void> Function(String name, String code, int months) onSave;
-  const _DrumProductDialog({required this.onSave});
+  const _DrumProductDialog({required this.onSave, this.suggestedNames = const []});
 
   @override
   State<_DrumProductDialog> createState() => _DrumProductDialogState();
@@ -398,6 +464,7 @@ class _DrumProductDialogState extends State<_DrumProductDialog> {
   final _name = TextEditingController();
   final _code = TextEditingController();
   final _months = TextEditingController(text: '24');
+  String? _selectedSuggestion;
   bool _saving = false;
   String? _error;
 
@@ -433,14 +500,41 @@ class _DrumProductDialogState extends State<_DrumProductDialog> {
         title: const Text('Add drum product'),
         content: SizedBox(
           width: 420,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: _name, autofocus: true, decoration: const InputDecoration(labelText: 'Product name')),
-              TextField(controller: _code, textCapitalization: TextCapitalization.characters, decoration: const InputDecoration(labelText: 'Product code (optional)')),
-              TextField(controller: _months, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Shelf life (months)', helperText: 'For example, 18 months or 24 months')),
-              if (_error != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
-            ],
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (widget.suggestedNames.isNotEmpty)
+                  DropdownButtonFormField<String>(
+                    value: _selectedSuggestion,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Match an existing stock product'),
+                    hint: const Text('Optional — choose to copy its exact name'),
+                    items: [
+                      for (final name in widget.suggestedNames) DropdownMenuItem<String>(value: name, child: Text(name, overflow: TextOverflow.ellipsis)),
+                    ],
+                    onChanged: _saving
+                        ? null
+                        : (value) => setState(() {
+                              _selectedSuggestion = value;
+                              if (value != null) _name.text = value;
+                            }),
+                  ),
+                TextField(
+                  controller: _name,
+                  autofocus: true,
+                  decoration: const InputDecoration(labelText: 'Product name'),
+                  onChanged: (value) {
+                    if (_selectedSuggestion != null && value != _selectedSuggestion) {
+                      setState(() => _selectedSuggestion = null);
+                    }
+                  },
+                ),
+                TextField(controller: _code, textCapitalization: TextCapitalization.characters, decoration: const InputDecoration(labelText: 'Product code (optional)')),
+                TextField(controller: _months, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Shelf life (months)', helperText: 'For example, 18 months or 24 months')),
+                if (_error != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+              ],
+            ),
           ),
         ),
         actions: [

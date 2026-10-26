@@ -21,7 +21,6 @@ import '../../ui/scan_page.dart';
 import '../../core/offline_queue.dart';
 import '../../ui/widgets.dart';
 import '../../ui/windows_widgets.dart';
-import '../drums/drum_dispatch_page.dart';
 import 'batch_code.dart';
 import 'destination_field.dart';
 
@@ -43,11 +42,15 @@ class _DispatchPageState extends State<DispatchPage> with SingleTickerProviderSt
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 5, vsync: this);
-    if (widget.tab == 'drums') _tab.index = 1;
-    if (widget.tab == 'history') _tab.index = 2;
-    if (widget.tab == 'reports') _tab.index = 3;
-    if (widget.tab == 'trucks') _tab.index = 4;
+    _tab = TabController(length: 4, vsync: this);
+    if (widget.tab == 'history') _tab.index = 1;
+    if (widget.tab == 'reports') _tab.index = 2;
+    if (widget.tab == 'trucks') _tab.index = 3;
+    if (widget.tab == 'drums') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) context.go('/drums');
+      });
+    }
   }
 
   @override
@@ -62,14 +65,12 @@ class _DispatchPageState extends State<DispatchPage> with SingleTickerProviderSt
     final entryTitle = canManage ? 'Dispatch Entry' : 'Dispatch Entry (view only)';
     final tabs = <WindowsModuleTab>[
       WindowsModuleTab(entryTitle, Icons.local_shipping_outlined),
-      const WindowsModuleTab('Drum Dispatch', Icons.inventory_2_outlined),
       const WindowsModuleTab('Dispatch History', Icons.history_rounded),
       const WindowsModuleTab('Reports', Icons.bar_chart_rounded),
       const WindowsModuleTab('Trucks', Icons.local_shipping_outlined),
     ];
     final content = TabBarView(controller: _tab, children: [
       _EntryTab(readOnly: !canManage),
-      const DrumDispatchPage(),
       const _HistoryTab(),
       const _ReportsTab(),
       _TrucksTab(readOnly: !canManage),
@@ -79,7 +80,7 @@ class _DispatchPageState extends State<DispatchPage> with SingleTickerProviderSt
         animation: _tab,
         builder: (context, _) => WindowsModuleWorkspace(
           title: 'Dispatch',
-          subtitle: 'CB and drum dispatch, history and transport reports',
+          subtitle: 'CB dispatch, history and transport reports',
           tabs: tabs,
           selectedIndex: _tab.index,
           onSelect: _tab.animateTo,
@@ -98,7 +99,6 @@ class _DispatchPageState extends State<DispatchPage> with SingleTickerProviderSt
             tabAlignment: TabAlignment.start,
             tabs: [
               Tab(text: tr(entryTitle)),
-              Tab(text: tr('Drum Dispatch')),
               Tab(text: tr('Dispatch History')),
               Tab(text: tr('Reports')),
               Tab(text: tr('Trucks')),
