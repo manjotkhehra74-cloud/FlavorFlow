@@ -336,6 +336,18 @@ function migrate() {
   ensureColumn('products', 'shelf_life_months', 'shelf_life_months INTEGER NOT NULL DEFAULT 24');
   ensureColumn('drum_products', 'master_product_id', 'master_product_id INTEGER REFERENCES products(id)');
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_drum_products_master_product ON drum_products(master_product_id) WHERE master_product_id IS NOT NULL');
+  // If a legacy drum-only record already matches a master product, preserve its configured shelf life.
+  db.exec(`
+    UPDATE products
+       SET shelf_life_months = (
+         SELECT dp.shelf_life_months FROM drum_products dp
+          WHERE dp.name = products.name COLLATE NOCASE
+          ORDER BY dp.id LIMIT 1
+       )
+     WHERE EXISTS (
+       SELECT 1 FROM drum_products dp WHERE dp.name = products.name COLLATE NOCASE
+     )
+  `);
   ensureColumn('inventory', 'qty_trays', 'qty_trays INTEGER NOT NULL DEFAULT 0');
   ensureColumn('batches', 'produced_trays', 'produced_trays INTEGER NOT NULL DEFAULT 0');
   ensureColumn('batches', 'used_cb', 'used_cb INTEGER NOT NULL DEFAULT 0');

@@ -64,7 +64,7 @@ test('migrates product_id, sort order and shelf life while linking existing drum
   const productColumns = db.prepare('PRAGMA table_info(products)').all();
   assert.ok(productColumns.some((column) => column.name === 'sort_order'));
   assert.ok(productColumns.some((column) => column.name === 'shelf_life_months'));
-  assert.equal(db.prepare('SELECT shelf_life_months FROM products WHERE name = ?').get('Legacy Drum Product').shelf_life_months, 24);
+  assert.equal(db.prepare('SELECT shelf_life_months FROM products WHERE name = ?').get('Legacy Drum Product').shelf_life_months, 18, 'existing drum shelf life should be preserved when catalogs are linked');
 
   const drumColumns = db.prepare('PRAGMA table_info(drum_products)').all();
   assert.ok(drumColumns.some((column) => column.name === 'master_product_id'));
@@ -76,7 +76,7 @@ test('migrates product_id, sort order and shelf life while linking existing drum
   assert.ok(linked);
   assert.equal(linked.drum_product_id, 1, 'legacy fill product ID must be preserved');
   assert.equal(linked.master_product_id, linked.product_id);
-  assert.equal(db.prepare('SELECT shelf_life_months FROM drum_products WHERE id = ?').get(linked.drum_product_id).shelf_life_months, 24);
+  assert.equal(db.prepare('SELECT shelf_life_months FROM drum_products WHERE id = ?').get(linked.drum_product_id).shelf_life_months, 18);
 });
 
 test.after(() => {
