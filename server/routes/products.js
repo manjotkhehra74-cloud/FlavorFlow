@@ -3,6 +3,7 @@ const express = require('express');
 const db = require('../db');
 const { requirePerm, bad } = require('../middleware');
 const { audit, nowIso } = require('../helpers');
+const { syncDrumProductCatalog } = require('../drum_product_catalog');
 
 const router = express.Router();
 /* ff-active-products */
@@ -28,7 +29,7 @@ router.use((req, res, next) => {
 router.get('/', requirePerm('products.view'), (req, res) => {
   const rows = db.prepare(
     `SELECT p.id, p.name, p.weight_per_cb, p.weight_without_cb, p.bottles_per_cb,
-            p.bottles_per_tray, p.tray_weight, p.min_stock_cb, p.active, p.created_at,
+            p.bottles_per_tray, p.tray_weight, p.min_stock_cb, p.shelf_life_months, p.active, p.created_at,
             COALESCE(i.qty_cb,0) qty_cb, COALESCE(i.qty_trays,0) qty_trays
      FROM products p LEFT JOIN inventory i ON i.product_id = p.id
      ORDER BY p.sort_order, p.name`
@@ -44,6 +45,10 @@ function validate(body) {
   const bpt = Math.floor(Number(body.bottlesPerTray ?? 0) || 0);
   const tw = bpt > 0 ? Number(body.trayWeight) : 0;
   const minStock = Math.floor(Number(body.minStockCb ?? 0));
+  const shelfLifeMonths = Number(body.shelfLifeMonths ?? body.shelf_life_months ?? 24);
+  if (!Number.isInteger(shelfLifeMonths) || shelfLifeMonths < 1 || shelfLifeMonths > 240) {
+    throw bad('Shelf life must be a whole number of months from 1 to 240.');
+  }
   if (!name) throw bad('Product name is required.');
   if (!(wcb > 0)) throw bad('Weight per CB must be greater than 0.');
   if (!(wncb > 0)) throw bad('Weight without CB must be greater than 0.');
@@ -52,7 +57,7 @@ function validate(body) {
   if (bpt < 0) throw bad('Bottles per tray cannot be negative.');
   if (bpt > 0 && !(tw > 0)) throw bad('Tray weight must be greater than 0 for tray-packed products.');
   if (!(minStock >= 0)) throw bad('Minimum stock must be 0 or more.');
-  return { name, wcb, wncb, bpc, bpt, tw, minStock };
+  return { name, wcb, wncb, bpc, bpt, tw, minStock, shelfLifeMonths };
 }
 
 router.post('/', requirePerm('products.manage'), (req, res) => {
@@ -60,11 +65,12 @@ router.post('/', requirePerm('products.manage'), (req, res) => {
   const exists = db.prepare('SELECT id FROM products WHERE lower(name)=lower(?)').get(v.name);
   if (exists) throw bad('A product with this name already exists.', 409);
   const info = db.prepare(
-    `INSERT INTO products (name, weight_per_cb, weight_without_cb, bottles_per_cb, bottles_per_tray, tray_weight, price, min_stock_cb, active, created_at)
-     VALUES (?,?,?,?,?,?,0,?,1,?)`
-  ).run(v.name, v.wcb, v.wncb, v.bpc, v.bpt, v.tw, v.minStock, nowIso());
+    `INSERT INTO products (name, weight_per_cb, weight_without_cb, bottles_per_cb, bottles_per_tray, tray_weight, price, min_stock_cb, shelf_life_months, active, created_at)
+     VALUES (?,?,?,?,?,?,0,?,?,1,?)`
+  ).run(v.name, v.wcb, v.wncb, v.bpc, v.bpt, v.tw, v.minStock, v.shelfLifeMonths, nowIso());
   db.prepare('INSERT INTO inventory (product_id, qty_cb, qty_trays, qty_loose, updated_at) VALUES (?,0,0,0,?)')
     .run(info.lastInsertRowid, nowIso());
+  syncDrumProductCatalog(db);
   audit(db, req.user, 'CREATE', 'product', info.lastInsertRowid, `Created product "${v.name}"`);
   res.status(201).json({ id: Number(info.lastInsertRowid) });
 });
@@ -73,10 +79,16 @@ router.put('/:id', requirePerm('products.manage'), (req, res) => {
   const id = Number(req.params.id);
   const prod = db.prepare('SELECT * FROM products WHERE id=?').get(id);
   if (!prod) throw bad('Product not found.', 404);
-  const v = validate({ ...req.body, name: req.body.name ?? prod.name });
+  const body = req.body || {};
+  const v = validate({
+    ...body,
+    name: body.name ?? prod.name,
+    shelfLifeMonths: body.shelfLifeMonths ?? body.shelf_life_months ?? prod.shelf_life_months,
+  });
   db.prepare(
-    `UPDATE products SET name=?, weight_per_cb=?, weight_without_cb=?, bottles_per_cb=?, bottles_per_tray=?, tray_weight=?, min_stock_cb=?, active=? WHERE id=?`
-  ).run(v.name, v.wcb, v.wncb, v.bpc, v.bpt, v.tw, v.minStock, req.body.active === false ? 0 : 1, id);
+    `UPDATE products SET name=?, weight_per_cb=?, weight_without_cb=?, bottles_per_cb=?, bottles_per_tray=?, tray_weight=?, min_stock_cb=?, shelf_life_months=?, active=? WHERE id=?`
+  ).run(v.name, v.wcb, v.wncb, v.bpc, v.bpt, v.tw, v.minStock, v.shelfLifeMonths, body.active === false ? 0 : 1, id);
+  syncDrumProductCatalog(db);
   audit(db, req.user, 'UPDATE', 'product', id, `Updated product "${v.name}"`);
   res.json({ ok: true });
 });
@@ -87,6 +99,7 @@ router.delete('/:id', requirePerm('products.manage'), (req, res) => {
   const prod = db.prepare('SELECT id, name FROM products WHERE id = ? AND active = 1').get(id);
   if (!prod) { res.status(404).json({ error: 'Product not found.' }); return; }
   db.prepare('UPDATE products SET active = 0 WHERE id = ?').run(id);
+  syncDrumProductCatalog(db);
   db.prepare('DELETE FROM inventory WHERE product_id = ?').run(id); // clear stock row too
   try { require('../helpers').audit(db, req.user, 'DELETE', 'product', id, 'Product "' + prod.name + '" deleted (soft) — inventory row removed'); } catch (_) {}
   res.json({ ok: true });
@@ -101,6 +114,7 @@ router.delete('/:id', requirePerm('products.manage'), (req, res) => {
   const b = db.prepare("SELECT COUNT(*) n FROM batches WHERE product_id = ? AND UPPER(COALESCE(status, '')) = 'COMPLETED' AND (COALESCE(produced_cb, 0) - COALESCE(used_cb, 0) > 0 OR COALESCE(produced_trays, 0) - COALESCE(used_trays, 0) > 0)").get(id);
   if (Number(inv.cb) > 0 || Number(inv.trays) > 0 || Number(b.n) > 0) return res.status(409).json({ error: 'Cannot delete a product with stock or a remaining production batch. Dispatch/use the stock first.' });
   db.prepare('UPDATE products SET active = 0 WHERE id = ?').run(id);
+  syncDrumProductCatalog(db);
   try { db.prepare('DELETE FROM inventory WHERE product_id = ?').run(id); } catch (_) {}
   try { require('../helpers').audit(db, req.user, 'DELETE', 'product', id, 'Product "' + p.name + '" archived — empty stock'); } catch (_) {}
   res.json({ ok: true });

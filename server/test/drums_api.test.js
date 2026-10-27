@@ -9,6 +9,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const express = require('express');
 const db = require('../db');
+const products = require('../routes/products');
 const drums = require('../routes/drums');
 const { errorHandler } = require('../middleware');
 
@@ -33,6 +34,7 @@ test.before(async () => {
     req.user = { id: 1, name: 'Drum API Test', role: 'super_admin', permissions: ['*'] };
     next();
   });
+  app.use('/api/products', products);
   app.use('/api/drums', drums);
   app.use(errorHandler);
   server = app.listen(0, '127.0.0.1');
@@ -49,16 +51,42 @@ test.after(async () => {
 });
 
 test('drum fills keep a plant-wide sequence, individual gross weights, shelf-life expiry and outbound history', async () => {
-  const product24 = await call('/api/drums/products', {
+  const now = new Date().toISOString();
+  const legacyDrumProductId = Number(db.prepare(`
+    INSERT INTO drum_products (code, name, shelf_life_months, active, created_at, updated_at)
+    VALUES ('AMP', 'Aseptic Mango Pulp', 24, 1, ?, ?)
+  `).run(now, now).lastInsertRowid);
+  const masterProduct24 = await call('/api/products', {
     method: 'POST',
-    body: { name: 'Aseptic Mango Pulp', code: 'AMP', shelfLifeMonths: 24 },
+    body: { name: 'Aseptic Mango Pulp', weightPerCb: 250, weightWithoutCb: 240, bottlesPerCb: 1, shelfLifeMonths: 24 },
   });
-  assert.equal(product24.status, 201);
-  const product18 = await call('/api/drums/products', {
+  assert.equal(masterProduct24.status, 201);
+  const masterProduct18 = await call('/api/products', {
     method: 'POST',
-    body: { name: 'Liner Tomato Paste', shelfLifeMonths: 18 },
+    body: { name: 'Liner Tomato Paste', weightPerCb: 250, weightWithoutCb: 240, bottlesPerCb: 1, shelfLifeMonths: 18 },
   });
-  assert.equal(product18.status, 201);
+  assert.equal(masterProduct18.status, 201);
+
+  const masterList = await call('/api/products');
+  assert.ok(masterList.body.products.some((row) => row.name === 'Aseptic Mango Pulp' && row.id === masterProduct24.body.id));
+  const drumCatalog = await call('/api/drums/products');
+  const product24 = drumCatalog.body.products.find((row) => row.master_product_id === masterProduct24.body.id);
+  const product18 = drumCatalog.body.products.find((row) => row.master_product_id === masterProduct18.body.id);
+  assert.ok(product24);
+  assert.ok(product18);
+  assert.equal(product24.id, legacyDrumProductId, 'linking a legacy product must preserve its fill-history ID');
+  assert.equal(product24.shelf_life_months, 24);
+  const reusedProduct = await call('/api/drums/products', {
+    method: 'POST',
+    body: { name: 'Aseptic Mango Pulp', shelfLifeMonths: 24 },
+  });
+  assert.equal(reusedProduct.status, 200);
+  assert.equal(reusedProduct.body.product.id, product24.id);
+  const drumOnlyProduct = await call('/api/drums/products', {
+    method: 'POST',
+    body: { name: 'Do Not Duplicate', shelfLifeMonths: 18 },
+  });
+  assert.equal(drumOnlyProduct.status, 409);
   const invalidRegisterPhoto = await call('/api/drums/register-ocr', {
     method: 'POST',
     body: { imageBase64: Buffer.from('not an image').toString('base64'), fillNumberFrom: 1, fillNumberTo: 1 },
@@ -89,7 +117,7 @@ test('drum fills keep a plant-wide sequence, individual gross weights, shelf-lif
     method: 'POST',
     body: {
       plantId,
-      productId: product24.body.product.id,
+      productId: product24.id,
       batchCode: 'MANGO-01',
       manufacturingDate: '2025-01-31',
       packagingType: 'aseptic_bag',
@@ -105,7 +133,7 @@ test('drum fills keep a plant-wide sequence, individual gross weights, shelf-lif
     method: 'POST',
     body: {
       plantId,
-      productId: product18.body.product.id,
+      productId: product18.id,
       batchCode: 'TOMATO-01',
       manufacturingDate: '2025-10-01',
       packagingType: 'liner_bag',
@@ -123,7 +151,7 @@ test('drum fills keep a plant-wide sequence, individual gross weights, shelf-lif
     method: 'POST',
     body: {
       plantId: rangePlantId,
-      productId: product24.body.product.id,
+      productId: product24.id,
       batchCode: 'MANGO-RANGE-01',
       manufacturingDate: '2025-02-01',
       packagingType: 'aseptic_bag',
@@ -144,7 +172,7 @@ test('drum fills keep a plant-wide sequence, individual gross weights, shelf-lif
     method: 'POST',
     body: {
       plantId: rangePlantId,
-      productId: product24.body.product.id,
+      productId: product24.id,
       batchCode: 'MANGO-RANGE-02',
       manufacturingDate: '2025-02-02',
       packagingType: 'aseptic_bag',
@@ -158,7 +186,7 @@ test('drum fills keep a plant-wide sequence, individual gross weights, shelf-lif
     method: 'POST',
     body: {
       plantId: rangePlantId,
-      productId: product24.body.product.id,
+      productId: product24.id,
       batchCode: 'MANGO-RANGE-03',
       manufacturingDate: '2025-02-03',
       packagingType: 'aseptic_bag',
@@ -173,7 +201,7 @@ test('drum fills keep a plant-wide sequence, individual gross weights, shelf-lif
     method: 'POST',
     body: {
       plantId: rangePlantId,
-      productId: product24.body.product.id,
+      productId: product24.id,
       batchCode: 'MANGO-RANGE-04',
       manufacturingDate: '2025-02-04',
       packagingType: 'aseptic_bag',
@@ -312,4 +340,15 @@ test('drum fills keep a plant-wide sequence, individual gross weights, shelf-lif
   const trackedAfterCorrection = await call('/api/drums/fills?status=ALL');
   assert.equal(trackedAfterCorrection.body.fills.length, 7);
   assert.ok(trackedAfterCorrection.body.fills.some((row) => row.status === 'DISPATCHED'));
+
+  const shelfLifeChange = await call(`/api/drums/products/${product24.id}`, {
+    method: 'PUT',
+    body: { shelfLifeMonths: 30 },
+  });
+  assert.equal(shelfLifeChange.status, 200);
+  assert.equal(shelfLifeChange.body.product.shelf_life_months, 30);
+  const updatedMasterProducts = await call('/api/products');
+  assert.equal(updatedMasterProducts.body.products.find((row) => row.id === masterProduct24.body.id).shelf_life_months, 30);
+  const batchHistory = await call(`/api/drums/batches?plantId=${plantId}`);
+  assert.equal(batchHistory.body.batches.find((row) => row.id === firstBatch.body.batch.id).expiry_date, '2027-01-31');
 });

@@ -226,6 +226,7 @@ function migrate() {
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     code TEXT UNIQUE,
     name TEXT NOT NULL UNIQUE,
+    master_product_id INTEGER REFERENCES products(id),
     shelf_life_months INTEGER NOT NULL CHECK (shelf_life_months > 0),
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL,
@@ -331,6 +332,10 @@ function migrate() {
   ensureColumn('users', 'totp_enabled', 'totp_enabled INTEGER NOT NULL DEFAULT 0');
   ensureColumn('products', 'bottles_per_tray', 'bottles_per_tray INTEGER NOT NULL DEFAULT 0');
   ensureColumn('products', 'tray_weight', 'tray_weight REAL NOT NULL DEFAULT 0');
+  ensureColumn('products', 'sort_order', 'sort_order INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('products', 'shelf_life_months', 'shelf_life_months INTEGER NOT NULL DEFAULT 24');
+  ensureColumn('drum_products', 'master_product_id', 'master_product_id INTEGER REFERENCES products(id)');
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_drum_products_master_product ON drum_products(master_product_id) WHERE master_product_id IS NOT NULL');
   ensureColumn('inventory', 'qty_trays', 'qty_trays INTEGER NOT NULL DEFAULT 0');
   ensureColumn('batches', 'produced_trays', 'produced_trays INTEGER NOT NULL DEFAULT 0');
   ensureColumn('batches', 'used_cb', 'used_cb INTEGER NOT NULL DEFAULT 0');
@@ -598,5 +603,8 @@ function mergeSharedPacking() {
   }
 }
 mergeSharedPacking();
+
+// Existing Product Master rows are immediately usable for drum fills, without a duplicate product entry.
+require('./drum_product_catalog').syncDrumProductCatalog(db);
 
 module.exports = db;

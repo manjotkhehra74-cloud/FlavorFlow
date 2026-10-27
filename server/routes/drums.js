@@ -6,6 +6,7 @@ const { requirePerm, bad } = require('../middleware');
 const { audit, nowIso } = require('../helpers');
 const { tx } = require('../sqlite');
 const { parseIsoDate, addMonths, normalizePackagingType, normalizeGrossWeight } = require('../drum_utils');
+const { syncDrumProductCatalog } = require('../drum_product_catalog');
 const { recognizeRegisterImage } = require('../drum_ocr');
 
 const MAX_REGISTER_PHOTO_BYTES = 5 * 1024 * 1024;
@@ -13,14 +14,15 @@ const MAX_REGISTER_PHOTO_BYTES = 5 * 1024 * 1024;
 const router = express.Router();
 const FILL_SELECT = `
   SELECT f.id, f.plant_id, pl.name AS plant_name, f.fill_number, f.batch_id,
-         b.batch_code, b.product_id, p.name AS product_name,
+         b.batch_code, b.product_id, COALESCE(master_product.name, p.name) AS product_name,
          b.manufacturing_date, b.expiry_date, b.shelf_life_months,
          f.packaging_type, f.gross_weight_kg, f.status, f.created_at,
          f.dispatched_at
     FROM drum_fills f
     JOIN drum_plants pl ON pl.id = f.plant_id
     JOIN drum_batches b ON b.id = f.batch_id
-    JOIN drum_products p ON p.id = b.product_id`;
+    JOIN drum_products p ON p.id = b.product_id
+    LEFT JOIN products master_product ON master_product.id = p.master_product_id`;
 
 function positiveId(value, label) {
   const id = Number(value);
@@ -115,46 +117,60 @@ function rowsForDispatch(dispatchId) {
      ORDER BY f.fill_number`).all(dispatchId);
 }
 
-/** Separate drum product catalog; it does not alter the bottled/carton products table. */
+function drumProductById(id) {
+  return db.prepare(`
+    SELECT dp.id, dp.master_product_id, dp.code,
+           COALESCE(master_product.name, dp.name) AS name,
+           COALESCE(master_product.shelf_life_months, dp.shelf_life_months) AS shelf_life_months,
+           CASE WHEN master_product.id IS NULL THEN dp.active ELSE master_product.active END AS active,
+           dp.created_at, dp.updated_at
+      FROM drum_products dp
+      LEFT JOIN products master_product ON master_product.id = dp.master_product_id
+     WHERE dp.id = ?`).get(id);
+}
+
+/** Drum fills use the same products saved in Product Master; legacy links keep their fill IDs. */
 router.get('/products', requirePerm('inventory.view'), (_req, res) => {
-  const products = db.prepare(
-    'SELECT id, code, name, shelf_life_months, active, created_at, updated_at FROM drum_products ORDER BY name COLLATE NOCASE'
-  ).all();
+  syncDrumProductCatalog(db);
+  const products = db.prepare(`
+    SELECT dp.id, dp.master_product_id, dp.code,
+           COALESCE(master_product.name, dp.name) AS name,
+           COALESCE(master_product.shelf_life_months, dp.shelf_life_months) AS shelf_life_months,
+           CASE WHEN master_product.id IS NULL THEN dp.active ELSE master_product.active END AS active,
+           dp.created_at, dp.updated_at
+      FROM drum_products dp
+      LEFT JOIN products master_product ON master_product.id = dp.master_product_id
+     ORDER BY name COLLATE NOCASE`).all();
   res.json({ products });
 });
 
+// Compatibility endpoint: never create a duplicate drum-only product. New items belong in Product Master.
 router.post('/products', requirePerm('inventory.manage'), (req, res) => {
-  const body = req.body || {};
-  const name = String(body.name || '').trim();
-  const code = String(body.code || '').trim().toUpperCase() || null;
-  const months = shelfLifeMonths(body.shelfLifeMonths ?? body.shelf_life_months);
+  const name = String((req.body || {}).name || '').trim();
   if (!name || name.length > 120) throw bad('Product name is required and must be 120 characters or fewer.');
-  if (code && code.length > 40) throw bad('Product code must be 40 characters or fewer.');
-  if (db.prepare('SELECT id FROM drum_products WHERE name = ? COLLATE NOCASE').get(name)) {
-    throw bad('A drum product with that name already exists.', 409);
-  }
-  if (code && db.prepare('SELECT id FROM drum_products WHERE code = ?').get(code)) {
-    throw bad('A drum product with that code already exists.', 409);
-  }
-  const now = nowIso();
-  const result = db.prepare(
-    'INSERT INTO drum_products (code, name, shelf_life_months, active, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)'
-  ).run(code, name, months, now, now);
-  const product = db.prepare('SELECT id, code, name, shelf_life_months, active FROM drum_products WHERE id = ?').get(Number(result.lastInsertRowid));
-  try { audit(db, req.user, 'CREATE', 'drum_product', product.id, `${name}; shelf life ${months} months`); } catch (_) {}
-  res.status(201).json({ product });
+  const masterProduct = db.prepare('SELECT id FROM products WHERE name = ? COLLATE NOCASE').get(name);
+  if (!masterProduct) throw bad('Add this item in Product Master first; it will then be available for filled drums.', 409);
+  syncDrumProductCatalog(db);
+  const product = db.prepare('SELECT id FROM drum_products WHERE master_product_id = ?').get(masterProduct.id);
+  if (!product) throw bad('The Product Master item could not be linked to Drum Stock.', 409);
+  res.json({ product: drumProductById(product.id) });
 });
 
 /** Changing a product shelf life only affects batches created from now on. */
 router.put('/products/:id', requirePerm('inventory.manage'), (req, res) => {
   const id = positiveId(req.params.id, 'Product ID');
   const months = shelfLifeMonths(req.body && (req.body.shelfLifeMonths ?? req.body.shelf_life_months));
-  const product = db.prepare('SELECT id, name, active FROM drum_products WHERE id = ?').get(id);
+  const product = drumProductById(id);
   if (!product) throw bad('Drum product not found.', 404);
   const now = nowIso();
-  db.prepare('UPDATE drum_products SET shelf_life_months = ?, updated_at = ? WHERE id = ?').run(months, now, id);
+  if (product.master_product_id != null) {
+    db.prepare('UPDATE products SET shelf_life_months = ? WHERE id = ?').run(months, product.master_product_id);
+    syncDrumProductCatalog(db);
+  } else {
+    db.prepare('UPDATE drum_products SET shelf_life_months = ?, updated_at = ? WHERE id = ?').run(months, now, id);
+  }
   try { audit(db, req.user, 'UPDATE', 'drum_product', id, `${product.name}; future batches use ${months} months`); } catch (_) {}
-  res.json({ product: db.prepare('SELECT id, code, name, shelf_life_months, active FROM drum_products WHERE id = ?').get(id) });
+  res.json({ product: drumProductById(id) });
 });
 
 router.get('/plants', requirePerm('inventory.view'), (_req, res) => {
@@ -214,13 +230,14 @@ router.get('/batches', requirePerm('inventory.view'), (req, res) => {
   const params = plantId ? [plantId] : [];
   const batches = db.prepare(`
     SELECT b.id, b.batch_code, b.plant_id, pl.name AS plant_name,
-           b.product_id, p.name AS product_name, b.manufacturing_date,
+           b.product_id, COALESCE(master_product.name, p.name) AS product_name, b.manufacturing_date,
            b.expiry_date, b.shelf_life_months, b.created_at,
            COUNT(f.id) AS total_drums,
            SUM(CASE WHEN f.status = 'AVAILABLE' THEN 1 ELSE 0 END) AS available_drums
       FROM drum_batches b
       JOIN drum_plants pl ON pl.id = b.plant_id
       JOIN drum_products p ON p.id = b.product_id
+      LEFT JOIN products master_product ON master_product.id = p.master_product_id
       LEFT JOIN drum_fills f ON f.batch_id = b.id
       ${where}
      GROUP BY b.id
@@ -236,7 +253,7 @@ router.get('/stock', requirePerm('inventory.view'), (req, res) => {
   const params = plantId ? [plantId] : [];
   const stock = db.prepare(`
     SELECT f.plant_id, pl.name AS plant_name,
-           b.product_id, p.name AS product_name,
+           b.product_id, COALESCE(master_product.name, p.name) AS product_name,
            b.id AS batch_id, b.batch_code, b.manufacturing_date, b.expiry_date,
            f.packaging_type,
            COUNT(f.id) AS available_drums,
@@ -245,10 +262,11 @@ router.get('/stock', requirePerm('inventory.view'), (req, res) => {
       JOIN drum_plants pl ON pl.id = f.plant_id
       JOIN drum_batches b ON b.id = f.batch_id
       JOIN drum_products p ON p.id = b.product_id
+      LEFT JOIN products master_product ON master_product.id = p.master_product_id
      WHERE f.status = 'AVAILABLE' ${where}
-     GROUP BY f.plant_id, pl.name, b.product_id, p.name, b.id, b.batch_code,
+     GROUP BY f.plant_id, pl.name, b.product_id, product_name, b.id, b.batch_code,
               b.manufacturing_date, b.expiry_date, f.packaging_type
-     ORDER BY pl.name COLLATE NOCASE, p.name COLLATE NOCASE, b.expiry_date, b.batch_code, f.packaging_type`).all(...params);
+     ORDER BY pl.name COLLATE NOCASE, product_name COLLATE NOCASE, b.expiry_date, b.batch_code, f.packaging_type`).all(...params);
   const summary = stock.reduce((sum, row) => {
     sum.drum_count += Number(row.available_drums || 0);
     sum.gross_weight_kg += Number(row.gross_weight_kg || 0);
@@ -320,7 +338,8 @@ router.post('/stock-adjustments', requirePerm('inventory.manage'), (req, res) =>
         FROM drum_fills f
         JOIN drum_batches b ON b.id = f.batch_id
         JOIN drum_products p ON p.id = b.product_id
-       WHERE p.name = ? COLLATE NOCASE AND f.status = 'AVAILABLE'`).get(balance.product_name);
+        LEFT JOIN products master_product ON master_product.id = p.master_product_id
+       WHERE COALESCE(master_product.name, p.name) = ? COLLATE NOCASE AND f.status = 'AVAILABLE'`).get(balance.product_name);
     const trackedDrums = Number(tracked.drums || 0);
     const trackedKg = Math.round(Number(tracked.kg || 0) * 1000) / 1000;
     if (targetDrums < trackedDrums) {
@@ -415,6 +434,7 @@ router.post('/fills', requirePerm('inventory.manage'), (req, res) => {
   const body = req.body || {};
   const plantId = positiveId(body.plantId ?? body.plant_id, 'Plant');
   const productId = positiveId(body.productId ?? body.product_id, 'Product');
+  syncDrumProductCatalog(db);
   const batchCode = String(body.batchCode ?? body.batch_code ?? '').trim().toUpperCase();
   if (!batchCode || batchCode.length > 80) throw bad('Batch code is required and must be 80 characters or fewer.');
   const manufacturingDate = validDate(body.manufacturingDate ?? body.manufacturing_date, 'Manufacturing/packing date');
@@ -428,7 +448,7 @@ router.post('/fills', requirePerm('inventory.manage'), (req, res) => {
 
   const plant = db.prepare('SELECT id, name, active, next_fill_number FROM drum_plants WHERE id = ?').get(plantId);
   if (!plant || !plant.active) throw bad('Source plant not found or inactive.', 404);
-  const product = db.prepare('SELECT id, name, shelf_life_months, active FROM drum_products WHERE id = ?').get(productId);
+  const product = drumProductById(productId);
   if (!product || !product.active) throw bad('Drum product not found or inactive.', 404);
 
   if (requestedExpiry && requestedExpiry < manufacturingDate) throw bad('Expiry date cannot be earlier than the manufacturing/packing date.');
@@ -439,7 +459,7 @@ router.post('/fills', requirePerm('inventory.manage'), (req, res) => {
   const result = tx(db, () => {
     const lockedPlant = db.prepare('SELECT id, active, next_fill_number FROM drum_plants WHERE id = ?').get(plantId);
     if (!lockedPlant || !lockedPlant.active) throw bad('Source plant not found or inactive.', 404);
-    const lockedProduct = db.prepare('SELECT id, name, shelf_life_months, active FROM drum_products WHERE id = ?').get(productId);
+    const lockedProduct = drumProductById(productId);
     if (!lockedProduct || !lockedProduct.active) throw bad('Drum product not found or inactive.', 404);
 
     let batch = db.prepare(
