@@ -64,10 +64,19 @@ router.post('/', requirePerm('products.manage'), (req, res) => {
   const v = validate(req.body || {});
   const exists = db.prepare('SELECT id FROM products WHERE lower(name)=lower(?)').get(v.name);
   if (exists) throw bad('A product with this name already exists.', 409);
+  const legacyDrumProduct = db.prepare(`
+    SELECT shelf_life_months FROM drum_products
+     WHERE name = ? COLLATE NOCASE AND master_product_id IS NULL
+     ORDER BY id LIMIT 1
+  `).get(v.name);
+  const legacyShelfLife = Number(legacyDrumProduct && legacyDrumProduct.shelf_life_months);
+  const shelfLifeMonths = Number.isInteger(legacyShelfLife) && legacyShelfLife >= 1 && legacyShelfLife <= 240
+    ? legacyShelfLife
+    : v.shelfLifeMonths;
   const info = db.prepare(
     `INSERT INTO products (name, weight_per_cb, weight_without_cb, bottles_per_cb, bottles_per_tray, tray_weight, price, min_stock_cb, shelf_life_months, active, created_at)
      VALUES (?,?,?,?,?,?,0,?,?,1,?)`
-  ).run(v.name, v.wcb, v.wncb, v.bpc, v.bpt, v.tw, v.minStock, v.shelfLifeMonths, nowIso());
+  ).run(v.name, v.wcb, v.wncb, v.bpc, v.bpt, v.tw, v.minStock, shelfLifeMonths, nowIso());
   db.prepare('INSERT INTO inventory (product_id, qty_cb, qty_trays, qty_loose, updated_at) VALUES (?,0,0,0,?)')
     .run(info.lastInsertRowid, nowIso());
   syncDrumProductCatalog(db);

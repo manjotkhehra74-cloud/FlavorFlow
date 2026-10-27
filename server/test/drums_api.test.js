@@ -54,7 +54,7 @@ test('drum fills keep a plant-wide sequence, individual gross weights, shelf-lif
   const now = new Date().toISOString();
   const legacyDrumProductId = Number(db.prepare(`
     INSERT INTO drum_products (code, name, shelf_life_months, active, created_at, updated_at)
-    VALUES ('AMP', 'Aseptic Mango Pulp', 24, 1, ?, ?)
+    VALUES ('AMP', 'Aseptic Mango Pulp', 18, 1, ?, ?)
   `).run(now, now).lastInsertRowid);
   const masterProduct24 = await call('/api/products', {
     method: 'POST',
@@ -69,13 +69,14 @@ test('drum fills keep a plant-wide sequence, individual gross weights, shelf-lif
 
   const masterList = await call('/api/products');
   assert.ok(masterList.body.products.some((row) => row.name === 'Aseptic Mango Pulp' && row.id === masterProduct24.body.id));
+  assert.equal(masterList.body.products.find((row) => row.id === masterProduct24.body.id).shelf_life_months, 18);
   const drumCatalog = await call('/api/drums/products');
   const product24 = drumCatalog.body.products.find((row) => row.master_product_id === masterProduct24.body.id);
   const product18 = drumCatalog.body.products.find((row) => row.master_product_id === masterProduct18.body.id);
   assert.ok(product24);
   assert.ok(product18);
   assert.equal(product24.id, legacyDrumProductId, 'linking a legacy product must preserve its fill-history ID');
-  assert.equal(product24.shelf_life_months, 24);
+  assert.equal(product24.shelf_life_months, 18, 'adding a legacy drum product to Product Master should preserve its shelf life');
   const reusedProduct = await call('/api/drums/products', {
     method: 'POST',
     body: { name: 'Aseptic Mango Pulp', shelfLifeMonths: 24 },
@@ -127,7 +128,7 @@ test('drum fills keep a plant-wide sequence, individual gross weights, shelf-lif
   assert.equal(firstBatch.status, 201);
   assert.deepEqual(firstBatch.body.assigned_numbers, [1, 2]);
   assert.deepEqual(firstBatch.body.fills.map((fill) => fill.gross_weight_kg), [230.1, 231.25]);
-  assert.equal(firstBatch.body.batch.expiry_date, '2027-01-31');
+  assert.equal(firstBatch.body.batch.expiry_date, '2026-07-31');
 
   const secondBatch = await call('/api/drums/fills', {
     method: 'POST',
@@ -350,5 +351,5 @@ test('drum fills keep a plant-wide sequence, individual gross weights, shelf-lif
   const updatedMasterProducts = await call('/api/products');
   assert.equal(updatedMasterProducts.body.products.find((row) => row.id === masterProduct24.body.id).shelf_life_months, 30);
   const batchHistory = await call(`/api/drums/batches?plantId=${plantId}`);
-  assert.equal(batchHistory.body.batches.find((row) => row.id === firstBatch.body.batch.id).expiry_date, '2027-01-31');
+  assert.equal(batchHistory.body.batches.find((row) => row.id === firstBatch.body.batch.id).expiry_date, '2026-07-31');
 });
