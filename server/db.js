@@ -226,7 +226,6 @@ function migrate() {
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     code TEXT UNIQUE,
     name TEXT NOT NULL UNIQUE,
-    master_product_id INTEGER REFERENCES products(id),
     shelf_life_months INTEGER NOT NULL CHECK (shelf_life_months > 0),
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL,
@@ -332,22 +331,8 @@ function migrate() {
   ensureColumn('users', 'totp_enabled', 'totp_enabled INTEGER NOT NULL DEFAULT 0');
   ensureColumn('products', 'bottles_per_tray', 'bottles_per_tray INTEGER NOT NULL DEFAULT 0');
   ensureColumn('products', 'tray_weight', 'tray_weight REAL NOT NULL DEFAULT 0');
+  // Product Master reads this sort key on all installations, including legacy databases.
   ensureColumn('products', 'sort_order', 'sort_order INTEGER NOT NULL DEFAULT 0');
-  ensureColumn('products', 'shelf_life_months', 'shelf_life_months INTEGER NOT NULL DEFAULT 24');
-  ensureColumn('drum_products', 'master_product_id', 'master_product_id INTEGER REFERENCES products(id)');
-  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_drum_products_master_product ON drum_products(master_product_id) WHERE master_product_id IS NOT NULL');
-  // If a legacy drum-only record already matches a master product, preserve its configured shelf life.
-  db.exec(`
-    UPDATE products
-       SET shelf_life_months = (
-         SELECT dp.shelf_life_months FROM drum_products dp
-          WHERE dp.name = products.name COLLATE NOCASE
-          ORDER BY dp.id LIMIT 1
-       )
-     WHERE EXISTS (
-       SELECT 1 FROM drum_products dp WHERE dp.name = products.name COLLATE NOCASE
-     )
-  `);
   ensureColumn('inventory', 'qty_trays', 'qty_trays INTEGER NOT NULL DEFAULT 0');
   ensureColumn('batches', 'produced_trays', 'produced_trays INTEGER NOT NULL DEFAULT 0');
   ensureColumn('batches', 'used_cb', 'used_cb INTEGER NOT NULL DEFAULT 0');
@@ -569,6 +554,7 @@ seedPacking();
 seedAsepticBags();
 seedDrumDefaults();
 seedDrumOpeningBalances();
+require('./drum_opening_products').syncDrumProductsFromOpeningBalances(db);
 
 /* one-time fix: trays & tray caps are consumed per TRAY produced, never per CB */
 db.prepare(
@@ -615,8 +601,5 @@ function mergeSharedPacking() {
   }
 }
 mergeSharedPacking();
-
-// Existing Product Master rows are immediately usable for drum fills, without a duplicate product entry.
-require('./drum_product_catalog').syncDrumProductCatalog(db);
 
 module.exports = db;

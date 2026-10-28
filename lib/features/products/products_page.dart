@@ -585,7 +585,6 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
   late final TextEditingController trayWt = TextEditingController(
       text: (widget.product?['tray_weight'] as num?) == 0 ? '' : widget.product?['tray_weight']?.toString() ?? '');
   late final TextEditingController minStock = TextEditingController(text: widget.product?['min_stock_cb']?.toString() ?? '0');
-  late final TextEditingController shelfLife = TextEditingController(text: widget.product?['shelf_life_months']?.toString() ?? '24');
   late final TextEditingController code = TextEditingController(text: ItemCode.of(widget.product));
   bool busy = false;
 
@@ -617,7 +616,6 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
       'bottlesPerTray': CompanyProfile.usesTrays ? (int.tryParse(bpt.text) ?? 0) : 0,
       'trayWeight': CompanyProfile.usesTrays ? (num.tryParse(trayWt.text) ?? 0) : 0,
       'minStockCb': int.tryParse(minStock.text) ?? 0,
-      'shelfLifeMonths': int.tryParse(shelfLife.text.trim()) ?? 0,
       'itemCode': ItemCode.normalize(code.text),
     };
     final fromDate = DateTime.tryParse(netFrom.text.trim());
@@ -649,7 +647,7 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
 
   @override
   void dispose() {
-    for (final c in [name, wcb, wncb, netFrom, netTo, bpc, bpt, trayWt, minStock, shelfLife, code]) c.dispose();
+    for (final c in [name, wcb, wncb, netFrom, netTo, bpc, bpt, trayWt, minStock, code]) c.dispose();
     super.dispose();
   }
 
@@ -691,17 +689,7 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
             ]),
           ],
           const SizedBox(height: 12),
-          TextField(
-            controller: shelfLife,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Shelf life for drum fills (months)',
-              helperText: 'Used to calculate expiry for future filled-drum batches.',
-            ),
-          ),
-          const SizedBox(height: 12),
           Row(children: [
-
             Expanded(child: TextField(controller: netFrom, readOnly: true, onTap: () => _pickDate(netFrom), decoration: const InputDecoration(labelText: 'Net weight effective from', suffixIcon: Icon(Icons.calendar_month_outlined, size: 18)))),
             const SizedBox(width: 12),
             Expanded(child: TextField(controller: netTo, readOnly: true, onTap: () => _pickDate(netTo), decoration: const InputDecoration(labelText: 'Net weight effective to', suffixIcon: Icon(Icons.calendar_month_outlined, size: 18)))),

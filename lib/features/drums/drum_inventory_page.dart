@@ -6,7 +6,6 @@ import 'package:provider/provider.dart';
 
 import '../../core/platform_support.dart';
 import '../../state/auth.dart';
-import '../products/products_page.dart' show ProductFormDialog;
 
 class DrumInventoryPage extends StatefulWidget {
   const DrumInventoryPage({super.key});
@@ -61,13 +60,17 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
   }
 
   Future<bool> _showAddProductDialog() async {
-    if (!context.read<AuthController>().can('products.manage')) {
-      _showMessage('You need Product Master permission to add a product.');
-      return false;
-    }
     final saved = await showDialog<bool>(
       context: context,
-      builder: (_) => const ProductFormDialog(),
+      builder: (_) => _DrumProductDialog(
+        onSave: (name, code, months) async {
+          await context.read<AuthController>().api.post('/drums/products', {
+            'name': name,
+            'code': code,
+            'shelfLifeMonths': months,
+          });
+        },
+      ),
     );
     return saved == true;
   }
@@ -82,7 +85,7 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
     if (!await _showAddProductDialog()) return;
     try {
       await _reloadAndWait();
-      if (mounted) _showMessage('Product saved in Product Master and ready for filled drums.');
+      if (mounted) _showMessage('Drum product added. You can now add filled drums for it.');
     } catch (error) {
       if (mounted) _showMessage(error.toString());
     }
@@ -365,7 +368,7 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
         ),
         const Padding(
           padding: EdgeInsets.only(bottom: 4),
-          child: Text('Filled drums use the shared Product Master. Add each product there once; it will appear here automatically.'),
+          child: Text('This list contains drum-fill products only. Bottle-line products stay separate; products with aggregate drum stock are available automatically.'),
         ),
         if (canManage && (_products.isEmpty || _plants.isEmpty))
           const Padding(
@@ -441,12 +444,10 @@ class _DrumInventoryPageState extends State<DrumInventoryPage> {
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final canManage = auth.can('inventory.manage');
-                    final canAddProducts = auth.can('products.manage');
                     final actions = <Widget>[
                       IconButton(tooltip: 'Refresh', onPressed: _reload, icon: const Icon(Icons.refresh)),
-                      if (canAddProducts)
-                        OutlinedButton.icon(onPressed: _addProduct, icon: const Icon(Icons.category_outlined), label: const Text('Add to Product Master')),
                       if (canManage) ...[
+                        OutlinedButton.icon(onPressed: _addProduct, icon: const Icon(Icons.category_outlined), label: const Text('Add drum product')),
                         OutlinedButton.icon(onPressed: _addPlant, icon: const Icon(Icons.factory_outlined), label: const Text('Add plant')),
                         OutlinedButton.icon(
                           onPressed: _addFilledDrums,
@@ -641,6 +642,76 @@ class _DrumStockAdjustDialogState extends State<_DrumStockAdjustDialog> {
       ],
     );
   }
+}
+
+class _DrumProductDialog extends StatefulWidget {
+  final Future<void> Function(String name, String code, int months) onSave;
+  const _DrumProductDialog({required this.onSave});
+
+  @override
+  State<_DrumProductDialog> createState() => _DrumProductDialogState();
+}
+
+class _DrumProductDialogState extends State<_DrumProductDialog> {
+  final _name = TextEditingController();
+  final _code = TextEditingController();
+  final _months = TextEditingController(text: '24');
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _code.dispose();
+    _months.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final name = _name.text.trim();
+    final code = _code.text.trim();
+    final months = int.tryParse(_months.text.trim());
+    if (name.isEmpty || months == null || months < 1 || months > 240) {
+      setState(() => _error = 'Enter a product name and shelf life in whole months (1–240).');
+      return;
+    }
+    setState(() { _saving = true; _error = null; });
+    try {
+      await widget.onSave(name, code, months);
+      if (mounted) Navigator.pop(context, true);
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('Add drum product'),
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: _name,
+                  autofocus: true,
+                  decoration: const InputDecoration(labelText: 'Product name'),
+                ),
+                TextField(controller: _code, textCapitalization: TextCapitalization.characters, decoration: const InputDecoration(labelText: 'Product code (optional)')),
+                TextField(controller: _months, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Shelf life (months)', helperText: 'For example, 18 months or 24 months')),
+                if (_error != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: _saving ? null : () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(onPressed: _saving ? null : _submit, child: Text(_saving ? 'Saving…' : 'Save product')),
+        ],
+      );
 }
 
 class _ShelfLifeDialog extends StatefulWidget {

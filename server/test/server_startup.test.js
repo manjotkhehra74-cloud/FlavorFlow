@@ -50,13 +50,14 @@ test('full backend mounts drum APIs and blocks the legacy request-log path', asy
   const token = jwt.sign({ uid: 1 });
   const masterProducts = await fetchJson('/api/products', token);
   assert.equal(masterProducts.status, 200);
+  assert.ok(masterProducts.body.products.some((row) => row.name === 'Soya Sauce 740gm'));
+
   const drumProducts = await fetchJson('/api/drums/products', token);
   assert.equal(drumProducts.status, 200);
-  assert.equal(drumProducts.body.products.length, masterProducts.body.products.length);
-  for (const product of masterProducts.body.products) {
-    assert.ok(drumProducts.body.products.some((drumProduct) =>
-      drumProduct.master_product_id === product.id && drumProduct.name === product.name));
-  }
+  const expectedDrumProducts = db.prepare('SELECT product_name FROM drum_opening_balances ORDER BY product_name COLLATE NOCASE').all()
+    .map((row) => row.product_name).sort();
+  assert.deepEqual(drumProducts.body.products.map((row) => row.name).sort(), expectedDrumProducts);
+  assert.ok(!drumProducts.body.products.some((row) => row.name === 'Soya Sauce 740gm'));
 
   const protectedProducts = await fetchJson('/api/drums/products');
   assert.equal(protectedProducts.status, 401);
